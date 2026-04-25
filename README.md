@@ -118,6 +118,27 @@ Resolution: deny rules win over allow rules. Anything not matched falls through 
 - `"allow"` — permit anything not explicitly denied.
 - async callable `(tool_name, input_data) -> bool` — your call. We ship `ask_via_stdin` for interactive runs.
 
+## Cost controls
+
+Each `ClaudeAgentNode` accepts a hard cap and a soft warning:
+
+```python
+ClaudeAgentNode(
+    ...,
+    max_cost_usd=0.50,   # SDK aborts the run when this is crossed
+    warn_at_pct=0.8,     # one-shot warning at 80% of the cap (default)
+    on_warn=None,        # default: print to stderr; pass a callable to override
+)
+```
+
+The hard cap goes to the SDK's `max_budget_usd` option and is enforced server-side. The warning is a soft, one-shot alert; pass `warn_at_pct=None` to silence it while keeping the cap. Each run also writes `last_cost_usd` into state.
+
+Other tactics that move the needle on cost:
+
+- Use Sonnet for cheap nodes, Opus only where you need it: `model="claude-sonnet-4-6"`.
+- Cap turns: `max_turns=10`.
+- Tighten `allowed_tools` so the agent doesn't roam.
+
 ## Bundled skills
 
 Reference by stem; the loader resolves them under `langclaude/skills/`:

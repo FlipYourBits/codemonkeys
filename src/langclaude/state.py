@@ -15,6 +15,7 @@ class WorkflowState(TypedDict, total=False):
 
     branch_name: str
     last_result: str
+    last_cost_usd: float
     artifacts: dict[str, Any]
 
     error: str | None

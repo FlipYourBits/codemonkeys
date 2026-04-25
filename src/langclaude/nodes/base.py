@@ -25,6 +25,7 @@ from claude_agent_sdk import (
     query,
 )
 
+from langclaude.budget import BudgetTracker, WarnCallback
 from langclaude.permissions import UnmatchedPolicy, build_can_use_tool
 
 
@@ -80,6 +81,12 @@ class ClaudeAgentNode:
         cwd_key: state key holding the working directory.
         model: optional Claude model id.
         max_turns: optional cap on agent turns.
+        max_cost_usd: hard cost cap; the SDK aborts the run when crossed.
+        warn_at_pct: emit a warning when running cost reaches this fraction
+            of `max_cost_usd` (e.g. 0.8 = 80%). Ignored if max_cost_usd is
+            None. Pass None to disable the warning.
+        on_warn: callback `(cost, cap) -> None` for the threshold warning.
+            Defaults to a stderr print.
         extra_options: dict merged into ClaudeAgentOptions for escape-hatch
             access to options not exposed here.
     """
@@ -99,6 +106,9 @@ class ClaudeAgentNode:
         cwd_key: str = "working_dir",
         model: str | None = None,
         max_turns: int | None = None,
+        max_cost_usd: float | None = None,
+        warn_at_pct: float | None = 0.8,
+        on_warn: WarnCallback | None = None,
         extra_options: dict[str, Any] | None = None,
     ) -> None:
         self.name = name
@@ -112,6 +122,9 @@ class ClaudeAgentNode:
         self.cwd_key = cwd_key
         self.model = model
         self.max_turns = max_turns
+        self.max_cost_usd = max_cost_usd
+        self.warn_at_pct = warn_at_pct
+        self.on_warn = on_warn
         self.extra_options = extra_options or {}
 
     def _build_options(self, cwd: str | None) -> ClaudeAgentOptions:
@@ -130,6 +143,8 @@ class ClaudeAgentNode:
             kwargs["model"] = self.model
         if self.max_turns is not None:
             kwargs["max_turns"] = self.max_turns
+        if self.max_cost_usd is not None:
+            kwargs["max_budget_usd"] = self.max_cost_usd
         kwargs.update(self.extra_options)
         return ClaudeAgentOptions(**kwargs)
 
@@ -148,8 +163,14 @@ class ClaudeAgentNode:
 
         text_chunks: list[str] = []
         result_text: str | None = None
+        tracker = BudgetTracker(
+            cap_usd=self.max_cost_usd,
+            warn_at_pct=self.warn_at_pct,
+            on_warn=self.on_warn,
+        )
 
         async for message in query(prompt=prompt, options=options):
+            tracker.observe(message)
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
@@ -158,7 +179,10 @@ class ClaudeAgentNode:
                 result_text = getattr(message, "result", None)
 
         final = result_text if result_text else "\n".join(text_chunks).strip()
-        return {self.output_key: final}
+        return {
+            self.output_key: final,
+            "last_cost_usd": tracker.last_cost_usd,
+        }
 
 
 class ShellNode:

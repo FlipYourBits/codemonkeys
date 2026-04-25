@@ -1,5 +1,6 @@
 """langclaude: LangGraph nodes powered by the Claude Agent SDK."""
 
+from langclaude.budget import BudgetTracker, default_on_warn
 from langclaude.nodes.base import ClaudeAgentNode, ShellNode
 from langclaude.nodes.branch_namer import branch_namer_node
 from langclaude.nodes.bug_fixer import bug_fixer_node
@@ -12,6 +13,7 @@ from langclaude.permissions import (
 from langclaude.state import WorkflowState
 
 __all__ = [
+    "BudgetTracker",
     "ClaudeAgentNode",
     "PermissionRule",
     "ShellNode",
@@ -20,6 +22,7 @@ __all__ = [
     "branch_namer_node",
     "bug_fixer_node",
     "build_can_use_tool",
+    "default_on_warn",
     "feature_implementer_node",
 ]
 
