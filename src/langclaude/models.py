@@ -2,9 +2,10 @@
 
 Centralised here so a future deprecation only needs one edit.
 
-NOTE: Claude Opus 4.6 is scheduled for full deprecation on 2026-06-15.
-After that date, swap DEFAULT_HEAVY to OPUS_4_7 (or whichever Opus is
-current) and re-run the test suite.
+These are Anthropic-API IDs. On Bedrock or Vertex AI, pass the full
+inference-profile ID (or Vertex model ID) directly to the node — see the
+README's Bedrock section. `model=` accepts any string and forwards it
+straight to the SDK.
 """
 
 from __future__ import annotations
@@ -14,5 +15,4 @@ OPUS_4_6 = "claude-opus-4-6"
 SONNET_4_6 = "claude-sonnet-4-6"
 HAIKU_4_5 = "claude-haiku-4-5-20251001"
 
-DEFAULT_HEAVY = OPUS_4_6   # feature_implementer, bug_fixer
-DEFAULT_LIGHT = HAIKU_4_5  # branch_namer and other one-shot text tasks
+DEFAULT = OPUS_4_6

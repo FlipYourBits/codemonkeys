@@ -1,1 +1,0 @@
-- can you make an optional param default to true for budget ledger for killing the process? e.g. if its true then it will hault everything because we crossed our max $, if its false then it will still act as a warning and tell us when we crossed it. also for the warning can you make it a list so that we can say we might want a warning at 80,90,95% ? 
