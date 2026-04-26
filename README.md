@@ -89,6 +89,25 @@ run_tests = ShellNode(name="tests", command="pytest -x")
 
 `command` accepts a string (`shlex.split`'d), a list (used as argv), or a callable taking state and returning either form.
 
+### `ruff_node`
+
+A `ShellNode` preset that runs [ruff](https://docs.astral.sh/ruff/) against the working directory. Useful as a tidy-up step after a Claude node has written code. Ruff is a runtime dependency, so this works without an extra install.
+
+```python
+from langclaude import ruff_node
+
+# Lint and auto-fix the whole working dir
+lint = ruff_node()
+
+# Format only
+fmt = ruff_node(mode="format")
+
+# Lint a subpath, fail the graph if anything remains after fixes
+strict = ruff_node(target="src", fail_on_findings=True)
+```
+
+The node invokes `python -m ruff`, so it works whether or not the venv is activated.
+
 ### Plain Python functions
 
 LangGraph already accepts any `(state) -> dict` callable as a node — no wrapper needed:

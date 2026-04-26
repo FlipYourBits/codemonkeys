@@ -26,6 +26,9 @@ dependencies = [
     "claude-agent-sdk>=0.1.0,<0.2",
     # langgraph already cut a 1.0; allow 0.2.x and the 1.x line, cap below 2.
     "langgraph>=0.2.0,<2",
+    # ruff is bundled so ruff_node works out of the box. Pre-1.0; cap at <1.
+    # If you pin ruff yourself in the consuming project, pip will reconcile.
+    "ruff>=0.5,<1",
 ]
 
 [project.optional-dependencies]
