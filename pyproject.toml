@@ -38,7 +38,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/FlipYourBits/agent-workflow-harness"
+Homepage = "https://github.com/FlipYourBits/langclaude"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/langclaude"]
