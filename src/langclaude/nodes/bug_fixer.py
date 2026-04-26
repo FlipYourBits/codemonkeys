@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from langclaude.models import DEFAULT_HEAVY
 from langclaude.nodes.base import ClaudeAgentNode
 from langclaude.permissions import UnmatchedPolicy
 
@@ -28,7 +29,7 @@ def bug_fixer_node(
     allow: Sequence[str] = ("Bash(python*)", "Bash(pytest*)", "Bash(uv*)"),
     deny: Sequence[str] = ("Bash(git push*)", "Bash(rm -rf*)"),
     on_unmatched: UnmatchedPolicy = "deny",
-    model: str | None = None,
+    model: str | None = DEFAULT_HEAVY,
     max_turns: int | None = 30,
     **kwargs: Any,
 ) -> ClaudeAgentNode:

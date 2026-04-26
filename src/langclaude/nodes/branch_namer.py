@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from langclaude.models import DEFAULT_LIGHT
 from langclaude.nodes.base import ClaudeAgentNode
 from langclaude.permissions import UnmatchedPolicy
 
@@ -26,7 +27,7 @@ def branch_namer_node(
     name: str = "branch_namer",
     extra_skills: Sequence[str | Path] = (),
     on_unmatched: UnmatchedPolicy = "deny",
-    model: str | None = None,
+    model: str | None = DEFAULT_LIGHT,
     **kwargs: Any,
 ) -> ClaudeAgentNode:
     """Build a node that writes `branch_name` into state.
