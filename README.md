@@ -18,7 +18,7 @@ export ANTHROPIC_API_KEY=...
 
 ```python
 import asyncio
-from langclaude import Pipeline, PYTHON_CLEAN_CODE
+from langclaude import Pipeline
 
 async def main():
     pipeline = Pipeline(
@@ -31,7 +31,6 @@ async def main():
             "python_format",
             ["code_review", "security_audit", "python_test"],
         ],
-        extra_skills=[PYTHON_CLEAN_CODE],
     )
     final = await pipeline.run()
     print(final)
@@ -49,8 +48,11 @@ Every node does one thing. The table is grouped by what that thing is.
 
 | Factory | Registry name | Output key | What it does |
 |---|---|---|---|
-| `git_new_branch_node()` | `new_branch` | `branch_name` | Generates a branch name from the task description. In interactive mode, prompts for approval and handles dirty-tree safety (stash/commit/carry). Falls back to auto mode when stdin isn't a TTY. |
-| `implement_feature_node()` | `implement_feature` | `last_result` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. Does not run tests. |
+| `git_new_branch_node()` | `git_new_branch` | `git_new_branch` | Generates a branch name from the task description. In interactive mode, prompts for approval and handles dirty-tree safety (stash/commit/carry). Falls back to auto mode when stdin isn't a TTY. |
+| `git_commit_node()` | `git_commit` | `git_commit` | Reviews uncommitted changes, writes a conventional commit message, stages and commits. Optionally prompts to push. |
+| `implement_feature_node()` | `implement_feature` | `implement_feature` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. Does not run tests. |
+| `python_plan_feature_node()` | `python_plan_feature` | `python_plan_feature` | Interactive planning: explores the codebase and produces a step-by-step implementation plan. User can give feedback until approved. |
+| `python_implement_feature_node()` | `python_implement_feature` | `python_implement_feature` | Python-specific implementation with interactive review. Follows Python clean-code and security guidelines. |
 
 ### Quality nodes
 
@@ -58,19 +60,19 @@ Each owns a single concern. They do not overlap — code review doesn't run lint
 
 | Factory | Registry name | Output key | What it does |
 |---|---|---|---|
-| `code_review_node()` | `code_review` | `review_findings` | **Semantic code review.** Reads the code and looks for things linters can't catch: logic errors, functions >50 lines, deep nesting, error handling gaps, resource leaks, concurrency bugs, API contract violations, dead code. Does NOT run linters, type-checkers, tests, or security scanners. |
-| `security_audit_node()` | `security_audit` | `security_findings` | **Security review.** Reads the code and traces data flow from inputs to sinks looking for injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. Pure semantic analysis — no external scanners required. Does NOT check code quality or run tests. |
-| `docs_review_node()` | `docs_review` | `docs_findings` | **Doc drift detection.** Checks docstrings, README, and CHANGELOG against the actual code for accuracy. Catches stale examples, missing docs for new public APIs, inconsistent terminology. Does NOT review code quality or security. |
-| `python_test_node()` | `python_test` | `test_findings` | **Test runner.** Runs pytest, reads failing tests and the code under test to identify root causes. |
-| `python_coverage_node()` | `python_coverage` | `coverage_findings` | **Coverage analysis.** Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` (changed files only) or `mode="full"`. |
-| `dependency_audit_node()` | `dependency_audit` | `dep_findings` | **Dependency vulnerabilities.** Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
+| `code_review_node()` | `code_review` | `code_review` | **Semantic code review.** Reads the code and looks for things linters can't catch: logic errors, functions >50 lines, deep nesting, error handling gaps, resource leaks, concurrency bugs, API contract violations, dead code. Does NOT run linters, type-checkers, tests, or security scanners. |
+| `security_audit_node()` | `security_audit` | `security_audit` | **Security review.** Reads the code and traces data flow from inputs to sinks looking for injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. Pure semantic analysis — no external scanners required. Does NOT check code quality or run tests. |
+| `docs_review_node()` | `docs_review` | `docs_review` | **Doc drift detection.** Checks docstrings, README, and CHANGELOG against the actual code for accuracy. Catches stale examples, missing docs for new public APIs, inconsistent terminology. Does NOT review code quality or security. |
+| `python_test_node()` | `python_test` | `python_test` | **Test runner.** Runs pytest, reads failing tests and the code under test to identify root causes. |
+| `python_coverage_node()` | `python_coverage` | `python_coverage` | **Coverage analysis.** Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` (changed files only) or `mode="full"`. |
+| `dependency_audit_node()` | `dependency_audit` | `dependency_audit` | **Dependency vulnerabilities.** Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
 
 ### Python tooling nodes
 
 | Factory | Registry name | Output key | What it does |
 |---|---|---|---|
-| `python_lint_node()` | `python_lint` | `lint_output` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
-| `python_format_node()` | `python_format` | `format_output` | Runs `ruff format`. |
+| `python_lint_node()` | `python_lint` | `python_lint` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
+| `python_format_node()` | `python_format` | `python_format` | Runs `ruff format`. |
 
 All quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing — see [Permissions control behavior](#permissions-control-behavior).
 
@@ -121,7 +123,7 @@ Deny always wins over allow.
 `Pipeline` resolves step names from the registry, injects config, and builds a LangGraph workflow.
 
 ```python
-from langclaude.skills import PYTHON_CLEAN_CODE
+from langclaude.nodes.base import Verbosity
 
 Pipeline(
     working_dir="/path/to/repo",
@@ -134,13 +136,13 @@ Pipeline(
         ("lint_final", "python_lint"),  # tuple: (graph_name, registry_key)
         "custom/commit",
     ],
-    extra_skills=[PYTHON_CLEAN_CODE],
     config={
         "code_review": {"mode": "diff"},
-        "python_coverage": {"mode": "diff", "base_ref_key": "base_ref"},
+        "python_coverage": {"mode": "diff"},
     },
     custom_nodes={"custom/commit": my_commit_factory},
-    verbose=True,
+    model="claude-sonnet-4-6",
+    verbosity=Verbosity.normal,
     extra_state={"base_ref": "main"},
 )
 ```
@@ -150,7 +152,8 @@ Pipeline(
 | **steps** | List of registry names, `(alias, registry_key)` tuples for duplicates, or nested lists for parallel fan-out. |
 | **config** | Per-step overrides passed as kwargs to the node factory. |
 | **custom_nodes** | Registered before resolution. Keys must be namespaced (`"custom/name"`). |
-| **extra_skills** | Merged into every node whose factory accepts `extra_skills`. |
+| **model** | Default model for all nodes that accept it. Per-node config overrides this. |
+| **verbosity** | Default verbosity for nodes that accept it (`Verbosity.silent`, `.normal`, `.verbose`). Per-node config overrides this. |
 | **extra_state** | Additional key-value pairs merged into the initial state dict. |
 
 ## Registry
@@ -162,8 +165,9 @@ from langclaude import register, resolve, list_builtins
 
 list_builtins()
 # ['code_review', 'dependency_audit', 'docs_review',
-#  'implement_feature', 'new_branch', 'python_coverage',
-#  'python_test', 'python_lint', 'python_format',
+#  'git_commit', 'git_new_branch', 'implement_feature',
+#  'python_coverage', 'python_format', 'python_implement_feature',
+#  'python_lint', 'python_plan_feature', 'python_test',
 #  'security_audit']
 
 register("deploy", my_deploy_factory, namespace="acme")
@@ -174,16 +178,16 @@ resolve("acme/deploy")  # returns my_deploy_factory
 
 Both graphs use `Pipeline` under the hood.
 
-**`python_new_feature`** — end-to-end: branch creation, implementation, lint + format, then all quality nodes in parallel (with fixing enabled), final lint, commit.
+**`python_new_feature`** — end-to-end: branch creation, interactive planning, Python-specific implementation with review, lint + format, test, coverage, code review, security audit, docs review, dependency audit, final lint, commit. All steps run sequentially.
 
 ```bash
 python -m langclaude.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
 ```
 
-**`python_full_repo_review`** — read-only: ruff (check-only), tests, coverage, code review, security audit, docs review, dependency audit — all in parallel. No edits, no branch, no commit.
+**`python_quality_gate`** — quality checks: lint, format, test, coverage, code review, security audit, docs review, dependency audit, final lint. No branch, no commit.
 
 ```bash
-python -m langclaude.graphs.python_full_repo_review /path/to/repo
+python -m langclaude.graphs.python_quality_gate /path/to/repo
 ```
 
 ## Manual wiring with chain()
@@ -221,8 +225,7 @@ reviewer = ClaudeAgentNode(
     skills=[PYTHON_CLEAN_CODE],
     allow=["Read", "Glob", "Grep", "Bash(git diff*)"],
     deny=["Bash(git push*)"],
-    prompt_template="Review the diff for {branch_name}.",
-    output_key="review",
+    prompt_template="Review the diff for {git_new_branch}.",
 )
 ```
 
