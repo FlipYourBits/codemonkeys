@@ -1,6 +1,7 @@
 """langclaude: LangGraph nodes powered by the Claude Agent SDK."""
 
 from langclaude.budget import BudgetTracker, default_on_warn
+from langclaude.display import Display
 from langclaude.graphs import chain
 from langclaude.models import DEFAULT, HAIKU_4_5, OPUS_4_6, OPUS_4_7, SONNET_4_6
 from langclaude.nodes.base import ClaudeAgentNode, ShellNode, Verbosity
@@ -33,6 +34,7 @@ from langclaude.validation import OutputKeyConflict, validate_node_outputs
 __all__ = [
     "BudgetTracker",
     "ClaudeAgentNode",
+    "Display",
     "DEFAULT",
     "HAIKU_4_5",
     "JAVASCRIPT_CLEAN_CODE",

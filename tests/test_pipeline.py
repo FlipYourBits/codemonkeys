@@ -247,6 +247,7 @@ class TestStatusLine:
 class TestPublicAPI:
     def test_importable_from_langclaude(self):
         from langclaude import (
+            Display,
             Pipeline,
             register,
             list_builtins,
@@ -254,5 +255,5 @@ class TestPublicAPI:
             resolve,
         )
 
-        for obj in (Pipeline, register, list_builtins, list_registered, resolve):
+        for obj in (Display, Pipeline, register, list_builtins, list_registered, resolve):
             assert obj is not None
