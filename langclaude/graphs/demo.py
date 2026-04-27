@@ -16,7 +16,6 @@ import argparse
 import asyncio
 import json
 
-from langclaude.display import Display
 from langclaude.nodes.base import Verbosity
 from langclaude.nodes.demo import demo_node
 from langclaude.pipeline import Pipeline
@@ -102,15 +101,7 @@ async def main(verbosity: Verbosity = Verbosity.normal) -> None:
     pipeline = build_pipeline(verbosity=verbosity)
     final = await pipeline.run()
 
-    if pipeline._display is not None:
-        pipeline._display.print_results(final.get("node_costs", {}))
-    else:
-        Display(steps=[], title="Demo Results", live=False).print_results(
-            final.get("node_costs", {})
-        )
-
-    print()
-    print("Final node outputs:")
+    print("\nFinal node outputs:")
     for key in _OUTPUT_KEYS:
         raw = final.get(key, "{}")
         print(f"  {key}: {json.dumps(json.loads(raw), indent=2)}")
