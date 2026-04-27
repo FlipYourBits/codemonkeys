@@ -138,88 +138,57 @@ class Pipeline:
             parts.append(f"### {req}\n{output}\n")
         return {**state, "_prior_results": "\n".join(parts)}
 
+    def _node_enter(self, graph_name: str, node: Any, state: dict[str, Any]) -> tuple[dict[str, Any], float]:
+        state = self._inject_prior_results(state, graph_name)
+        t0 = 0.0
+        if self._display is not None:
+            self._display.node_start(graph_name)
+            t0 = time.time()
+            if hasattr(node, 'on_message') and self.verbosity == Verbosity.verbose:
+                from langclaude.nodes.base import _make_printer
+                node.on_message = _make_printer(self.verbosity, display=self._display)
+            if hasattr(node, 'on_warn'):
+                from langclaude.budget import default_on_warn
+                node.on_warn = lambda cost, cap: default_on_warn(cost, cap, display=self._display)
+        return state, t0
+
+    def _node_exit(self, graph_name: str, result: Any, state: dict[str, Any], t0: float) -> Any:
+        if not isinstance(result, dict):
+            if self._display is not None:
+                self._display.node_done(graph_name, elapsed=time.time() - t0)
+            return result
+
+        cost = result.pop("last_cost_usd", 0.0)
+        if self._display is not None:
+            self._display.node_done(graph_name, elapsed=time.time() - t0, cost=cost)
+
+        node_costs = {**state.get("node_costs", {}), graph_name: cost}
+        total_cost = state.get("total_cost_usd", 0.0) + cost
+        node_outputs = {**state.get("node_outputs", {})}
+        if graph_name in result:
+            node_outputs[graph_name] = result[graph_name]
+        return {
+            **state,
+            **result,
+            "node_costs": node_costs,
+            "total_cost_usd": total_cost,
+            "node_outputs": node_outputs,
+        }
+
     def _make_tracking_wrap(self, graph_name: str, node: Any) -> Any:
         if Pipeline._is_async(node):
 
             async def _wrapper(state):
-                state = self._inject_prior_results(state, graph_name)
-
-                if self._display is not None:
-                    self._display.node_start(graph_name)
-                    t0 = time.time()
-                    if hasattr(node, 'on_message') and self.verbosity == Verbosity.verbose:
-                        from langclaude.nodes.base import _make_printer
-                        node.on_message = _make_printer(self.verbosity, display=self._display)
-                    if hasattr(node, 'on_warn'):
-                        from langclaude.budget import default_on_warn
-                        node.on_warn = lambda cost, cap: default_on_warn(cost, cap, display=self._display)
-
+                state, t0 = self._node_enter(graph_name, node, state)
                 result = await node(state)
-
-                if not isinstance(result, dict):
-                    if self._display is not None:
-                        self._display.node_done(graph_name, elapsed=time.time() - t0)
-                    return result
-
-                cost = result.pop("last_cost_usd", 0.0)
-
-                if self._display is not None:
-                    elapsed = time.time() - t0
-                    self._display.node_done(graph_name, elapsed=elapsed, cost=cost)
-
-                node_costs = {**state.get("node_costs", {}), graph_name: cost}
-                total_cost = state.get("total_cost_usd", 0.0) + cost
-                node_outputs = {**state.get("node_outputs", {})}
-                if graph_name in result:
-                    node_outputs[graph_name] = result[graph_name]
-                return {
-                    **state,
-                    **result,
-                    "node_costs": node_costs,
-                    "total_cost_usd": total_cost,
-                    "node_outputs": node_outputs,
-                }
+                return self._node_exit(graph_name, result, state, t0)
 
             return _wrapper
 
         def _wrapper(state):
-            state = self._inject_prior_results(state, graph_name)
-
-            if self._display is not None:
-                self._display.node_start(graph_name)
-                t0 = time.time()
-                if hasattr(node, 'on_message') and self.verbosity == Verbosity.verbose:
-                    from langclaude.nodes.base import _make_printer
-                    node.on_message = _make_printer(self.verbosity, display=self._display)
-                if hasattr(node, 'on_warn'):
-                    from langclaude.budget import default_on_warn
-                    node.on_warn = lambda cost, cap: default_on_warn(cost, cap, display=self._display)
-
+            state, t0 = self._node_enter(graph_name, node, state)
             result = node(state)
-
-            if not isinstance(result, dict):
-                if self._display is not None:
-                    self._display.node_done(graph_name, elapsed=time.time() - t0)
-                return result
-
-            cost = result.pop("last_cost_usd", 0.0)
-
-            if self._display is not None:
-                elapsed = time.time() - t0
-                self._display.node_done(graph_name, elapsed=elapsed, cost=cost)
-
-            node_costs = {**state.get("node_costs", {}), graph_name: cost}
-            total_cost = state.get("total_cost_usd", 0.0) + cost
-            node_outputs = {**state.get("node_outputs", {})}
-            if graph_name in result:
-                node_outputs[graph_name] = result[graph_name]
-            return {
-                **state,
-                **result,
-                "node_costs": node_costs,
-                "total_cost_usd": total_cost,
-                "node_outputs": node_outputs,
-            }
+            return self._node_exit(graph_name, result, state, t0)
 
         return _wrapper
 

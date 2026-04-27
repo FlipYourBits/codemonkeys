@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from langclaude.display import default_prompt as _default_prompt
 from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
 from langclaude.skills.python import CLEAN_CODE
@@ -45,14 +46,6 @@ _ALLOW = [
     "Bash(cat *)",
     "Bash(python *)",
 ]
-
-
-def _default_prompt(text: str, content: str | None = None) -> str:
-    if content is not None:
-        print(f"\n{'=' * 60}", file=sys.stderr)
-        print(content, file=sys.stderr)
-        print(f"{'=' * 60}", file=sys.stderr)
-    return input(f"\n{text} ")
 
 
 async def ask_plan_feedback_via_stdin(

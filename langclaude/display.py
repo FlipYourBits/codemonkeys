@@ -158,3 +158,11 @@ class Display:
         if self._live is not None:
             self._live.stop()
             self._live = None
+
+
+def default_prompt(text: str, content: str | None = None) -> str:
+    if content is not None:
+        print(f"\n{'=' * 60}", file=sys.stderr)
+        print(content, file=sys.stderr)
+        print(f"{'=' * 60}", file=sys.stderr)
+    return input(f"\n{text} ")
