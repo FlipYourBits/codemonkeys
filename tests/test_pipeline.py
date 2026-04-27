@@ -212,6 +212,20 @@ class TestStatusLine:
         assert "a" in err
         assert "done" in err
 
+    def test_normal_verbosity_uses_display(self):
+        async def step_a(state):
+            return {"a": "done", "last_cost_usd": 0.03}
+
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["custom/a"],
+            custom_nodes={"custom/a": step_a},
+            verbosity=Verbosity.normal,
+        )
+        asyncio.get_event_loop().run_until_complete(p.run())
+        assert p._display is not None
+
     def test_silent_verbosity_no_output(self, capsys):
         async def step_a(state):
             return {"a": "done", "last_cost_usd": 0.0}

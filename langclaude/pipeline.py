@@ -7,13 +7,13 @@ parallel fan-out (same semantics as `chain()`).
 from __future__ import annotations
 
 import inspect
-import sys
 import time
 from collections.abc import Callable, Sequence
 from typing import Any, Union
 
 from langgraph.graph import StateGraph
 
+from langclaude.display import Display
 from langclaude.graphs import chain
 from langclaude.nodes.base import Verbosity
 from langclaude.registry import register, resolve
@@ -60,6 +60,7 @@ class Pipeline:
         self.custom_nodes = dict(custom_nodes or {})
         self.verbosity = verbosity
         self.extra_state = dict(extra_state or {})
+        self._display: Display | None = None
 
         self._requires_map: dict[str, list[str]] = {}
         self._register_custom_nodes()
@@ -122,24 +123,22 @@ class Pipeline:
             async def _wrapper(state):
                 state = self._inject_prior_results(state, graph_name)
 
-                silent = self.verbosity == Verbosity.silent
-                if not silent:
-                    print(f"● {graph_name}...", end="", file=sys.stderr, flush=True)
+                if self._display is not None:
+                    self._display.node_start(graph_name)
                     t0 = time.time()
 
                 result = await node(state)
 
                 if not isinstance(result, dict):
-                    if not silent:
-                        print(" done", file=sys.stderr)
+                    if self._display is not None:
+                        self._display.node_done(graph_name, elapsed=time.time() - t0)
                     return result
 
                 cost = result.pop("last_cost_usd", 0.0)
 
-                if not silent:
+                if self._display is not None:
                     elapsed = time.time() - t0
-                    cost_str = f", ${cost:.4f}" if cost > 0 else ""
-                    print(f" done ({elapsed:.1f}s{cost_str})", file=sys.stderr)
+                    self._display.node_done(graph_name, elapsed=elapsed, cost=cost)
 
                 node_costs = {**state.get("node_costs", {}), graph_name: cost}
                 total_cost = state.get("total_cost_usd", 0.0) + cost
@@ -159,24 +158,22 @@ class Pipeline:
         def _wrapper(state):
             state = self._inject_prior_results(state, graph_name)
 
-            silent = self.verbosity == Verbosity.silent
-            if not silent:
-                print(f"● {graph_name}...", end="", file=sys.stderr, flush=True)
+            if self._display is not None:
+                self._display.node_start(graph_name)
                 t0 = time.time()
 
             result = node(state)
 
             if not isinstance(result, dict):
-                if not silent:
-                    print(" done", file=sys.stderr)
+                if self._display is not None:
+                    self._display.node_done(graph_name, elapsed=time.time() - t0)
                 return result
 
             cost = result.pop("last_cost_usd", 0.0)
 
-            if not silent:
+            if self._display is not None:
                 elapsed = time.time() - t0
-                cost_str = f", ${cost:.4f}" if cost > 0 else ""
-                print(f" done ({elapsed:.1f}s{cost_str})", file=sys.stderr)
+                self._display.node_done(graph_name, elapsed=elapsed, cost=cost)
 
             node_costs = {**state.get("node_costs", {}), graph_name: cost}
             total_cost = state.get("total_cost_usd", 0.0) + cost
@@ -256,14 +253,23 @@ class Pipeline:
         resolved = [self._resolve_step(s, seen) for s in self.steps]
         ordered_names = self._flatten_names(resolved)
         self._validate_requires(ordered_names)
+        self._ordered_names = ordered_names
         chain(graph, *resolved)
         return graph.compile()
 
     async def run(self, **extra: Any) -> dict[str, Any]:
+        if self.verbosity != Verbosity.silent:
+            self._display = Display(
+                steps=self._ordered_names, title="Pipeline", live=True
+            )
         state: dict[str, Any] = {
             "working_dir": self.working_dir,
             "task_description": self.task,
             **self.extra_state,
             **extra,
         }
-        return await self._app.ainvoke(state)
+        try:
+            return await self._app.ainvoke(state)
+        finally:
+            if self._display is not None:
+                self._display.stop()
