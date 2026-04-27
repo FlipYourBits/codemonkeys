@@ -33,7 +33,8 @@ class TestPipelineConstruction:
 
     def test_unknown_step_raises(self):
         with pytest.raises(KeyError, match="nonexistent"):
-            Pipeline(working_dir="/tmp", task="x", steps=["nonexistent"])
+            p = Pipeline(working_dir="/tmp", task="x", steps=["nonexistent"])
+            asyncio.get_event_loop().run_until_complete(p.run())
 
     def test_parallel_steps(self):
         p = Pipeline(
@@ -41,7 +42,7 @@ class TestPipelineConstruction:
             task="test",
             steps=[["python_lint", "python_format"]],
         )
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
 
     def test_config_overrides(self):
         p = Pipeline(
@@ -50,7 +51,7 @@ class TestPipelineConstruction:
             steps=["python_lint"],
             config={"python_lint": {"fix": False}},
         )
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
 
     def test_aliased_tuple_step(self):
         p = Pipeline(
@@ -59,7 +60,7 @@ class TestPipelineConstruction:
             steps=["python_lint", ("python_ruff_final", "python_lint")],
             config={"python_ruff_final": {"name": "python_ruff_final"}},
         )
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
 
     def test_duplicate_step_auto_suffixed(self):
         p = Pipeline(
@@ -67,7 +68,7 @@ class TestPipelineConstruction:
             task="test",
             steps=["python_lint", "python_format", "python_lint"],
         )
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
 
 
 class TestPipelineCustomNodes:
@@ -81,7 +82,7 @@ class TestPipelineCustomNodes:
             steps=["custom/deploy"],
             custom_nodes={"custom/deploy": my_node},
         )
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
 
     def test_run_with_custom_nodes(self):
         calls = []
@@ -186,13 +187,14 @@ class TestRequiresConfig:
             return {"a": "done"}
 
         with pytest.raises(ValueError, match="requires.*nonexistent"):
-            Pipeline(
+            p = Pipeline(
                 working_dir="/tmp",
                 task="test",
                 steps=["custom/a"],
                 custom_nodes={"custom/a": step_a},
                 config={"a": {"requires": ["nonexistent"]}},
             )
+            asyncio.get_event_loop().run_until_complete(p.run())
 
 
 class TestStatusLine:

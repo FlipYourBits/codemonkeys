@@ -64,7 +64,8 @@ class Pipeline:
 
         self._requires_map: dict[str, list[str]] = {}
         self._register_custom_nodes()
-        self._app = self._build()
+        self._ordered_names = self._compute_ordered_names()
+        self._app: Any | None = None
 
     @staticmethod
     def _wrap_as_factory(node: Any) -> Callable[..., Any]:
@@ -82,6 +83,22 @@ class Pipeline:
                 ns, _, name = key.rpartition("/")
                 register(name, factory, namespace=ns)
 
+    def _compute_ordered_names(self) -> list[str]:
+        seen: dict[str, int] = {}
+        resolved = [self._resolve_step_for_names(s, seen) for s in self.steps]
+        return self._flatten_names(resolved)
+
+    def _resolve_step_for_names(self, step: Any, seen: dict[str, int]) -> Any:
+        if isinstance(step, list):
+            return [self._resolve_step_for_names(s, seen) for s in step]
+        if isinstance(step, tuple):
+            graph_name = step[0]
+            seen[graph_name] = seen.get(graph_name, 0) + 1
+            return (graph_name, None)
+        base = step.rsplit("/", 1)[-1]
+        graph_name = self._dedup_name(base, seen)
+        return (graph_name, None)
+
     def _apply_overrides(self, factory: Any, overrides: dict[str, Any]) -> Any:
         sig = inspect.signature(factory)
         params = sig.parameters
@@ -94,6 +111,10 @@ class Pipeline:
 
         if self.model and "model" in params and "model" not in overrides:
             overrides["model"] = self.model
+
+        if "prompt_fn" in params and "prompt_fn" not in overrides:
+            if self._display is not None:
+                overrides["prompt_fn"] = self._display.prompt
 
         if overrides:
             return factory(**overrides)
@@ -265,7 +286,6 @@ class Pipeline:
         resolved = [self._resolve_step(s, seen) for s in self.steps]
         ordered_names = self._flatten_names(resolved)
         self._validate_requires(ordered_names)
-        self._ordered_names = ordered_names
         chain(graph, *resolved)
         return graph.compile()
 
@@ -274,6 +294,8 @@ class Pipeline:
             self._display = Display(
                 steps=self._ordered_names, title="Pipeline", live=True
             )
+        if self._app is None:
+            self._app = self._build()
         state: dict[str, Any] = {
             "working_dir": self.working_dir,
             "task_description": self.task,

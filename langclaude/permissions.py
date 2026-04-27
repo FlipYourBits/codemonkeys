@@ -125,7 +125,7 @@ def build_can_use_tool(
     return can_use_tool
 
 
-async def ask_via_stdin(tool_name: str, input_data: dict[str, Any]) -> bool:
+async def ask_via_stdin(tool_name: str, input_data: dict[str, Any], prompt_fn: Any | None = None) -> bool:
     """Prompt the user on stdin for an unmatched tool call.
 
     Returns True on 'y'/'yes' (case-insensitive). Returns False on any other
@@ -135,6 +135,9 @@ async def ask_via_stdin(tool_name: str, input_data: dict[str, Any]) -> bool:
         return False
 
     summary = ", ".join(f"{k}={v!r}" for k, v in list(input_data.items())[:3])
-    prompt = f"\n[langclaude] Allow {tool_name}({summary})? [y/N]: "
-    answer = await asyncio.to_thread(input, prompt)
+    text = f"[langclaude] Allow {tool_name}({summary})? [y/N]:"
+    if prompt_fn is not None:
+        answer = await asyncio.to_thread(prompt_fn, text, None)
+    else:
+        answer = await asyncio.to_thread(input, f"\n{text} ")
     return answer.strip().lower() in ("y", "yes")

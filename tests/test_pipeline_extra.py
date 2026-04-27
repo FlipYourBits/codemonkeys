@@ -180,4 +180,4 @@ class TestPipelineCustomNodeNamespace:
             steps=["custom/bare_node"],
             custom_nodes={"bare_node": my_node},
         )
-        assert p._app is not None
+        assert len(p._ordered_names) > 0

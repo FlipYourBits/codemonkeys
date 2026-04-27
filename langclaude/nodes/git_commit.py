@@ -18,6 +18,7 @@ from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
 
 AskPush = Callable[[str], Awaitable[Literal["push", "skip", "feedback"] | str]]
+PromptFn = Callable[[str, str | None], str]
 
 _SYSTEM_PROMPT = (
     "You commit code changes. "
@@ -49,16 +50,22 @@ _DENY = [
 ]
 
 
-async def ask_push_via_stdin(summary: str) -> Literal["push", "skip", "feedback"] | str:
+def _default_prompt(text: str, content: str | None = None) -> str:
+    if content is not None:
+        print(f"\n{'=' * 60}", file=sys.stderr)
+        print(content, file=sys.stderr)
+        print(f"{'=' * 60}", file=sys.stderr)
+    return input(f"\n{text} ")
+
+
+async def ask_push_via_stdin(
+    summary: str,
+    prompt_fn: PromptFn | None = None,
+) -> Literal["push", "skip", "feedback"] | str:
     if not sys.stdin.isatty():
         return "push"
-    print(f"\n{'=' * 60}", file=sys.stderr)
-    print(summary, file=sys.stderr)
-    print(f"{'=' * 60}", file=sys.stderr)
-    answer = await asyncio.to_thread(
-        input,
-        "\n[git_commit] (p)ush / (s)kip push / or provide feedback: ",
-    )
+    prompt = prompt_fn or _default_prompt
+    answer = await asyncio.to_thread(prompt, "[git_commit] (p)ush / (s)kip push / or provide feedback:", summary)
     a = answer.strip()
     if a.lower() in ("p", "push", "y", "yes", ""):
         return "push"
@@ -90,8 +97,13 @@ def git_commit_node(
     max_turns: int | None = None,
     verbosity: Verbosity = Verbosity.silent,
     ask_push: AskPush = ask_push_via_stdin,
+    prompt_fn: PromptFn | None = None,
     **kwargs: Any,
 ) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+    if prompt_fn is not None and ask_push is ask_push_via_stdin:
+        from functools import partial
+        ask_push = partial(ask_push_via_stdin, prompt_fn=prompt_fn)
+
     inner_name = f"{name}_inner"
     committer = ClaudeAgentNode(
         name=inner_name,

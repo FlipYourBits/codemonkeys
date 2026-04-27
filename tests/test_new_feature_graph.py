@@ -9,7 +9,7 @@ from langclaude.nodes.base import Verbosity
 class TestNewFeatureBuildPipeline:
     def test_builds_successfully(self):
         p = build_pipeline("/tmp/repo", "add retry decorator")
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
         assert p.working_dir == "/tmp/repo"
         assert p.task == "add retry decorator"
 

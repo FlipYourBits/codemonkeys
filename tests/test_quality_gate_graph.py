@@ -7,18 +7,18 @@ from langclaude.nodes.base import Verbosity
 class TestBuildPipeline:
     def test_builds_with_default_diff_mode(self):
         p = build_pipeline("/tmp/repo")
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
         assert p.working_dir == "/tmp/repo"
         assert p.config.get("code_review") == {"mode": "diff"}
 
     def test_builds_with_full_mode(self):
         p = build_pipeline("/tmp/repo", mode="full")
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
         assert p.working_dir == "/tmp/repo"
 
     def test_builds_with_diff_mode(self):
         p = build_pipeline("/tmp/repo", mode="diff", base_ref="develop")
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
         assert p.extra_state.get("base_ref") == "develop"
 
     def test_full_mode_no_mode_overrides(self):

@@ -368,7 +368,7 @@ class TestPythonNewFeaturePipeline:
     def test_builds_with_defaults(self):
         p = build_new_feature("/tmp/repo", "add retry")
         assert p.working_dir == "/tmp/repo"
-        assert p._app is not None
+        assert len(p._ordered_names) > 0
 
     def test_steps_include_branch_and_commit(self):
         p = build_new_feature("/tmp/repo", "add retry")

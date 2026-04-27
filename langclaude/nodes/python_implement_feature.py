@@ -18,6 +18,7 @@ from langclaude.permissions import UnmatchedPolicy
 from langclaude.skills.python import CLEAN_CODE, SECURITY
 
 AskFeedback = Callable[[str], Awaitable[str | None]]
+PromptFn = Callable[[str, str | None], str]
 
 _SYSTEM_PROMPT = (
     "You are an expert Python engineer implementing a feature in an existing "
@@ -47,16 +48,22 @@ _ALLOW = [
 ]
 
 
-async def ask_impl_feedback_via_stdin(summary: str) -> str | None:
+def _default_prompt(text: str, content: str | None = None) -> str:
+    if content is not None:
+        print(f"\n{'=' * 60}", file=sys.stderr)
+        print(content, file=sys.stderr)
+        print(f"{'=' * 60}", file=sys.stderr)
+    return input(f"\n{text} ")
+
+
+async def ask_impl_feedback_via_stdin(
+    summary: str,
+    prompt_fn: PromptFn | None = None,
+) -> str | None:
     if not sys.stdin.isatty():
         return None
-    print(f"\n{'=' * 60}", file=sys.stderr)
-    print(summary, file=sys.stderr)
-    print(f"{'=' * 60}", file=sys.stderr)
-    answer = await asyncio.to_thread(
-        input,
-        "\n[implement] Approve? (y)es or describe what to fix: ",
-    )
+    prompt = prompt_fn or _default_prompt
+    answer = await asyncio.to_thread(prompt, "[implement] Approve? (y)es or describe what to fix:", summary)
     a = answer.strip()
     if a.lower() in ("y", "yes", ""):
         return None
@@ -73,8 +80,13 @@ def python_implement_feature_node(
     max_turns: int | None = None,
     verbosity: Verbosity = Verbosity.silent,
     ask_feedback: AskFeedback = ask_impl_feedback_via_stdin,
+    prompt_fn: PromptFn | None = None,
     **kwargs: Any,
 ) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+    if prompt_fn is not None and ask_feedback is ask_impl_feedback_via_stdin:
+        from functools import partial
+        ask_feedback = partial(ask_impl_feedback_via_stdin, prompt_fn=prompt_fn)
+
     inner_name = f"{name}_inner"
     implementer = ClaudeAgentNode(
         name=inner_name,
