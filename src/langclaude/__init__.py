@@ -24,6 +24,13 @@ from langclaude.permissions import (
     build_can_use_tool,
 )
 from langclaude.graphs import chain
+from langclaude.pipeline import Pipeline
+from langclaude.registry import (
+    list_builtins,
+    list_registered,
+    register,
+    resolve,
+)
 from langclaude.validation import (
     MERGE_OK_KEYS,
     OutputKeyConflict,
@@ -40,6 +47,7 @@ __all__ = [
     "OPUS_4_7",
     "OutputKeyConflict",
     "PermissionRule",
+    "Pipeline",
     "SONNET_4_6",
     "ShellNode",
     "ask_via_stdin",
@@ -54,6 +62,10 @@ __all__ = [
     "claude_coverage_node",
     "claude_dependency_audit_node",
     "claude_pytest_node",
+    "list_builtins",
+    "list_registered",
+    "register",
+    "resolve",
     "shell_ruff_fix_node",
     "shell_ruff_fmt_node",
     "validate_node_outputs",
