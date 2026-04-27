@@ -76,3 +76,47 @@ class TestDisplayNonLive:
     def test_stop_is_safe_when_not_live(self):
         d = Display(steps=[], title="T", live=False)
         d.stop()  # should not raise
+
+
+class TestDisplayLive:
+    """Test Display with live=True but mocked stderr.isatty."""
+
+    def test_live_starts_when_tty(self, monkeypatch):
+        monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+        d = Display(steps=["a"], title="T", live=True)
+        assert d._live is not None
+        d.stop()
+
+    def test_live_skipped_when_not_tty(self, monkeypatch):
+        monkeypatch.setattr("sys.stderr.isatty", lambda: False)
+        d = Display(steps=["a"], title="T", live=True)
+        assert d._live is None
+
+    def test_node_lifecycle(self, monkeypatch):
+        monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+        d = Display(steps=["a", "b"], title="T", live=True)
+        d.node_start("a")
+        d.node_output("a", "→ Read(x.py)")
+        d.node_done("a", elapsed=1.0, cost=0.01)
+        d.node_start("b")
+        d.node_done("b", elapsed=0.5)
+        d.stop()
+        assert d._live is None
+
+    def test_prompt_pauses_live(self, monkeypatch):
+        monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+        d = Display(steps=["a"], title="T", live=True)
+        d.node_start("a")
+
+        monkeypatch.setattr("builtins.input", lambda *_: "yes")
+        result = d.prompt("Continue?")
+        assert result == "yes"
+        # Live should have restarted
+        assert d._live is not None
+        d.stop()
+
+    def test_stop_idempotent(self, monkeypatch):
+        monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+        d = Display(steps=["a"], title="T", live=True)
+        d.stop()
+        d.stop()  # should not raise
