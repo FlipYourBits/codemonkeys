@@ -10,7 +10,9 @@ from langclaude.budget import BudgetTracker
 class TestBudgetTracker:
     def test_no_cap_does_not_warn(self):
         warns: list[tuple[float, float]] = []
-        t = BudgetTracker(max_budget_usd=None, on_warn=lambda c, k: warns.append((c, k)))
+        t = BudgetTracker(
+            max_budget_usd=None, on_warn=lambda c, k: warns.append((c, k))
+        )
         t.update(99.0)
         assert warns == []
         assert t.last_cost_usd == 99.0

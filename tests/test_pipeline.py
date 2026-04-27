@@ -10,6 +10,7 @@ from langclaude.pipeline import Pipeline
 @pytest.fixture(autouse=True)
 def _clean_user_registry():
     from langclaude import registry as reg
+
     snapshot = dict(reg._USER_REGISTRY)
     yield
     reg._USER_REGISTRY.clear()
@@ -55,7 +56,9 @@ class TestPipelineConstruction:
             working_dir="/tmp",
             task="test",
             steps=["ruff_fix", ("ruff_final", "ruff_fix")],
-            config={"ruff_final": {"name": "ruff_final", "output_key": "ruff_final_output"}},
+            config={
+                "ruff_final": {"name": "ruff_final", "output_key": "ruff_final_output"}
+            },
         )
         assert p._app is not None
 
@@ -97,6 +100,13 @@ class TestPipelineCustomNodes:
 
 class TestPublicAPI:
     def test_importable_from_langclaude(self):
-        from langclaude import Pipeline, register, list_builtins, list_registered, resolve
-        assert Pipeline is not None
-        assert callable(register)
+        from langclaude import (
+            Pipeline,
+            register,
+            list_builtins,
+            list_registered,
+            resolve,
+        )
+
+        for obj in (Pipeline, register, list_builtins, list_registered, resolve):
+            assert obj is not None

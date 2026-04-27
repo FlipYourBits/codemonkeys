@@ -42,13 +42,15 @@ def test_ruff_fix_target_callable():
 
 def test_ruff_fix_fixes_unsorted_imports(tmp_path: Path):
     f = tmp_path / "messy.py"
-    f.write_text(textwrap.dedent("""
+    f.write_text(
+        textwrap.dedent("""
         import sys
         import os
 
         x = 1
         print(os, sys, x)
-    """).lstrip())
+    """).lstrip()
+    )
 
     node = shell_ruff_fix_node(target="messy.py", extra_args=["--select", "I"])
     asyncio.run(node({"working_dir": str(tmp_path)}))

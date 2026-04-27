@@ -13,6 +13,7 @@ from langclaude.registry import (
 @pytest.fixture(autouse=True)
 def _clean_user_registry():
     from langclaude import registry as reg
+
     snapshot = dict(reg._USER_REGISTRY)
     yield
     reg._USER_REGISTRY.clear()

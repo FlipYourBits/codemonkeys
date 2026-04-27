@@ -25,4 +25,6 @@ class TestCodeReviewSelfContained:
             allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
             deny=["Bash(git push*)"],
         )
-        assert "fix" in node.system_prompt.lower() or "edit" in node.system_prompt.lower()
+        assert (
+            "fix" in node.system_prompt.lower() or "edit" in node.system_prompt.lower()
+        )

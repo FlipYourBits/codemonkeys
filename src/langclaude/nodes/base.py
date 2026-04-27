@@ -60,7 +60,6 @@ def _load_skill(ref: str | Path) -> str:
 MessageCallback = Callable[[str, Any], None]
 
 
-
 def _format_usage(usage: dict[str, Any] | None) -> str:
     if not usage:
         return ""
@@ -90,9 +89,7 @@ def _default_printer(node_name: str, message: Any) -> None:
                 for line in block.text.splitlines():
                     print(f"{prefix} {line}", file=sys.stderr)
             elif isinstance(block, ToolUseBlock):
-                args = ", ".join(
-                    f"{k}={str(v)!r}" for k, v in block.input.items()
-                )
+                args = ", ".join(f"{k}={str(v)!r}" for k, v in block.input.items())
                 print(f"{prefix} → {block.name}({args})", file=sys.stderr)
             elif isinstance(block, ThinkingBlock):
                 print(f"{prefix} (thinking…)", file=sys.stderr)
@@ -215,9 +212,7 @@ class ClaudeAgentNode:
         self.system_prompt = _compose_system_prompt(system_prompt, list(skills))
         self.allow = list(allow)
         self.deny = list(deny)
-        self._sdk_allowed_tools, self._allow_rules = _split_allow(
-            self.allow, self.deny
-        )
+        self._sdk_allowed_tools, self._allow_rules = _split_allow(self.allow, self.deny)
         self.on_unmatched = on_unmatched
         self.prompt_template = prompt_template
         self.output_key = output_key
@@ -363,6 +358,7 @@ class ShellNode:
         cwd = state.get(self.cwd_key)
 
         if not self.verbose:
+
             def run() -> subprocess.CompletedProcess[str]:
                 return subprocess.run(
                     argv,

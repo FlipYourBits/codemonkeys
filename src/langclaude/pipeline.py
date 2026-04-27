@@ -6,7 +6,6 @@ parallel fan-out (same semantics as `chain()`).
 
 from __future__ import annotations
 
-import functools
 import inspect
 from collections.abc import Sequence
 from pathlib import Path
@@ -97,11 +96,13 @@ class Pipeline:
         and everything else is preserved.
         """
         if inspect.iscoroutinefunction(node):
+
             async def _wrapper(state):
                 result = await node(state)
                 if isinstance(result, dict):
                     return {**state, **result}
                 return result
+
             return _wrapper
 
         def _wrapper(state):
@@ -109,6 +110,7 @@ class Pipeline:
             if isinstance(result, dict):
                 return {**state, **result}
             return result
+
         return _wrapper
 
     def _instantiate(self, name: str) -> tuple[str, Any]:

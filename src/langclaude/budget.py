@@ -39,9 +39,7 @@ def _normalize_pcts(
         pcts = [float(p) for p in warn_at_pct]
     for p in pcts:
         if not 0.0 < p <= 1.0:
-            raise ValueError(
-                f"warn_at_pct entries must be in (0, 1], got {p}"
-            )
+            raise ValueError(f"warn_at_pct entries must be in (0, 1], got {p}")
     pcts.sort()
     return pcts
 

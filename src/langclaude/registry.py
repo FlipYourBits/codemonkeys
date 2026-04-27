@@ -25,18 +25,20 @@ def _register_builtins() -> None:
     from langclaude.nodes.test_coverage import claude_coverage_node
     from langclaude.nodes.test_runner import claude_pytest_node
 
-    _BUILTINS.update({
-        "new_branch": claude_new_branch_node,
-        "implement_feature": claude_feature_implementer_node,
-        "code_review": claude_code_review_node,
-        "security_audit": claude_security_audit_node,
-        "docs_review": claude_docs_review_node,
-        "ruff_fix": shell_ruff_fix_node,
-        "ruff_fmt": shell_ruff_fmt_node,
-        "pytest": claude_pytest_node,
-        "coverage": claude_coverage_node,
-        "dependency_audit": claude_dependency_audit_node,
-    })
+    _BUILTINS.update(
+        {
+            "new_branch": claude_new_branch_node,
+            "implement_feature": claude_feature_implementer_node,
+            "code_review": claude_code_review_node,
+            "security_audit": claude_security_audit_node,
+            "docs_review": claude_docs_review_node,
+            "ruff_fix": shell_ruff_fix_node,
+            "ruff_fmt": shell_ruff_fmt_node,
+            "pytest": claude_pytest_node,
+            "coverage": claude_coverage_node,
+            "dependency_audit": claude_dependency_audit_node,
+        }
+    )
 
 
 def _ensure_builtins() -> None:
@@ -76,8 +78,7 @@ def resolve(name: str) -> Callable[..., Any]:
     _ensure_builtins()
     if name not in _BUILTINS:
         raise KeyError(
-            f"{name!r} not found in built-in registry. "
-            f"Available: {sorted(_BUILTINS)}"
+            f"{name!r} not found in built-in registry. Available: {sorted(_BUILTINS)}"
         )
     return _BUILTINS[name]
 

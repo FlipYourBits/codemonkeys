@@ -95,7 +95,9 @@ def claude_pytest_node(
     if deny is not None:
         deny_list = list(deny)
     else:
-        deny_list = list(_READONLY_DENY if not _has_write_tools(allow_list) else _READWRITE_DENY)
+        deny_list = list(
+            _READONLY_DENY if not _has_write_tools(allow_list) else _READWRITE_DENY
+        )
 
     can_fix = _has_write_tools(allow_list)
     system_prompt = _READWRITE_PROMPT if can_fix else _READONLY_PROMPT

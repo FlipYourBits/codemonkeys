@@ -40,9 +40,7 @@ _PROMPT_TEMPLATE = (
 
 
 def _run(argv: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        argv, cwd=cwd, capture_output=True, text=True, check=False
-    )
+    return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False)
 
 
 def _is_dirty(cwd: str) -> bool:
@@ -63,8 +61,7 @@ async def ask_branch_name_via_stdin(proposed: str) -> tuple[str, str]:
     if not sys.stdin.isatty():
         return ("accept", proposed)
     prompt = (
-        f"\n[langclaude] Proposed branch: {proposed}\n"
-        f"  [y]es / [r]ename / [a]bort: "
+        f"\n[langclaude] Proposed branch: {proposed}\n  [y]es / [r]ename / [a]bort: "
     )
     answer = await asyncio.to_thread(input, prompt)
     a = answer.strip().lower()[:1]
@@ -178,7 +175,7 @@ def claude_new_branch_node(
                         lambda: _run(["git", "stash", "--include-untracked"], cwd)
                     )
                 elif choice.startswith("commit:"):
-                    msg = choice[len("commit:"):]
+                    msg = choice[len("commit:") :]
                     await asyncio.to_thread(
                         lambda: (
                             _run(["git", "add", "-A"], cwd),
@@ -192,8 +189,10 @@ def claude_new_branch_node(
         )
         if proc.returncode != 0:
             raise subprocess.CalledProcessError(
-                proc.returncode, ["git", "checkout", "-b", branch_name],
-                output=proc.stdout, stderr=proc.stderr,
+                proc.returncode,
+                ["git", "checkout", "-b", branch_name],
+                output=proc.stdout,
+                stderr=proc.stderr,
             )
 
         return {output_key: branch_name}

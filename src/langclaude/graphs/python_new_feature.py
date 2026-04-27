@@ -23,9 +23,10 @@ def _commit_node(**kwargs) -> ShellNode:
     return ShellNode(
         name="commit",
         command=lambda s: [
-            "bash", "-c",
+            "bash",
+            "-c",
             "git add -A && git commit -m "
-            + shlex.quote(f"feat: {s.get('task_description', 'implement feature')}")
+            + shlex.quote(f"feat: {s.get('task_description', 'implement feature')}"),
         ],
         output_key="last_result",
         check=True,
@@ -62,31 +63,68 @@ def build_pipeline(
         config={
             "pytest": {
                 "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-                "deny": ["Bash(rm -rf*)", "Bash(rm*)", "Bash(git push*)", "Bash(git commit*)", "Bash(git reset*)"],
+                "deny": [
+                    "Bash(rm -rf*)",
+                    "Bash(rm*)",
+                    "Bash(git push*)",
+                    "Bash(git commit*)",
+                    "Bash(git reset*)",
+                ],
             },
             "coverage": {
-                "mode": "diff", "base_ref_key": "base_ref",
+                "mode": "diff",
+                "base_ref_key": "base_ref",
                 "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-                "deny": ["Bash(rm -rf*)", "Bash(rm*)", "Bash(git push*)", "Bash(git commit*)", "Bash(git reset*)"],
+                "deny": [
+                    "Bash(rm -rf*)",
+                    "Bash(rm*)",
+                    "Bash(git push*)",
+                    "Bash(git commit*)",
+                    "Bash(git reset*)",
+                ],
             },
             "code_review": {
                 "mode": "diff",
                 "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-                "deny": ["Bash(rm -rf*)", "Bash(rm*)", "Bash(git push*)", "Bash(git commit*)", "Bash(git reset*)"],
+                "deny": [
+                    "Bash(rm -rf*)",
+                    "Bash(rm*)",
+                    "Bash(git push*)",
+                    "Bash(git commit*)",
+                    "Bash(git reset*)",
+                ],
             },
             "security_audit": {
                 "mode": "diff",
                 "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-                "deny": ["Bash(rm -rf*)", "Bash(rm*)", "Bash(git push*)", "Bash(git commit*)", "Bash(git reset*)"],
+                "deny": [
+                    "Bash(rm -rf*)",
+                    "Bash(rm*)",
+                    "Bash(git push*)",
+                    "Bash(git commit*)",
+                    "Bash(git reset*)",
+                ],
             },
             "docs_review": {
                 "mode": "diff",
                 "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-                "deny": ["Bash(rm -rf*)", "Bash(rm*)", "Bash(git push*)", "Bash(git commit*)", "Bash(git reset*)"],
+                "deny": [
+                    "Bash(rm -rf*)",
+                    "Bash(rm*)",
+                    "Bash(git push*)",
+                    "Bash(git commit*)",
+                    "Bash(git reset*)",
+                ],
             },
             "dependency_audit": {
                 "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-                "deny": ["Bash(rm -rf*)", "Bash(rm*)", "Bash(git push*)", "Bash(git commit*)", "Bash(git reset*)"],
+                "deny": [
+                    "Bash(rm -rf*)",
+                    "Bash(rm*)",
+                    "Bash(git push*)",
+                    "Bash(git commit*)",
+                    "Bash(git reset*)",
+                ],
             },
             "ruff_final": {"name": "ruff_final", "output_key": "ruff_final_output"},
         },

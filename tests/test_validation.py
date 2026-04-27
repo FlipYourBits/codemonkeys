@@ -40,7 +40,9 @@ class TestValidateNodeOutputs:
     def test_distinct_output_keys_resolve_conflict(self):
         validate_node_outputs(
             claude_security_audit_node(name="sec_diff", output_key="security_findings"),
-            claude_security_audit_node(name="sec_full", output_key="security_findings_full"),
+            claude_security_audit_node(
+                name="sec_full", output_key="security_findings_full"
+            ),
         )
 
     def test_last_cost_usd_is_merge_ok(self):

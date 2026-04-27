@@ -19,8 +19,8 @@ from typing import Any
 MERGE_OK_KEYS: frozenset[str] = frozenset(
     {
         "last_cost_usd",  # summed across nodes
-        "last_result",    # overwrites by design — many nodes write a freeform result
-        "artifacts",      # users typically reduce dicts here
+        "last_result",  # overwrites by design — many nodes write a freeform result
+        "artifacts",  # users typically reduce dicts here
     }
 )
 
@@ -77,7 +77,5 @@ def validate_outputs_iter(nodes: Iterable[Any]) -> None:
     lines = ["Output-key conflicts detected:"]
     for key, owners in conflicts.items():
         lines.append(f"  {key!r}: written by {', '.join(owners)}")
-    lines.append(
-        "Set `output_key=` (or rename one node's output) to disambiguate."
-    )
+    lines.append("Set `output_key=` (or rename one node's output) to disambiguate.")
     raise OutputKeyConflict("\n".join(lines))

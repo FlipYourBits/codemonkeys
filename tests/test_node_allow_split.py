@@ -15,9 +15,7 @@ class TestSplitAllow:
         assert rules == ["Bash(python*)", "Edit(*.py)"]
 
     def test_mixed_entries_split_correctly(self):
-        sdk, rules = _split_allow(
-            ["Read", "Bash(python*)", "Glob", "Edit(*.py)"], []
-        )
+        sdk, rules = _split_allow(["Read", "Bash(python*)", "Glob", "Edit(*.py)"], [])
         assert sdk == ["Read", "Glob"]
         assert rules == ["Bash(python*)", "Edit(*.py)"]
 
