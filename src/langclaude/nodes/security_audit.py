@@ -1,12 +1,12 @@
-"""Security-audit node: Claude agent that runs scanners and reviews for vulnerabilities.
+"""Security-audit node: runs security scanners and performs semantic review.
 
-Claude probes for installed scanners (semgrep, gitleaks, pip-audit,
-npm audit, etc.), runs them, then performs semantic security review
-and triage following the security-audit skill.
+Owns security concerns exclusively: injection, auth, secrets, crypto,
+data exposure. Runs security-specific scanners (semgrep, gitleaks, etc.)
+and traces data flow through the code. Does NOT check code quality,
+run tests, or audit dependencies — other nodes own those.
 
 When Edit/Write are in the allow list (and not denied), the agent also
-fixes vulnerabilities it finds. Control interactive vs auto approval via
-on_unmatched.
+fixes vulnerabilities it finds.
 """
 
 from __future__ import annotations
@@ -29,18 +29,18 @@ You are conducting a security audit of a code repository. Your goal is to identi
 
 ## Scope
 
-- **Diff mode**: only review changes between the base ref given in the user prompt and `HEAD`. Do not flag pre-existing issues outside the diff.
+- **Diff mode**: only review changes between the base ref and `HEAD`. Do not flag pre-existing issues outside the diff.
 - **Full mode**: review the entire current tree.
 
-The user's prompt will tell you which mode and (in diff mode) which base ref to use.
+## Phase 1 — Run security scanners
 
-## Phase 1 — Pre-collected scanner output
+Run whichever security scanners are installed via Bash: semgrep, gitleaks, pip-audit, trivy, etc. Only run tools that are actually installed. Treat scanner output as **leads, not verdicts** — you must still confirm exploitability by reading the code before reporting.
 
-Scanner output (semgrep, gitleaks, pip-audit, npm audit, govulncheck, cargo audit, bundler-audit, trivy) is already collected by a deterministic shell node and injected into your prompt. Do not re-run these tools. Treat their output as **leads, not verdicts** — you must still confirm exploitability by reading the code before reporting.
+Do NOT run linters (ruff, eslint), formatters, type-checkers, or test suites — other nodes handle those. Do NOT run dependency auditors (pip-audit for vuln scanning) — the dependency audit node handles that. Focus on source code security scanners only.
 
 ## Phase 2 — Semantic review
 
-For diff mode, run `git diff BASE_REF...HEAD` (substituting the base ref from the user prompt) and read every changed file. For full mode, walk the tree (use `Glob` + `Read`).
+For diff mode, run `git diff BASE_REF...HEAD` and read every changed file. For full mode, walk the tree (use `Glob` + `Read`).
 
 Trace data flow from untrusted inputs (HTTP handlers, CLI args, env vars, queue consumers, file ingest, IPC) to sinks. Look for:
 
@@ -85,7 +85,7 @@ Trace data flow from untrusted inputs (HTTP handlers, CLI args, env vars, queue 
 - Missing rate limits on auth endpoints (only flag if it enables credential stuffing — not generic DoS)
 - Insecure defaults in framework config
 
-## Phase 3 — Triage and dedupe
+## Triage
 
 - Cross-reference scanner findings against your semantic review. Drop scanner findings you cannot confirm by reading the code.
 - Drop duplicates (same vuln reported by multiple sources — keep the one with strongest evidence).
@@ -93,10 +93,12 @@ Trace data flow from untrusted inputs (HTTP handlers, CLI args, env vars, queue 
 
 ## Exclusions — DO NOT REPORT
 
+- Code quality, complexity, or maintainability concerns (code review owns these)
+- Dependency vulnerabilities (dependency audit owns these)
+- Test failures or missing tests (test nodes own these)
 - Denial of service or resource exhaustion (CPU, memory, file handles)
 - Generic rate limiting concerns
 - Lack of input validation on fields with no security impact
-- Style, naming, or maintainability concerns
 - Performance issues
 - Pre-existing issues outside the diff (in diff mode)
 

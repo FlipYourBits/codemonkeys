@@ -1,11 +1,10 @@
-"""Docs-review node: Claude agent that reviews documentation for drift.
+"""Docs-review node: checks documentation for drift against the code.
 
-Claude reads doc files (README, CHANGELOG, etc.) and checks them against
-the code, following the docs-review skill.
+Owns doc accuracy exclusively: stale docstrings, outdated READMEs,
+missing public-API docs, inconsistent terminology. Does NOT check
+code quality, security, tests, or formatting — other nodes own those.
 
-When Edit/Write are in the allow list (and not denied), the agent also
-updates docs that have drifted. Control interactive vs auto approval via
-on_unmatched.
+When Edit/Write are in the allow list, the agent also fixes drifted docs.
 """
 
 from __future__ import annotations

@@ -1,11 +1,12 @@
-"""Code-review node: Claude agent that gathers context and reviews code.
+"""Code-review node: semantic code quality review.
 
-Claude runs linters, diffs, and type-checkers itself via Bash, then
-performs semantic review and triage following the code-review skill.
+Focuses on things linters and type-checkers cannot catch: logic errors,
+excessive complexity, bad abstractions, resource leaks, concurrency bugs.
+Does NOT run linters, formatters, type-checkers, or tests — other nodes
+own those concerns.
 
 When Edit/Write are in the allow list (and not denied), the agent also
-fixes issues it finds. Control interactive vs auto approval via
-on_unmatched.
+fixes issues it finds.
 """
 
 from __future__ import annotations
@@ -24,37 +25,31 @@ _SKILL = """\
 
 # Code review
 
-You are conducting a code review focused on **correctness, maintainability, and code quality** — not security (a separate audit covers that). Better to miss subjective concerns than flood the report with noise. Confidence floor is 0.85 — higher than the security audit, because reviews are noisier by nature.
+You are conducting a **semantic** code review focused on correctness, maintainability, and design quality. You review things that linters, formatters, type-checkers, and test runners cannot catch — those tools run in separate nodes. Do not run or re-run them. Confidence floor is 0.85.
 
 ## Scope
 
-- **Diff mode**: only review changes between the base ref given in the user prompt and `HEAD`. Ignore pre-existing issues outside the diff.
+- **Diff mode**: only review changes between the base ref and `HEAD`. Ignore pre-existing issues outside the diff.
 - **Full mode**: review the entire current tree.
 
-## Phase 1 — Pre-collected context
-
-Linter, type-checker, and test output is already collected by a deterministic shell node and injected into your prompt. Do not re-run these tools. Treat their output as **leads**, not verdicts — confirm by reading the relevant code before reporting.
-
-## Phase 2 — Semantic review
+## Method
 
 For diff mode, run `git diff BASE_REF...HEAD` and read every changed file. For full mode, walk the tree (use `Glob` + `Read`).
 
-Look for issues in these categories. Each example shows the kind of thing worth flagging — only report when you're confident a real problem exists.
+Look for issues in these categories. Only report when you're confident a real problem exists.
 
 ### `logic_error`
 - Off-by-one bounds, wrong comparison operator (`<=` vs `<`)
-- Swapped arguments to a function (`subtract(b, a)` when caller meant `subtract(a, b)`)
+- Swapped arguments to a function
 - Broken control flow — early `return` inside a loop that should `continue`, missing `else` branch
 - Wrong default value that changes semantics
 - Negation errors (`if not x` when `x` is meant)
 
-### `missing_test`
-- New public function with no test
-- New code branch (if/else, error path) with no test exercising it
-- Bug fix without a regression test
-
-### `failing_test` (only when `run_tests=True`)
-- Test that fails after the diff applied — likely a regression
+### `complexity`
+- Functions longer than ~50 lines — suggest extracting a helper
+- Deeply nested conditionals (3+ levels) — suggest early returns or extraction
+- God classes / modules that do too many unrelated things
+- Complex boolean expressions that should be named or broken up
 
 ### `error_handling`
 - Bare `except:` or `except Exception:` swallowing real errors
@@ -80,15 +75,9 @@ Look for issues in these categories. Each example shows the kind of thing worth 
 - Repeated computation that could be hoisted
 - Loading entire collection into memory when streaming would do
 
-### `type_safety`
-- `Any` (Python) / `any` (TS) leaking into public API
-- `# type: ignore` / `@ts-ignore` without a reason and without a narrow scope
-- Missing type annotations on a new public function
-- Casts that bypass type checking (`cast`, `as unknown as ...`)
-
 ### `api_contract`
 - Breaking change to a public signature with no version bump or migration note
-- Docstring or type contradicts the new implementation
+- Docstring contradicts the implementation
 - Function renamed but old name not deprecated
 
 ### `dead_code`
@@ -101,21 +90,22 @@ Look for issues in these categories. Each example shows the kind of thing worth 
 - Magic number where a named constant would prevent a real bug
 - Duplicated logic that's drifted between copies (one fixed, the other not)
 
-## Phase 3 — Triage and dedupe
+## Triage
 
-- Cross-reference linter/type-checker output against your semantic findings. Drop tool findings you can't confirm by reading the code.
-- Drop duplicates — same issue from multiple sources. Keep the source with the strongest evidence.
-- Apply the **0.85 confidence floor**. Below that, drop. Reviews are noisier than security audits, so the bar is higher.
+- Apply the **0.85 confidence floor**. Below that, drop.
 - Drop anything where you can't articulate a concrete failure mode.
+- Deduplicate — keep the finding with the strongest evidence.
 
 ## Exclusions — DO NOT REPORT
 
 - Formatting / whitespace / import order (formatters own these)
+- Type errors, missing type annotations (type-checkers own these)
+- Lint violations (linters own these)
+- Missing tests or test failures (test/coverage nodes own these)
+- Security vulnerabilities (security audit owns these)
 - Naming preferences without a misleading-name argument
 - "I would have written this differently" without a correctness argument
 - Performance issues with no measurable impact
-- Style guide violations that don't affect behavior
-- Type checker noise that's already silenced with a justified `# type: ignore`
 - Pre-existing issues outside the diff (in diff mode)
 
 ## Output
@@ -125,16 +115,12 @@ Final reply must be a single fenced JSON block matching this schema and nothing 
 ```json
 {
   "mode": "diff" | "full",
-  "scanners_run": ["ruff", "mypy"],
-  "scanners_skipped": ["eslint"],
-  "tests_run": false,
   "findings": [
     {
       "file": "path/to/file.py",
       "line": 42,
       "severity": "HIGH" | "MEDIUM" | "LOW",
       "category": "logic_error",
-      "source": "review" | "ruff" | "mypy" | "pyright" | "eslint" | "tsc" | "golangci-lint" | "clippy" | "rubocop" | "pytest" | "npm-test" | "go-test" | "cargo-test",
       "description": "One-sentence statement of the issue.",
       "recommendation": "What to change, concretely.",
       "confidence": 0.92
@@ -150,28 +136,27 @@ Final reply must be a single fenced JSON block matching this schema and nothing 
 ```
 
 Severity guide:
-- **HIGH**: bug that will cause incorrect behavior in production, or a failing test
-- **MEDIUM**: latent bug under specific conditions, or a clear maintainability/contract issue
+- **HIGH**: bug that will cause incorrect behavior in production
+- **MEDIUM**: latent bug under specific conditions, or a clear maintainability issue
 - **LOW**: clarity / minor concerns worth surfacing but not blocking
 
 If there are no findings, return the JSON with an empty `findings` array."""
 
 _REVIEW_ONLY_PROMPT = (
-    "You are a senior engineer conducting a code review. "
-    "Use Bash to run git diff, linters (ruff, mypy, pyright, eslint, tsc, "
-    "etc.), and type-checkers — only run tools that are installed. "
-    "Then perform semantic review and triage following the skill below. "
-    "Do not edit files; do not push. "
+    "You are a senior engineer conducting a semantic code review. "
+    "Read the code directly — do not run linters, formatters, type-checkers, "
+    "or tests (other pipeline nodes handle those). "
+    "Follow the skill below. Do not edit files; do not push. "
     "Output JSON only as your final message." + _SKILL
 )
 
 _REVIEW_AND_FIX_PROMPT = (
-    "You are a senior engineer conducting a code review. "
-    "Use Bash to run git diff, linters (ruff, mypy, pyright, eslint, tsc, "
-    "etc.), and type-checkers — only run tools that are installed. "
-    "Then perform semantic review and triage following the skill below. "
-    "After reviewing, fix each issue you found — make the smallest correct "
-    "change per issue, verify by re-reading the file. Do not push. "
+    "You are a senior engineer conducting a semantic code review. "
+    "Read the code directly — do not run linters, formatters, type-checkers, "
+    "or tests (other pipeline nodes handle those). "
+    "Follow the skill below. After reviewing, fix each issue you found — "
+    "make the smallest correct change per issue, verify by re-reading the "
+    "file. Do not push. "
     "Output JSON only as your final message." + _SKILL
 )
 
@@ -211,7 +196,6 @@ def claude_code_review_node(
     name: str = "code_review",
     mode: Mode = "diff",
     base_ref_key: str = "base_ref",
-    run_tests: bool = False,
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] | None = None,
@@ -222,17 +206,13 @@ def claude_code_review_node(
     verbose: bool = False,
     **kwargs: Any,
 ) -> ClaudeAgentNode:
-    """Build a code-review node.
+    """Build a semantic code-review node.
 
-    By default the node is read-only (Edit/Write denied). To enable
-    fixing, pass allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"]
-    and a deny list without Edit/Write. The system prompt adjusts
-    automatically.
+    Focuses on issues linters/type-checkers/tests cannot catch: logic
+    errors, complexity, resource leaks, concurrency, API contracts.
 
-    Control interactive approval via on_unmatched:
-        - "allow": auto-approve all tool calls (CI / auto mode)
-        - "deny": deny unmatched tools
-        - ask_via_stdin: prompt per tool call (interactive mode)
+    By default read-only (Edit/Write denied). To enable fixing, pass
+    Edit/Write in the allow list.
 
     State input:
         working_dir: repo root.
@@ -256,26 +236,17 @@ def claude_code_review_node(
     can_fix = _has_write_tools(allow_list)
     system_prompt = _REVIEW_AND_FIX_PROMPT if can_fix else _REVIEW_ONLY_PROMPT
 
-    test_instruction = (
-        "Also run the project's test suite and include failures in your review. "
-        if run_tests
-        else "Do not run tests. "
-    )
-
     if mode == "diff":
         prompt_template = (
             "DIFF mode — review only changes introduced by the diff "
-            "against {%s}. Start by running `git diff {%s}...HEAD` and "
-            "any available linters/type-checkers. %s"
-            "Then proceed to semantic review and triage."
-        ) % (base_ref_key, base_ref_key, test_instruction)
+            "against {%s}. Start by running `git diff {%s}...HEAD` "
+            "and reading the changed files."
+        ) % (base_ref_key, base_ref_key)
     else:
         prompt_template = (
             "FULL mode — review the entire repository at {working_dir}. "
-            "Start by listing files and running any available "
-            "linters/type-checkers. %s"
-            "Then proceed to semantic review and triage."
-        ) % test_instruction
+            "Start by listing files and reading the code."
+        )
 
     return ClaudeAgentNode(
         name=name,
