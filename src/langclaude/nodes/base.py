@@ -76,12 +76,14 @@ def _make_printer(verbosity: Verbosity) -> MessageCallback | None:
                     print(f"{prefix}{usage}", file=sys.stderr)
             for block in message.content:
                 if isinstance(block, TextBlock):
-                    for line in block.text.splitlines():
+                    lines = block.text.splitlines()
+                    max_lines = 5
+                    for line in lines[:max_lines]:
                         print(f"{prefix} {line}", file=sys.stderr)
+                    if len(lines) > max_lines:
+                        print(f"{prefix} ... ({len(lines) - max_lines} more lines)", file=sys.stderr)
                 elif isinstance(block, ToolUseBlock):
-                    args = ", ".join(
-                        f"{k}={str(v)!r}" for k, v in block.input.items()
-                    )
+                    args = ", ".join(f"{k}={str(v)!r}" for k, v in block.input.items())
                     print(f"{prefix} → {block.name}({args})", file=sys.stderr)
                 elif isinstance(block, ThinkingBlock):
                     print(f"{prefix} (thinking…)", file=sys.stderr)
@@ -142,6 +144,7 @@ class ClaudeAgentNode:
         self,
         *,
         name: str,
+        display_name: str | None = None,
         system_prompt: str = "",
         skills: Sequence[str | Path] = (),
         allow: Sequence[str] = (),
@@ -159,6 +162,7 @@ class ClaudeAgentNode:
         extra_options: dict[str, Any] | None = None,
     ) -> None:
         self.name = name
+        self.display_name = display_name or name
         self.system_prompt = _compose_system_prompt(system_prompt, list(skills))
         self.allow = list(allow)
         self.deny = list(deny)
@@ -216,11 +220,15 @@ class ClaudeAgentNode:
 
     def _render_prompt(self, state: dict[str, Any]) -> str:
         try:
-            return self.prompt_template.format(**state)
+            prompt = self.prompt_template.format(**state)
         except KeyError as e:
             raise KeyError(
                 f"node {self.name!r} prompt_template references missing state key: {e.args[0]!r}"
             ) from e
+        prior = state.get("_prior_results", "")
+        if prior:
+            return f"{prior}\n\n{prompt}"
+        return prompt
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         cwd = state.get("working_dir")
@@ -241,7 +249,7 @@ class ClaudeAgentNode:
         async for message in query(prompt=_prompt_stream(), options=options):
             tracker.observe(message)
             if self.on_message is not None:
-                self.on_message(self.name, message)
+                self.on_message(self.display_name, message)
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):

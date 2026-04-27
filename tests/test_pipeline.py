@@ -142,6 +142,58 @@ class TestCostTracking:
         assert final["total_cost_usd"] == 0.0
 
 
+class TestRequiresConfig:
+    def test_prior_results_injected(self):
+        async def step_a(state):
+            return {"a": '{"findings": []}', "last_cost_usd": 0.0}
+
+        async def step_b(state):
+            assert "_prior_results" in state
+            assert "### a" in state["_prior_results"]
+            assert '{"findings": []}' in state["_prior_results"]
+            return {"b": "saw context", "last_cost_usd": 0.0}
+
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["custom/a", "custom/b"],
+            custom_nodes={"custom/a": step_a, "custom/b": step_b},
+            config={"b": {"requires": ["a"]}},
+        )
+        final = asyncio.get_event_loop().run_until_complete(p.run())
+        assert final["b"] == "saw context"
+
+    def test_no_requires_no_prior_results(self):
+        async def step_a(state):
+            return {"a": "done", "last_cost_usd": 0.0}
+
+        async def step_b(state):
+            assert "_prior_results" not in state or state["_prior_results"] == ""
+            return {"b": "no context", "last_cost_usd": 0.0}
+
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["custom/a", "custom/b"],
+            custom_nodes={"custom/a": step_a, "custom/b": step_b},
+        )
+        final = asyncio.get_event_loop().run_until_complete(p.run())
+        assert final["b"] == "no context"
+
+    def test_requires_invalid_node_raises(self):
+        async def step_a(state):
+            return {"a": "done"}
+
+        with pytest.raises(ValueError, match="requires.*nonexistent"):
+            Pipeline(
+                working_dir="/tmp",
+                task="test",
+                steps=["custom/a"],
+                custom_nodes={"custom/a": step_a},
+                config={"a": {"requires": ["nonexistent"]}},
+            )
+
+
 class TestPublicAPI:
     def test_importable_from_langclaude(self):
         from langclaude import (

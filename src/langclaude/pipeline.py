@@ -59,6 +59,7 @@ class Pipeline:
         self.verbosity = verbosity
         self.extra_state = dict(extra_state or {})
 
+        self._requires_map: dict[str, list[str]] = {}
         self._register_custom_nodes()
         self._app = self._build()
 
@@ -99,10 +100,22 @@ class Pipeline:
         call = getattr(node, "__call__", None)
         return call is not None and inspect.iscoroutinefunction(call)
 
+    def _inject_prior_results(self, state: dict[str, Any], graph_name: str) -> dict[str, Any]:
+        requires = self._requires_map.get(graph_name, [])
+        if not requires:
+            return state
+        node_outputs = state.get("node_outputs", {})
+        parts = ["## Prior results\n"]
+        for req in requires:
+            output = node_outputs.get(req, "")
+            parts.append(f"### {req}\n{output}\n")
+        return {**state, "_prior_results": "\n".join(parts)}
+
     def _make_tracking_wrap(self, graph_name: str, node: Any) -> Any:
         if Pipeline._is_async(node):
 
             async def _wrapper(state):
+                state = self._inject_prior_results(state, graph_name)
                 result = await node(state)
                 if not isinstance(result, dict):
                     return result
@@ -123,6 +136,7 @@ class Pipeline:
             return _wrapper
 
         def _wrapper(state):
+            state = self._inject_prior_results(state, graph_name)
             result = node(state)
             if not isinstance(result, dict):
                 return result
@@ -172,10 +186,37 @@ class Pipeline:
             return graph_name, self._make_tracking_wrap(graph_name, node)
         return self._instantiate(step, seen)
 
+    def _validate_requires(self, ordered_names: list[str]) -> None:
+        for name in ordered_names:
+            node_config = self.config.get(name, {})
+            requires = node_config.get("requires", [])
+            if not requires:
+                continue
+            for req in requires:
+                if req not in ordered_names or ordered_names.index(req) >= ordered_names.index(name):
+                    raise ValueError(
+                        f"requires: node {name!r} requires {req!r} but it "
+                        f"does not appear earlier in the step list"
+                    )
+            self._requires_map[name] = requires
+
+    @staticmethod
+    def _flatten_names(resolved: list[Any]) -> list[str]:
+        names: list[str] = []
+        for item in resolved:
+            if isinstance(item, list):
+                for sub in item:
+                    names.append(sub[0])
+            else:
+                names.append(item[0])
+        return names
+
     def _build(self) -> Any:
         graph = StateGraph(dict)
         seen: dict[str, int] = {}
         resolved = [self._resolve_step(s, seen) for s in self.steps]
+        ordered_names = self._flatten_names(resolved)
+        self._validate_requires(ordered_names)
         chain(graph, *resolved)
         return graph.compile()
 
