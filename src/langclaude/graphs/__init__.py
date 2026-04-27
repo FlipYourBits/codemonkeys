@@ -30,14 +30,14 @@ def chain(graph: StateGraph, *steps: Any) -> None:
                 ("security_audit", security),
                 [("test_runner", tests), ("test_coverage", coverage)],
             ],
-            ("issue_fixer", fixer),
+            ("ruff_final", ruff_fix),
         )
 
     Produces::
 
-        START → branch_namer → implementer → code_review    ─┐
-                                           → security_audit  ├→ issue_fixer → END
-                                           → test_runner → test_coverage ─┘
+        START → new_branch → implementer → code_review      ─┐
+                                          → security_audit    ├→ ruff_final → END
+                                          → test_runner → test_coverage ─┘
     """
     all_steps = list(steps)
 
