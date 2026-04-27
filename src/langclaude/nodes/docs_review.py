@@ -4,9 +4,7 @@ Owns doc accuracy exclusively: stale docstrings, outdated READMEs,
 missing public-API docs, inconsistent terminology. Does NOT check
 code quality, security, tests, or formatting — other nodes own those.
 
-The agent always attempts to review and fix. Permissions control what
-actually happens: deny Edit/Write for report-only, allow for auto-fix,
-or use ask_via_stdin for interactive approval per edit.
+Report-only: returns JSON findings without making any edits.
 """
 
 from __future__ import annotations
@@ -23,15 +21,17 @@ _SYSTEM_PROMPT = (
     "You are reviewing docs for drift against the code they describe. "
     "Use Bash/Read to examine git diff, changed files, and doc files "
     "(README, CHANGELOG, etc.). Follow the skill below exactly. "
-    "Review the docs, then fix any that have drifted — update factual "
-    "errors, outdated examples, and missing sections. "
-    "Do not push. Output JSON only as your final message."
+    "Report findings only — do not fix issues. "
+    "Do not run tests, linters, or install packages — only read code and docs. "
+    "Output JSON only as your final message."
 )
 
 Mode = Literal["diff", "full"]
 
 _ALLOW = [
-    "Read", "Glob", "Grep", "Edit", "Write",
+    "Read",
+    "Glob",
+    "Grep",
     "Bash(git diff*)",
     "Bash(git log*)",
     "Bash(git show*)",
