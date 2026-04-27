@@ -1,14 +1,12 @@
 # langclaude
 
-LangGraph nodes powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview), with bundled skill files and per-node permissions using the same `Bash(python*)` syntax as Claude Code's `settings.local.json`.
+LangGraph nodes powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview). Each node is a self-contained Claude agent session that owns a single concern — run a tool, analyze, and optionally fix — controlled by permissions.
 
 ## Install
 
 ```bash
 pip install -e .
 ```
-
-Set your API key:
 
 ```bash
 export ANTHROPIC_API_KEY=...
@@ -29,7 +27,7 @@ async def main():
             "implement_feature",
             "ruff_fix",
             "ruff_fmt",
-            ["code_review", "security_audit"],
+            ["code_review", "security_audit", "pytest"],
         ],
         extra_skills=["python-clean-code"],
     )
@@ -39,9 +37,87 @@ async def main():
 asyncio.run(main())
 ```
 
-Steps are strings resolved from the built-in registry. Lists create parallel fan-out. Config overrides and custom nodes are passed as dicts.
+Steps are strings resolved from the built-in registry. Lists create parallel fan-out.
+
+## Built-in nodes
+
+Every node does one thing. The table is grouped by what that thing is.
+
+### Workflow nodes
+
+| Factory | Registry name | Output key | What it does |
+|---|---|---|---|
+| `claude_new_branch_node()` | `new_branch` | `branch_name` | Generates a branch name from the task description. In interactive mode, prompts for approval and handles dirty-tree safety (stash/commit/carry). Falls back to auto mode when stdin isn't a TTY. |
+| `claude_feature_implementer_node()` | `implement_feature` | `last_result` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. Does not run tests. |
+
+### Quality nodes
+
+Each owns a single concern. They do not overlap — code review doesn't run linters, security audit doesn't check code quality, etc.
+
+| Factory | Registry name | Output key | What it does |
+|---|---|---|---|
+| `claude_code_review_node()` | `code_review` | `review_findings` | **Semantic code review.** Reads the code and looks for things linters can't catch: logic errors, functions >50 lines, deep nesting, error handling gaps, resource leaks, concurrency bugs, API contract violations, dead code. Does NOT run linters, type-checkers, tests, or security scanners. |
+| `claude_security_audit_node()` | `security_audit` | `security_findings` | **Security review.** Runs installed security scanners (semgrep, gitleaks, etc.) then traces data flow through the code looking for injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. Does NOT check code quality or run tests. |
+| `claude_docs_review_node()` | `docs_review` | `docs_findings` | **Doc drift detection.** Checks docstrings, README, and CHANGELOG against the actual code for accuracy. Catches stale examples, missing docs for new public APIs, inconsistent terminology. Does NOT review code quality or security. |
+| `claude_pytest_node()` | `pytest` | `test_findings` | **Test runner.** Runs pytest, reads failing tests and the code under test to identify root causes. |
+| `claude_coverage_node()` | `coverage` | `coverage_findings` | **Coverage analysis.** Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` (changed files only) or `mode="full"`. |
+| `claude_dependency_audit_node()` | `dependency_audit` | `dep_findings` | **Dependency vulnerabilities.** Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
+
+### Deterministic nodes
+
+| Factory | Registry name | Output key | What it does |
+|---|---|---|---|
+| `shell_ruff_fix_node()` | `ruff_fix` | `ruff_fix_output` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
+| `shell_ruff_fmt_node()` | `ruff_fmt` | `ruff_fmt_output` | Runs `ruff format`. |
+
+All quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing — see [Permissions control behavior](#permissions-control-behavior).
+
+## Permissions control behavior
+
+Each node's behavior is controlled by three levers:
+
+1. **allow/deny** — what tools the agent can use. Default: read-only. Pass Edit/Write to enable fixing.
+2. **on_unmatched** — what happens for tool calls not covered by allow/deny:
+   - `"deny"`: block (default — safest)
+   - `"allow"`: auto-approve (CI / fully automatic)
+   - `ask_via_stdin`: prompt the user interactively
+3. **System prompt** — adjusts automatically. Read-only nodes report findings; read-write nodes also fix them.
+
+```python
+# Report only (default):
+claude_code_review_node()
+
+# Review and fix automatically:
+claude_code_review_node(
+    allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+    deny=["Bash(git push*)"],
+)
+
+# Review and fix with user approval per edit:
+from langclaude import ask_via_stdin
+claude_code_review_node(
+    allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+    deny=["Bash(git push*)"],
+    on_unmatched=ask_via_stdin,
+)
+```
+
+### Permission rule syntax
+
+Same syntax as Claude Code's `settings.local.json`:
+
+| Rule | Meaning |
+|---|---|
+| `"Read"` | every Read call |
+| `"Bash(python*)"` | Bash where `command` matches `python*` |
+| `"Bash(git push*)"` | Bash where `command` matches `git push*` |
+| `"Edit(*.py)"` | Edit where `file_path` matches `*.py` |
+
+Deny always wins over allow.
 
 ## Pipeline
+
+`Pipeline` resolves step names from the registry, injects config, and builds a LangGraph workflow.
 
 ```python
 Pipeline(
@@ -51,14 +127,14 @@ Pipeline(
         "new_branch",
         "implement_feature",
         "ruff_fix",
-        ["code_review", "security_audit", "docs_review"],
-        ("ruff_final", "ruff_fix"),       # tuple: (graph_name, registry_key) for aliases
+        ["code_review", "security_audit", "pytest"],  # parallel
+        ("ruff_final", "ruff_fix"),  # tuple: (graph_name, registry_key)
         "custom/commit",
     ],
-    extra_skills=["python-clean-code"],   # injected into every node that accepts it
+    extra_skills=["python-clean-code"],
     config={
-        "code_review": {"mode": "diff", "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"]},
-        "security_audit": {"mode": "diff"},
+        "code_review": {"mode": "diff"},
+        "coverage": {"mode": "diff", "base_ref_key": "base_ref"},
     },
     custom_nodes={"custom/commit": my_commit_factory},
     verbose=True,
@@ -66,11 +142,13 @@ Pipeline(
 )
 ```
 
-- **steps**: list of registry names, `(alias, registry_key)` tuples, or nested lists for parallel.
-- **config**: per-step overrides passed as kwargs to the node factory.
-- **custom_nodes**: registered before resolution. Keys must be namespaced (`"custom/name"`).
-- **extra_skills**: merged into every node whose factory accepts `extra_skills`.
-- **extra_state**: additional key-value pairs merged into the initial state dict.
+| Parameter | What it does |
+|---|---|
+| **steps** | List of registry names, `(alias, registry_key)` tuples for duplicates, or nested lists for parallel fan-out. |
+| **config** | Per-step overrides passed as kwargs to the node factory. |
+| **custom_nodes** | Registered before resolution. Keys must be namespaced (`"custom/name"`). |
+| **extra_skills** | Merged into every node whose factory accepts `extra_skills`. |
+| **extra_state** | Additional key-value pairs merged into the initial state dict. |
 
 ## Registry
 
@@ -88,49 +166,20 @@ register("deploy", my_deploy_factory, namespace="acme")
 resolve("acme/deploy")  # returns my_deploy_factory
 ```
 
-## Built-in nodes
+## Pre-built graphs
 
-| Factory | Registry name | Default output key | Description |
-|---|---|---|---|
-| `claude_new_branch_node()` | `new_branch` | `branch_name` | Generates branch name, handles dirty tree, creates branch |
-| `claude_feature_implementer_node()` | `implement_feature` | `last_result` | Implements feature from task_description |
-| `claude_code_review_node()` | `code_review` | `review_findings` | Runs linters + semantic review. Allow Edit/Write to also fix. |
-| `claude_security_audit_node()` | `security_audit` | `security_findings` | Runs security scanners + review. Allow Edit/Write to also fix. |
-| `claude_docs_review_node()` | `docs_review` | `docs_findings` | Checks docs for drift. Allow Edit/Write to also fix. |
-| `claude_pytest_node()` | `pytest` | `test_findings` | Runs pytest, analyzes failures. Allow Edit/Write to also fix. |
-| `claude_coverage_node()` | `coverage` | `coverage_findings` | Runs coverage, finds gaps. Allow Edit/Write to add tests. |
-| `claude_dependency_audit_node()` | `dependency_audit` | `dep_findings` | Runs SCA scanners. Allow Edit/Write to upgrade deps. |
-| `shell_ruff_fix_node()` | `ruff_fix` | `ruff_fix_output` | Runs `ruff check --fix` |
-| `shell_ruff_fmt_node()` | `ruff_fmt` | `ruff_fmt_output` | Runs `ruff format` |
+Both graphs use `Pipeline` under the hood.
 
-## Permissions control behavior
+**`python_new_feature`** — end-to-end: branch creation, implementation, lint + format, then all quality nodes in parallel (with fixing enabled), final lint, commit.
 
-Each node's behavior is controlled by three levers:
+```bash
+python -m langclaude.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
+```
 
-1. **allow/deny** — what tools the agent can use. Default: read-only. Pass Edit/Write to enable fixing.
-2. **on_unmatched** — what happens for unmatched tool calls:
-   - `"allow"`: auto-approve (CI / fully automatic)
-   - `"deny"`: refuse (default)
-   - `ask_via_stdin`: prompt the user (interactive)
-3. **System prompt** — adjusts automatically based on permissions. Read-only nodes report findings; read-write nodes also fix them.
+**`python_full_repo_review`** — read-only: ruff (check-only), tests, coverage, code review, security audit, docs review, dependency audit — all in parallel. No edits, no branch, no commit.
 
-```python
-# Report only (default):
-claude_security_audit_node()
-
-# Fix automatically:
-claude_security_audit_node(
-    allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-    deny=["Bash(git push*)"],
-)
-
-# Fix with user approval per edit:
-from langclaude import ask_via_stdin
-claude_security_audit_node(
-    allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-    deny=["Bash(git push*)"],
-    on_unmatched=ask_via_stdin,
-)
+```bash
+python -m langclaude.graphs.python_full_repo_review /path/to/repo
 ```
 
 ## Manual wiring with chain()
@@ -153,21 +202,7 @@ chain(graph,
 app = graph.compile()
 ```
 
-`chain()` wires nodes in sequence and adds `START`/`END` automatically. Lists create parallel fan-out.
-
-## Pre-built graphs
-
-**`python_new_feature`** — end-to-end: branch creation, implementation, lint, parallel reviews with fixing enabled, final lint, commit.
-
-```bash
-python -m langclaude.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
-```
-
-**`python_full_repo_review`** — read-only analysis: lint, tests, coverage, code review, security audit, docs review, and dependency audit all run in parallel.
-
-```bash
-python -m langclaude.graphs.python_full_repo_review /path/to/repo
-```
+`chain()` wires nodes in sequence with `START`/`END` added automatically. Lists create parallel fan-out.
 
 ## Low-level building blocks
 
@@ -195,24 +230,7 @@ from langclaude import ShellNode
 run_tests = ShellNode(name="tests", command="pytest -x")
 ```
 
-**Plain functions** — any `(state) -> dict` callable is a valid LangGraph node, no wrapper needed.
-
-## Permission rules
-
-Rules use the same syntax as Claude Code's `settings.local.json`:
-
-| Rule | Meaning |
-|---|---|
-| `"Read"` | every Read call |
-| `"Bash(python*)"` | Bash where `command` matches `python*` |
-| `"Bash(git push*)"` | Bash where `command` matches `git push*` |
-| `"Edit(*.py)"` | Edit where `file_path` matches `*.py` |
-
-Resolution: deny wins over allow. Unmatched tools fall through to `on_unmatched`:
-
-- `"deny"` (default) — refuse anything not pre-approved.
-- `"allow"` — permit anything not explicitly denied.
-- async callable `(tool_name, input_data) -> bool` — we ship `ask_via_stdin` for interactive runs.
+**Plain functions** — any `(state) -> dict` callable is a valid LangGraph node.
 
 ## Cost controls
 
@@ -226,36 +244,32 @@ ClaudeAgentNode(
 )
 ```
 
-Each run writes `last_cost_usd` into state. Other cost levers:
-
-- Use Sonnet for cheap nodes: `model="claude-sonnet-4-6"`.
-- Cap turns: `max_turns=10`.
-- Tighten `allow` so the agent doesn't roam.
+Each run writes `last_cost_usd` into state. Other levers: cheaper models (`model="claude-sonnet-4-6"`), turn caps (`max_turns=10`), tighter allow lists.
 
 ## Output-key collision detection
 
 ```python
 from langclaude import validate_node_outputs
 
-validate_node_outputs(audit, review, fix)  # raises OutputKeyConflict on collision
+validate_node_outputs(audit, review, coverage)  # raises OutputKeyConflict
 ```
 
 `last_cost_usd`, `last_result`, and `artifacts` are on a merge-OK allow-list.
 
-## Bundled skills
+## Language skills
 
-Node-specific skills (code-review, security-audit, docs-review, git-guidelines) are embedded directly in each node's system prompt. Language-specific skills are separate `.md` files under `langclaude/skills/`, referenced by stem:
+Node-specific behavior (what code review looks for, what security audit traces, etc.) is embedded directly in each node's system prompt. Language-specific clean code and security guidance are separate `.md` files under `langclaude/skills/`:
 
-| Skill | Used by |
+| Skill | Usage |
 |---|---|
-| `python-clean-code` | pass via `extra_skills` |
-| `python-security` | pass via `extra_skills` |
-| `javascript-clean-code` | pass via `extra_skills` |
-| `javascript-security` | pass via `extra_skills` |
-| `rust-clean-code` | pass via `extra_skills` |
-| `rust-security` | pass via `extra_skills` |
+| `python-clean-code` | `extra_skills=["python-clean-code"]` |
+| `python-security` | `extra_skills=["python-security"]` |
+| `javascript-clean-code` | `extra_skills=["javascript-clean-code"]` |
+| `javascript-security` | `extra_skills=["javascript-security"]` |
+| `rust-clean-code` | `extra_skills=["rust-clean-code"]` |
+| `rust-security` | `extra_skills=["rust-security"]` |
 
-Pass language skills via `extra_skills=["python-clean-code"]` on any node factory, or `skills=[...]` on a raw `ClaudeAgentNode`. Accepts bundled stems or paths to your own `.md` files.
+Pass on any node factory via `extra_skills`, or on a raw `ClaudeAgentNode` via `skills`. Accepts bundled stems or paths to your own `.md` files.
 
 ## Using Amazon Bedrock or Google Vertex AI
 
@@ -278,7 +292,7 @@ Pass the provider-specific model ID directly:
 claude_feature_implementer_node(model="us.anthropic.claude-opus-4-7-20251201-v1:0")
 ```
 
-Cost reporting (`last_cost_usd`, `max_budget_usd`, `warn_at_pct`) works regardless of backend.
+Cost reporting works regardless of backend.
 
 ## Tests
 
