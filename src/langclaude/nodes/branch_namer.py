@@ -105,8 +105,13 @@ def claude_new_branch_node(
     name: str = "branch_namer",
     mode: Mode = "interactive",
     extra_skills: Sequence[str | Path] = (),
+    allow: Sequence[str] | None = None,
+    deny: Sequence[str] = (),
     on_unmatched: UnmatchedPolicy = "deny",
     model: str | None = HAIKU_4_5,
+    max_turns: int = 1,
+    output_key: str = "branch_name",
+    verbose: bool = False,
     ask_name: AskBranchName = ask_branch_name_via_stdin,
     ask_dirty: AskDirtyTree = ask_dirty_tree_via_stdin,
     **kwargs: Any,
@@ -128,16 +133,19 @@ def claude_new_branch_node(
         ask_name: async callback for branch name approval.
         ask_dirty: async callback for dirty-tree handling.
     """
-    skills = ["git-guidelines", *extra_skills]
+    allow_list = list(allow) if allow is not None else []
     namer = ClaudeAgentNode(
         name=f"{name}_inner",
         system_prompt=_SYSTEM_PROMPT,
-        skills=skills,
+        skills=["git-guidelines", *extra_skills],
+        allow=allow_list,
+        deny=list(deny),
         prompt_template=_PROMPT_TEMPLATE,
-        output_key="branch_name",
+        output_key=output_key,
         on_unmatched=on_unmatched,
         model=model,
-        max_turns=kwargs.pop("max_turns", 1),
+        max_turns=max_turns,
+        verbose=verbose,
         **kwargs,
     )
 
@@ -148,7 +156,7 @@ def claude_new_branch_node(
             effective = "auto"
 
         result = await namer(state)
-        proposed = result["branch_name"].strip()
+        proposed = result[output_key].strip()
 
         if effective == "interactive":
             action, branch_name = await ask_name(proposed)
@@ -188,8 +196,8 @@ def claude_new_branch_node(
                 output=proc.stdout, stderr=proc.stderr,
             )
 
-        return {"branch_name": branch_name}
+        return {output_key: branch_name}
 
     run.__name__ = name
-    run.declared_outputs = ("branch_name",)  # type: ignore[attr-defined]
+    run.declared_outputs = (output_key,)  # type: ignore[attr-defined]
     return run

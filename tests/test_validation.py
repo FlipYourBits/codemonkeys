@@ -7,7 +7,6 @@ from langclaude import (
     claude_code_review_node,
     claude_coverage_node,
     claude_dependency_audit_node,
-    claude_issue_fixer_node,
     claude_pytest_node,
     claude_security_audit_node,
     validate_node_outputs,
@@ -22,7 +21,6 @@ class TestValidateNodeOutputs:
             claude_code_review_node(),
             claude_coverage_node(),
             claude_pytest_node(),
-            claude_issue_fixer_node(),
         )
 
     def test_two_security_nodes_default_conflict(self):
@@ -52,15 +50,6 @@ class TestValidateNodeOutputs:
             claude_security_audit_node(),
             claude_code_review_node(),
         )
-
-    def test_orchestrator_aux_keys_detected(self):
-        # issue_fixer writes "skipped_findings"; building two of them
-        # without distinct names should conflict on that aux key.
-        with pytest.raises(OutputKeyConflict, match="skipped_findings"):
-            validate_node_outputs(
-                claude_issue_fixer_node(name="fix_a"),
-                claude_issue_fixer_node(name="fix_b"),
-            )
 
     def test_node_without_declared_outputs_silently_skipped(self):
         async def bare(state):

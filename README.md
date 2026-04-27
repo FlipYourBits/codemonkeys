@@ -38,17 +38,17 @@ async def main():
 asyncio.run(main())
 ```
 
-`chain()` wires nodes in sequence and adds `START`/`END` automatically. Lists create parallel fan-out:
+`chain()` wires nodes in sequence and adds `START`/`END` automatically. Lists create parallel processes:
 
 ```python
 chain(graph,
-    ("implement", claude_python_feature_implementer_node()),
+    ("implement", claude_feature_implementer_node(extra_skills=["python-clean-code"])),
     ("ruff_fix", shell_ruff_fix_node()),
     [
         ("code_review", claude_code_review_node(mode="diff")),
         ("security_audit", claude_security_audit_node(mode="diff")),
     ],
-    ("issue_fixer", claude_python_issue_fixer_node()),
+    ("issue_fixer", claude_issue_fixer_node()),
 )
 ```
 
@@ -60,16 +60,13 @@ Node factory functions are prefixed by type: `claude_` (Claude Agent SDK), `shel
 
 | Factory | Default output key | Description |
 |---|---|---|
-| `claude_new_branch_node()` | `branch_name` | Generates a branch name via Haiku, prompts for approval (interactive mode), checks for dirty tree (stash/commit/carry), and creates + switches to the branch. Pass `mode="auto"` for CI. |
-| `claude_feature_implementer_node()` | `last_result` | Implements a feature described in `task_description`. Reads code, makes edits, runs tests. |
-| `claude_python_feature_implementer_node()` | `last_result` | Same as above with `python-clean-code` skill. Also: `claude_javascript_*`, `claude_rust_*`. |
+| `claude_new_branch_node()` | `branch_name` | Generates a branch name, prompts for approval (interactive mode), checks for dirty tree (stash/commit/carry), and creates + switches to the branch. Pass `mode="auto"` for CI. |
+| `claude_feature_implementer_node()` | `last_result` | Implements a feature described in `task_description`. Reads code and makes edits. Pass `extra_skills=["python-clean-code"]` for language-specific guidance. |
 | `claude_bug_fixer_node()` | `last_result` | Diagnoses and fixes a bug from `task_description`. Adds a regression test. |
-| `claude_python_bug_fixer_node()` | `last_result` | Same as above with `python-clean-code` skill. Also: `claude_javascript_*`, `claude_rust_*`. |
 | `claude_code_review_node()` | `review_findings` | Runs linters, git diff, and type-checkers via Bash, then performs semantic code review. Supports `mode="diff"` (scoped to changes) or `mode="full"` (whole repo). |
 | `claude_security_audit_node()` | `security_findings` | Runs security scanners (semgrep, gitleaks, pip-audit, etc.) via Bash, then performs semantic security review. Supports `mode="diff"` or `mode="full"`. |
 | `claude_docs_review_node()` | `docs_findings` | Reads doc files and checks for drift against the code. Supports `mode="diff"` or `mode="full"`. |
 | `claude_issue_fixer_node()` | `applied_fixes` | Consumes findings from review nodes and applies fixes. Supports `mode="interactive"` (prompt per finding), `mode="auto"` (severity threshold), or `mode="all"`. |
-| `claude_python_issue_fixer_node()` | `applied_fixes` | Same as above with `python-clean-code` skill. Also: `claude_javascript_*`, `claude_rust_*`. |
 
 ### Shell nodes
 
@@ -84,8 +81,8 @@ Both invoke `python -m ruff` so they work whether or not the venv is activated. 
 
 | Factory | Default output key | Description |
 |---|---|---|
-| `py_test_runner_node()` | `test_findings` | Runs pytest with `pytest-json-report`, parses failures into structured findings. Also writes `test_summary`. |
-| `py_test_coverage_node()` | `coverage_findings` | Runs `pytest --cov`, parses coverage JSON, emits uncovered line ranges as findings. Supports `mode="diff"` (only changed files) or `mode="full"`. Also writes `coverage_summary`. |
+| `py_pytest_runner_node()` | `test_findings` | Runs pytest with `pytest-json-report`, parses failures into structured findings. Also writes `test_summary`. |
+| `py_pytest_coverage_node()` | `coverage_findings` | Runs `pytest --cov`, parses coverage JSON, emits uncovered line ranges as findings. Supports `mode="diff"` (only changed files) or `mode="full"`. Also writes `coverage_summary`. |
 | `py_dependency_audit_node()` | `dep_findings` | Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit) and parses results into findings. |
 
 ### Low-level building blocks
@@ -185,14 +182,14 @@ Reference by stem; the loader resolves them under `langclaude/skills/`:
 | `docs-review` | `claude_docs_review_node` |
 | `security-audit` | `claude_security_audit_node` |
 | `git-guidelines` | `claude_new_branch_node` |
-| `python-clean-code` | python variant nodes |
-| `python-security` | python variant nodes |
-| `javascript-clean-code` | javascript variant nodes |
-| `javascript-security` | javascript variant nodes |
-| `rust-clean-code` | rust variant nodes |
-| `rust-security` | rust variant nodes |
+| `python-clean-code` | pass via `extra_skills` |
+| `python-security` | pass via `extra_skills` |
+| `javascript-clean-code` | pass via `extra_skills` |
+| `javascript-security` | pass via `extra_skills` |
+| `rust-clean-code` | pass via `extra_skills` |
+| `rust-security` | pass via `extra_skills` |
 
-Add your own via `extra_skills=[...]` (factory nodes) or `skills=[...]` (raw `ClaudeAgentNode`). Pass a bundled stem or a path to your own `.md` file.
+Pass language skills via `extra_skills=["python-clean-code"]` on any node factory, or `skills=[...]` on a raw `ClaudeAgentNode`. Accepts bundled stems or paths to your own `.md` files.
 
 ## Using Amazon Bedrock or Google Vertex AI
 

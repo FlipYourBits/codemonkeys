@@ -13,8 +13,9 @@ from langclaude.permissions import UnmatchedPolicy
 _SYSTEM_PROMPT = (
     "You are an expert software engineer implementing a feature in an existing "
     "repository. Read the relevant code first, propose the smallest change "
-    "that satisfies the task, then make the edits. Run any existing tests "
-    "or type checks if available. Report what you changed and how to verify."
+    "that satisfies the task, then make the edits. Do not run tests — "
+    "that is handled by a separate step. Report what you changed and how "
+    "to verify."
 )
 
 _DEFAULT_ALLOW: tuple[str, ...] = (
@@ -26,54 +27,38 @@ _DEFAULT_ALLOW: tuple[str, ...] = (
     "Bash",
 )
 
+_DEFAULT_DENY: tuple[str, ...] = (
+    "Bash(git push*)",
+    "Bash(rm -rf*)",
+)
+
 
 def claude_feature_implementer_node(
     *,
     name: str = "feature_implementer",
     extra_skills: Sequence[str | Path] = (),
-    allow: Sequence[str] = _DEFAULT_ALLOW,
-    deny: Sequence[str] = ("Bash(git push*)", "Bash(rm -rf*)"),
+    allow: Sequence[str] | None = None,
+    deny: Sequence[str] = _DEFAULT_DENY,
     on_unmatched: UnmatchedPolicy = "deny",
     model: str | None = DEFAULT,
     max_turns: int | None = None,
+    output_key: str = "last_result",
+    verbose: bool = False,
     **kwargs: Any,
 ) -> ClaudeAgentNode:
     """Build a node that implements `task_description` against `working_dir`."""
-    skills = [*extra_skills]
+    allow_list = list(allow) if allow is not None else list(_DEFAULT_ALLOW)
     return ClaudeAgentNode(
         name=name,
         system_prompt=_SYSTEM_PROMPT,
-        skills=skills,
-        allow=list(allow),
+        skills=[*extra_skills],
+        allow=allow_list,
         deny=list(deny),
         on_unmatched=on_unmatched,
         prompt_template="Implement the following task:\n\n{task_description}",
-        output_key="last_result",
+        output_key=output_key,
         model=model,
         max_turns=max_turns,
+        verbose=verbose,
         **kwargs,
-    )
-
-
-def claude_python_feature_implementer_node(**kwargs: Any) -> ClaudeAgentNode:
-    kwargs.setdefault("name", "python_feature_implementer")
-    extra = kwargs.pop("extra_skills", ())
-    return claude_feature_implementer_node(
-        extra_skills=["python-clean-code", *extra], **kwargs
-    )
-
-
-def claude_javascript_feature_implementer_node(**kwargs: Any) -> ClaudeAgentNode:
-    kwargs.setdefault("name", "javascript_feature_implementer")
-    extra = kwargs.pop("extra_skills", ())
-    return claude_feature_implementer_node(
-        extra_skills=["javascript-clean-code", *extra], **kwargs
-    )
-
-
-def claude_rust_feature_implementer_node(**kwargs: Any) -> ClaudeAgentNode:
-    kwargs.setdefault("name", "rust_feature_implementer")
-    extra = kwargs.pop("extra_skills", ())
-    return claude_feature_implementer_node(
-        extra_skills=["rust-clean-code", *extra], **kwargs
     )

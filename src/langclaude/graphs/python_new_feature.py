@@ -19,12 +19,10 @@ from langgraph.graph import StateGraph
 from langclaude.graphs import chain
 from langclaude.nodes.base import ShellNode
 from langclaude.nodes.branch_namer import claude_new_branch_node
-from langclaude.nodes.bug_fixer import claude_bug_fixer_node
 from langclaude.nodes.code_review import claude_code_review_node
 from langclaude.nodes.dependency_audit import claude_dependency_audit_node
 from langclaude.nodes.docs_review import claude_docs_review_node
 from langclaude.nodes.feature_implementer import claude_feature_implementer_node
-from langclaude.nodes.issue_fixer import claude_issue_fixer_node
 from langclaude.nodes.ruff_node import shell_ruff_fix_node, shell_ruff_fmt_node
 from langclaude.nodes.security_audit import claude_security_audit_node
 from langclaude.nodes.test_coverage import claude_coverage_node
@@ -47,14 +45,6 @@ def build_graph(*, base_ref: str = "main", verbose: bool = True):
             ("docs_review", claude_docs_review_node(mode="diff", verbose=verbose)),
             ("dep_audit", claude_dependency_audit_node()),
         ],
-        ("issue_fixer", claude_issue_fixer_node(
-            extra_skills=["python-clean-code"],
-            findings_keys=("review_findings", "security_findings", "docs_findings"),
-            mode="auto",
-            severity_threshold="MEDIUM",
-            verbose=verbose,
-        )),
-        ("bug_fixer", claude_bug_fixer_node(extra_skills=["python-clean-code"], verbose=verbose)),
         ("ruff_final", shell_ruff_fix_node(name="ruff_final", output_key="ruff_final_output")),
         ("commit", ShellNode(
             name="commit",
@@ -84,8 +74,6 @@ async def main(working_dir: str, task: str, base_ref: str = "main") -> None:
     print(f"branch:   {final.get('branch_name', '?')}")
     print(f"tests:    {final.get('test_summary', {})}")
     print(f"coverage: {final.get('coverage_summary', {})}")
-    print(f"fixes:    {len(final.get('applied_fixes', []))} applied")
-    print(f"skipped:  {len(final.get('skipped_findings', []))}")
     print(f"cost:     ${final.get('last_cost_usd', 0):.4f}")
 
 

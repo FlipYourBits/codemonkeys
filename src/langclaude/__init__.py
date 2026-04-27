@@ -8,22 +8,12 @@ from langclaude.models import (
     OPUS_4_7,
     SONNET_4_6,
 )
-from langclaude.findings import (
-    dedupe_findings,
-    parse_findings,
-    passes_threshold,
-)
 from langclaude.nodes.base import ClaudeAgentNode, ShellNode
 from langclaude.nodes.branch_namer import claude_new_branch_node
-from langclaude.nodes.bug_fixer import claude_bug_fixer_node
 from langclaude.nodes.code_review import claude_code_review_node
 from langclaude.nodes.dependency_audit import claude_dependency_audit_node
 from langclaude.nodes.docs_review import claude_docs_review_node
 from langclaude.nodes.feature_implementer import claude_feature_implementer_node
-from langclaude.nodes.issue_fixer import (
-    ask_finding_via_stdin,
-    claude_issue_fixer_node,
-)
 from langclaude.nodes.ruff_node import shell_ruff_fix_node, shell_ruff_fmt_node
 from langclaude.nodes.security_audit import claude_security_audit_node
 from langclaude.nodes.test_coverage import claude_coverage_node
@@ -52,21 +42,15 @@ __all__ = [
     "PermissionRule",
     "SONNET_4_6",
     "ShellNode",
-    "ask_finding_via_stdin",
     "ask_via_stdin",
     "build_can_use_tool",
     "chain",
     "claude_new_branch_node",
-    "claude_bug_fixer_node",
     "claude_code_review_node",
     "claude_docs_review_node",
     "claude_feature_implementer_node",
-    "claude_issue_fixer_node",
     "claude_security_audit_node",
-    "dedupe_findings",
     "default_on_warn",
-    "parse_findings",
-    "passes_threshold",
     "claude_coverage_node",
     "claude_dependency_audit_node",
     "claude_pytest_node",
