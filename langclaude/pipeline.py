@@ -126,6 +126,9 @@ class Pipeline:
                 if self._display is not None:
                     self._display.node_start(graph_name)
                     t0 = time.time()
+                    if hasattr(node, 'on_message') and self.verbosity == Verbosity.verbose:
+                        from langclaude.nodes.base import _make_printer
+                        node.on_message = _make_printer(self.verbosity, display=self._display)
 
                 result = await node(state)
 
@@ -161,6 +164,9 @@ class Pipeline:
             if self._display is not None:
                 self._display.node_start(graph_name)
                 t0 = time.time()
+                if hasattr(node, 'on_message') and self.verbosity == Verbosity.verbose:
+                    from langclaude.nodes.base import _make_printer
+                    node.on_message = _make_printer(self.verbosity, display=self._display)
 
             result = node(state)
 

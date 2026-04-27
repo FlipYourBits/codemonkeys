@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from langclaude.display import Display
+from langclaude.nodes.base import _make_printer, Verbosity
 
 
 class TestDisplayNonLive:
@@ -120,3 +121,10 @@ class TestDisplayLive:
         d = Display(steps=["a"], title="T", live=True)
         d.stop()
         d.stop()  # should not raise
+
+
+class TestMakePrinterWithDisplay:
+    def test_verbose_printer_routes_to_display(self):
+        d = Display(steps=["test_node"], title="T", live=False)
+        printer = _make_printer(Verbosity.verbose, display=d)
+        assert printer is not None

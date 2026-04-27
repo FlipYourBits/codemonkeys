@@ -62,39 +62,44 @@ def _format_usage(usage: dict[str, Any] | None) -> str:
     return f" tokens[{' '.join(parts)}]" if parts else ""
 
 
-def _make_printer(verbosity: Verbosity) -> MessageCallback | None:
+def _make_printer(verbosity: Verbosity, display: Any | None = None) -> MessageCallback | None:
     if verbosity == Verbosity.silent:
         return None
     show_usage = verbosity == Verbosity.verbose
 
+    def _emit(node_name: str, line: str) -> None:
+        if display is not None:
+            display.node_output(node_name, line)
+        else:
+            print(f"[{node_name}] {line}", file=sys.stderr)
+
     def printer(node_name: str, message: Any) -> None:
-        prefix = f"[{node_name}]"
         if isinstance(message, AssistantMessage):
             if show_usage:
                 usage = _format_usage(getattr(message, "usage", None))
                 if usage:
-                    print(f"{prefix}{usage}", file=sys.stderr)
+                    _emit(node_name, f"tokens{usage}")
             for block in message.content:
                 if isinstance(block, TextBlock):
                     lines = block.text.splitlines()
                     max_lines = 5
                     for line in lines[:max_lines]:
-                        print(f"{prefix} {line}", file=sys.stderr)
+                        _emit(node_name, line)
                     if len(lines) > max_lines:
-                        print(f"{prefix} ... ({len(lines) - max_lines} more lines)", file=sys.stderr)
+                        _emit(node_name, f"... ({len(lines) - max_lines} more lines)")
                 elif isinstance(block, ToolUseBlock):
                     args = ", ".join(f"{k}={str(v)!r}" for k, v in block.input.items())
-                    print(f"{prefix} → {block.name}({args})", file=sys.stderr)
+                    _emit(node_name, f"→ {block.name}({args})")
                 elif isinstance(block, ThinkingBlock):
-                    print(f"{prefix} (thinking…)", file=sys.stderr)
+                    _emit(node_name, "(thinking…)")
         elif isinstance(message, ResultMessage):
             if show_usage:
                 cost = getattr(message, "total_cost_usd", None)
                 cost_str = f" cost=${cost:.4f}" if cost is not None else ""
                 usage_str = _format_usage(getattr(message, "usage", None))
-                print(f"{prefix} ✓ done{cost_str}{usage_str}", file=sys.stderr)
+                _emit(node_name, f"✓ done{cost_str}{usage_str}")
             else:
-                print(f"{prefix} ✓ done", file=sys.stderr)
+                _emit(node_name, "✓ done")
 
     return printer
 
