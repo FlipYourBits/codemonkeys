@@ -29,6 +29,7 @@ from claude_agent_sdk import (
 )
 
 from langclaude.budget import BudgetTracker, WarnCallback
+from langclaude.models import DEFAULT as _DEFAULT_MODEL
 from langclaude.permissions import (
     PermissionRule,
     UnmatchedPolicy,
@@ -156,7 +157,7 @@ class ClaudeAgentNode:
         deny: Sequence[str] = (),
         on_unmatched: UnmatchedPolicy = "deny",
         prompt_template: str = "{task_description}",
-        model: str | None = None,
+        model: str = _DEFAULT_MODEL,
         max_turns: int | None = None,
         max_budget_usd: float | None = None,
         hard_cap: bool = True,
@@ -214,8 +215,7 @@ class ClaudeAgentNode:
         }
         if cwd is not None:
             kwargs["cwd"] = cwd
-        if self.model is not None:
-            kwargs["model"] = self.model
+        kwargs["model"] = self.model
         if self.max_turns is not None:
             kwargs["max_turns"] = self.max_turns
         if self.max_budget_usd is not None and self.hard_cap:
