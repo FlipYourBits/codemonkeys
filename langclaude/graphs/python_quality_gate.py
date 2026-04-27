@@ -1,14 +1,20 @@
 """Python code quality gate.
 
-Pipeline shape:
+Runs lint and format first (they modify files), then fans out six
+review/audit nodes in parallel, collects findings into an interactive
+resolver, and finishes with a final lint pass.
 
     lint → format → [test, coverage, code_review, security, docs, dep_audit]
-        → resolve_findings (interactive) → lint
+        → resolve_findings → lint
+
+Defaults to diff mode (only changes vs base ref). Use --mode full to
+scan the entire repo.
 
 Run with:
 
     python -m langclaude.graphs.python_quality_gate /path/to/repo
-    python -m langclaude.graphs.python_quality_gate /path/to/repo --mode diff --base-ref main
+    python -m langclaude.graphs.python_quality_gate /path/to/repo --mode full
+    python -m langclaude.graphs.python_quality_gate /path/to/repo --no-interactive
 """
 
 from __future__ import annotations
@@ -106,7 +112,7 @@ def build_pipeline(
 
 async def main(
     working_dir: str,
-    mode: str = "full",
+    mode: str = "diff",
     base_ref: str = "main",
     interactive: bool = True,
     verbosity: Verbosity = Verbosity.normal,
@@ -118,8 +124,7 @@ async def main(
         interactive=interactive,
         verbosity=verbosity,
     )
-    final = await pipeline.run()
-
+    await pipeline.run()
     pipeline.print_results()
 
 
