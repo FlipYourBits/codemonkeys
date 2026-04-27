@@ -205,6 +205,7 @@ class Pipeline:
         graph_name = self._dedup_name(base_name, seen)
         overrides = dict(self.config.get(name, {}))
         overrides.update(self.config.get(graph_name, {}))
+        overrides.pop("requires", None)
         if graph_name != base_name:
             overrides.setdefault("name", graph_name)
         node = self._apply_overrides(factory, overrides)
@@ -219,6 +220,7 @@ class Pipeline:
             factory = resolve(registry_key)
             overrides = dict(self.config.get(registry_key, {}))
             overrides.update(self.config.get(graph_name, {}))
+            overrides.pop("requires", None)
             node = self._apply_overrides(factory, overrides)
             return graph_name, self._make_tracking_wrap(graph_name, node)
         return self._instantiate(step, seen)

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from typing import Literal
+from typing import Any, Literal
 
 from langclaude.nodes.base import Verbosity
 from langclaude.pipeline import Pipeline
@@ -24,28 +24,39 @@ Mode = Literal["full", "diff"]
 def build_pipeline(
     working_dir: str,
     *,
-    mode: Mode = "full",
+    mode: Mode = "diff",
     base_ref: str = "main",
     verbosity: Verbosity = Verbosity.normal,
 ) -> Pipeline:
-    config: dict[str, dict[str, str]] = {}
+    config: dict[str, dict[str, Any]] = {}
     extra_state: dict[str, str] = {"base_ref": base_ref}
 
     if mode == "diff":
         for node in ("python_coverage", "code_review", "security_audit", "docs_review"):
             config[node] = {"mode": "diff"}
 
+    config["resolve_findings"] = {
+        "requires": [
+            "code_review",
+            "security_audit",
+            "docs_review",
+            "python_dependency_audit",
+        ],
+    }
+    config["python_lint_2"] = {"requires": ["python_lint"]}
+
     return Pipeline(
         working_dir=working_dir,
         steps=[
             "python_lint",
             "python_format",
-            "python_test",
             "python_coverage",
+            "python_test",
+            "python_dependency_audit",
             "code_review",
             "security_audit",
             "docs_review",
-            "dependency_audit",
+            "resolve_findings",
             "python_lint",
         ],
         config=config,
@@ -60,25 +71,34 @@ async def main(
     base_ref: str = "main",
     verbosity: Verbosity = Verbosity.normal,
 ) -> None:
-    pipeline = build_pipeline(working_dir, mode=mode, base_ref=base_ref, verbosity=verbosity)
+    pipeline = build_pipeline(
+        working_dir, mode=mode, base_ref=base_ref, verbosity=verbosity
+    )
     final = await pipeline.run()
 
     print("\n=== Quality Gate Results ===")
-    print(f"tests:    {str(final.get('python_test', '?'))[:200]}")
-    print(f"coverage: {str(final.get('python_coverage', '?'))[:200]}")
-    print(f"cost:     ${final.get('last_cost_usd', 0):.4f}")
+    node_costs = final.get("node_costs", {})
+    for name, cost in node_costs.items():
+        print(f"{name:<25}${cost:.4f}")
+    print("─" * 33)
+    print(f"{'total':<25}${final.get('total_cost_usd', 0):.4f}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run the Python quality gate pipeline.",
     )
-    parser.add_argument("working_dir", help="Path to the repository root")
+    parser.add_argument(
+        "working_dir",
+        nargs="?",
+        default=".",
+        help="Path to the repository root (default: current directory)",
+    )
     parser.add_argument(
         "--mode",
         choices=["full", "diff"],
-        default="full",
-        help="Scan entire repo (full) or only changes vs base ref (diff). Default: full",
+        default="diff",
+        help="Scan only changes vs base ref (diff) or entire repo (full). Default: diff",
     )
     parser.add_argument(
         "--base-ref",
