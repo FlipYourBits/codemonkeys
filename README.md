@@ -244,14 +244,10 @@ validate_node_outputs(audit, review, fix)  # raises OutputKeyConflict on collisi
 
 ## Bundled skills
 
-Reference by stem; the loader resolves them under `langclaude/skills/`:
+Node-specific skills (code-review, security-audit, docs-review, git-guidelines) are embedded directly in each node's system prompt. Language-specific skills are separate `.md` files under `langclaude/skills/`, referenced by stem:
 
 | Skill | Used by |
 |---|---|
-| `code-review` | `claude_code_review_node` |
-| `docs-review` | `claude_docs_review_node` |
-| `security-audit` | `claude_security_audit_node` |
-| `git-guidelines` | `claude_new_branch_node` |
 | `python-clean-code` | pass via `extra_skills` |
 | `python-security` | pass via `extra_skills` |
 | `javascript-clean-code` | pass via `extra_skills` |

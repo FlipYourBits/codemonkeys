@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from langclaude.nodes.base import ClaudeAgentNode
-from langclaude.nodes.test_runner import claude_pytest_node
+from langclaude.nodes.pytest_node import claude_pytest_node
 
 
 class TestPytestClaudeNode:

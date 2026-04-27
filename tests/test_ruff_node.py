@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from langclaude.nodes.ruff_node import shell_ruff_fix_node, shell_ruff_fmt_node
+from langclaude.nodes.ruff import shell_ruff_fix_node, shell_ruff_fmt_node
 
 
 def _ruff_available() -> bool:

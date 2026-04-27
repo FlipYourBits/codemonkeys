@@ -15,15 +15,15 @@ _USER_REGISTRY: dict[str, Callable[..., Any]] = {}
 
 
 def _register_builtins() -> None:
-    from langclaude.nodes.branch_namer import claude_new_branch_node
+    from langclaude.nodes.new_branch import claude_new_branch_node
     from langclaude.nodes.code_review import claude_code_review_node
+    from langclaude.nodes.coverage import claude_coverage_node
     from langclaude.nodes.dependency_audit import claude_dependency_audit_node
     from langclaude.nodes.docs_review import claude_docs_review_node
-    from langclaude.nodes.feature_implementer import claude_feature_implementer_node
-    from langclaude.nodes.ruff_node import shell_ruff_fix_node, shell_ruff_fmt_node
+    from langclaude.nodes.implement_feature import claude_feature_implementer_node
+    from langclaude.nodes.pytest_node import claude_pytest_node
+    from langclaude.nodes.ruff import shell_ruff_fix_node, shell_ruff_fmt_node
     from langclaude.nodes.security_audit import claude_security_audit_node
-    from langclaude.nodes.test_coverage import claude_coverage_node
-    from langclaude.nodes.test_runner import claude_pytest_node
 
     _BUILTINS.update(
         {
