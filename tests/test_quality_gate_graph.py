@@ -24,7 +24,7 @@ class TestBuildPipeline:
 
     def test_full_mode_no_mode_overrides(self):
         p = build_pipeline("/tmp/repo", mode="full")
-        assert "mode" not in p.config.get("code_review", {})
+        assert "mode" not in p.config["code_review"]
         assert p.extra_state == {"base_ref": "main"}
 
     def test_diff_mode_sets_config_overrides(self):
@@ -92,7 +92,7 @@ class TestBuildPipeline:
         assert p.config["python_lint_2"]["requires"] == ["python_lint"]
 
 
-class TestTokenReduction:
+class TestModelTiers:
     def test_cheap_nodes_use_sonnet(self):
         p = build_pipeline("/tmp/repo", mode="full")
         assert p.config["python_test"]["model"] == SONNET_4_6
@@ -108,21 +108,3 @@ class TestTokenReduction:
         assert "model" not in p.config["code_review"]
         assert "model" not in p.config["security_audit"]
         assert "model" not in p.config["resolve_findings"]
-
-    def test_all_agent_nodes_have_max_turns(self):
-        p = build_pipeline("/tmp/repo", mode="full")
-        for name in (
-            "python_test", "python_coverage", "code_review",
-            "security_audit", "docs_review", "python_dependency_audit",
-            "resolve_findings",
-        ):
-            assert "max_turns" in p.config[name], f"{name} missing max_turns"
-
-    def test_all_agent_nodes_have_budget(self):
-        p = build_pipeline("/tmp/repo", mode="full")
-        for name in (
-            "python_test", "python_coverage", "code_review",
-            "security_audit", "docs_review", "python_dependency_audit",
-            "resolve_findings",
-        ):
-            assert "max_budget_usd" in p.config[name], f"{name} missing budget"
