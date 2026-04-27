@@ -9,9 +9,10 @@ from __future__ import annotations
 import inspect
 import time
 from collections.abc import Callable, Sequence
-from typing import Any, Union
+from typing import Annotated, Any, Union
 
 from langgraph.graph import StateGraph
+from typing_extensions import TypedDict
 
 from langclaude.display import Display
 from langclaude.graphs import chain
@@ -19,6 +20,10 @@ from langclaude.nodes.base import Verbosity
 from langclaude.registry import register, resolve
 
 Step = Union[str, tuple[str, str]]
+
+
+def _last(a: Any, b: Any) -> Any:
+    return b
 
 
 class Pipeline:
@@ -63,6 +68,9 @@ class Pipeline:
         self._display: Display | None = None
 
         self._requires_map: dict[str, list[str]] = {}
+        self._node_costs: dict[str, float] = {}
+        self._node_outputs: dict[str, str] = {}
+        self._parallel = self._has_parallel(self.steps)
         self._register_custom_nodes()
         self._ordered_names = self._compute_ordered_names()
         self._app: Any | None = None
@@ -131,10 +139,9 @@ class Pipeline:
         requires = self._requires_map.get(graph_name, [])
         if not requires:
             return state
-        node_outputs = state.get("node_outputs", {})
         parts = ["## Prior results\n"]
         for req in requires:
-            output = node_outputs.get(req, "")
+            output = self._node_outputs.get(req, "")
             parts.append(f"### {req}\n{output}\n")
         return {**state, "_prior_results": "\n".join(parts)}
 
@@ -159,21 +166,15 @@ class Pipeline:
             return result
 
         cost = result.pop("last_cost_usd", 0.0)
+        self._node_costs[graph_name] = cost
         if self._display is not None:
             self._display.node_done(graph_name, elapsed=time.time() - t0, cost=cost)
 
-        node_costs = {**state.get("node_costs", {}), graph_name: cost}
-        total_cost = state.get("total_cost_usd", 0.0) + cost
-        node_outputs = {**state.get("node_outputs", {})}
         if graph_name in result:
-            node_outputs[graph_name] = result[graph_name]
-        return {
-            **state,
-            **result,
-            "node_costs": node_costs,
-            "total_cost_usd": total_cost,
-            "node_outputs": node_outputs,
-        }
+            self._node_outputs[graph_name] = result[graph_name]
+        if self._parallel:
+            return result
+        return {**state, **result}
 
     def _make_tracking_wrap(self, graph_name: str, node: Any) -> Any:
         if Pipeline._is_async(node):
@@ -249,12 +250,26 @@ class Pipeline:
                 names.append(item[0])
         return names
 
+    @staticmethod
+    def _has_parallel(steps: list[Any]) -> bool:
+        return any(isinstance(s, list) for s in steps)
+
+    def _make_state_schema(self, node_names: list[str], extra_keys: list[str]) -> type:
+        ann: dict[str, Any] = {}
+        for key in ["working_dir", "task_description", "_prior_results", *extra_keys, *node_names]:
+            ann[key] = Annotated[Any, _last]
+        return TypedDict("PipelineState", ann, total=False)  # type: ignore[operator]
+
     def _build(self) -> Any:
-        graph = StateGraph(dict)
         seen: dict[str, int] = {}
         resolved = [self._resolve_step(s, seen) for s in self.steps]
         ordered_names = self._flatten_names(resolved)
         self._validate_requires(ordered_names)
+        if self._has_parallel(self.steps):
+            schema = self._make_state_schema(ordered_names, list(self.extra_state))
+        else:
+            schema = dict
+        graph = StateGraph(schema)
         chain(graph, *resolved)
         return graph.compile()
 
@@ -272,7 +287,11 @@ class Pipeline:
             **extra,
         }
         try:
-            return await self._app.ainvoke(state)
+            result = await self._app.ainvoke(state)
+            result["node_costs"] = dict(self._node_costs)
+            result["total_cost_usd"] = sum(self._node_costs.values())
+            result["node_outputs"] = dict(self._node_outputs)
+            return result
         finally:
             if self._display is not None:
                 self._display.stop()
