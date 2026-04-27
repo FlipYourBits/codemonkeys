@@ -10,7 +10,7 @@ ShellNode runs a subprocess. Pure-Python work needs no wrapper — any
 from __future__ import annotations
 
 import asyncio
-import importlib.resources as resources
+import enum
 import shlex
 import subprocess
 import sys
@@ -24,7 +24,6 @@ from claude_agent_sdk import (
     ResultMessage,
     TextBlock,
     ThinkingBlock,
-    ToolResultBlock,
     ToolUseBlock,
     query,
 )
@@ -37,24 +36,10 @@ from langclaude.permissions import (
 )
 
 
-def _load_skill(ref: str | Path) -> str:
-    """Load a skill by package-relative name or filesystem path.
-
-    Bundled skills are referenced by stem (e.g. "python-clean-code"); they
-    resolve to `langclaude/skills/<stem>.md`. Anything else is treated as a
-    filesystem path.
-    """
-    if isinstance(ref, Path):
-        return ref.read_text(encoding="utf-8")
-
-    if "/" in ref or ref.endswith(".md"):
-        return Path(ref).read_text(encoding="utf-8")
-
-    skills_pkg = resources.files(anchor="langclaude.skills")
-    candidate = skills_pkg / f"{ref}.md"
-    if not candidate.is_file():
-        raise FileNotFoundError(f"bundled skill not found: {ref}")
-    return candidate.read_text(encoding="utf-8")
+class Verbosity(enum.Enum):
+    silent = "silent"
+    normal = "normal"
+    verbose = "verbose"
 
 
 MessageCallback = Callable[[str, Any], None]
@@ -77,35 +62,39 @@ def _format_usage(usage: dict[str, Any] | None) -> str:
     return f" tokens[{' '.join(parts)}]" if parts else ""
 
 
-def _default_printer(node_name: str, message: Any) -> None:
-    """Print full progress output per agent message to stderr."""
-    prefix = f"[{node_name}]"
-    if isinstance(message, AssistantMessage):
-        usage = _format_usage(getattr(message, "usage", None))
-        if usage:
-            print(f"{prefix}{usage}", file=sys.stderr)
-        for block in message.content:
-            if isinstance(block, TextBlock):
-                for line in block.text.splitlines():
-                    print(f"{prefix} {line}", file=sys.stderr)
-            elif isinstance(block, ToolUseBlock):
-                args = ", ".join(f"{k}={str(v)!r}" for k, v in block.input.items())
-                print(f"{prefix} → {block.name}({args})", file=sys.stderr)
-            elif isinstance(block, ThinkingBlock):
-                print(f"{prefix} (thinking…)", file=sys.stderr)
-            elif isinstance(block, ToolResultBlock):
-                content = getattr(block, "content", "")
-                if isinstance(content, list):
-                    content = " ".join(
-                        getattr(c, "text", "") for c in content if hasattr(c, "text")
+def _make_printer(verbosity: Verbosity) -> MessageCallback | None:
+    if verbosity == Verbosity.silent:
+        return None
+    show_usage = verbosity == Verbosity.verbose
+
+    def printer(node_name: str, message: Any) -> None:
+        prefix = f"[{node_name}]"
+        if isinstance(message, AssistantMessage):
+            if show_usage:
+                usage = _format_usage(getattr(message, "usage", None))
+                if usage:
+                    print(f"{prefix}{usage}", file=sys.stderr)
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    for line in block.text.splitlines():
+                        print(f"{prefix} {line}", file=sys.stderr)
+                elif isinstance(block, ToolUseBlock):
+                    args = ", ".join(
+                        f"{k}={str(v)!r}" for k, v in block.input.items()
                     )
-                for line in str(content).splitlines():
-                    print(f"{prefix} ← {line}", file=sys.stderr)
-    elif isinstance(message, ResultMessage):
-        cost = getattr(message, "total_cost_usd", None)
-        cost_str = f" cost=${cost:.4f}" if cost is not None else ""
-        usage_str = _format_usage(getattr(message, "usage", None))
-        print(f"{prefix} ✓ done{cost_str}{usage_str}", file=sys.stderr)
+                    print(f"{prefix} → {block.name}({args})", file=sys.stderr)
+                elif isinstance(block, ThinkingBlock):
+                    print(f"{prefix} (thinking…)", file=sys.stderr)
+        elif isinstance(message, ResultMessage):
+            if show_usage:
+                cost = getattr(message, "total_cost_usd", None)
+                cost_str = f" cost=${cost:.4f}" if cost is not None else ""
+                usage_str = _format_usage(getattr(message, "usage", None))
+                print(f"{prefix} ✓ done{cost_str}{usage_str}", file=sys.stderr)
+            else:
+                print(f"{prefix} ✓ done", file=sys.stderr)
+
+    return printer
 
 
 def _split_allow(
@@ -135,7 +124,8 @@ def _compose_system_prompt(base: str, skill_refs: Sequence[str | Path]) -> str:
         return base
     parts = [base, "", "## Operating guidelines", ""]
     for ref in skill_refs:
-        parts.append(_load_skill(ref))
+        text = ref.read_text(encoding="utf-8") if isinstance(ref, Path) else ref
+        parts.append(text)
         parts.append("")
     return "\n".join(parts).strip()
 
@@ -143,47 +133,9 @@ def _compose_system_prompt(base: str, skill_refs: Sequence[str | Path]) -> str:
 class ClaudeAgentNode:
     """A LangGraph node that runs a Claude Agent SDK query.
 
-    The node is an async callable: `await node(state) -> dict`. State keys
-    used by default:
-        - working_dir: cwd for the agent
-        - task_description: passed into prompt_template
-
-    Args:
-        name: node identifier (used in error messages).
-        system_prompt: base system prompt; skills are appended.
-        skills: list of bundled skill names (e.g. "python-clean-code") or
-            paths to .md files. Their contents are appended to system_prompt.
-        allow / deny: rule strings matching Claude Code's settings.json
-            syntax: bare names ("Read") or patterns ("Bash(python*)").
-            Bare names with no matching deny rule are routed to the SDK's
-            fast-path auto-allow; everything else runs through can_use_tool.
-            Deny always wins.
-        on_unmatched: "allow" | "deny" | async callable returning bool.
-        prompt_template: str.format()ed against state before sending.
-        output_key: state key to write the final assistant text into.
-        cwd_key: state key holding the working directory.
-        model: optional Claude model id.
-        max_turns: optional cap on agent turns.
-        max_budget_usd: cost cap. With hard_cap=True (default) the SDK aborts
-            the run when crossed; with hard_cap=False it is only used to
-            compute warning thresholds.
-        hard_cap: if True (default) pass `max_budget_usd` to the SDK so the
-            run is killed when crossed. If False, the run is not killed —
-            but a warning still fires when 100% is reached (1.0 is added to
-            warn_at_pct automatically when missing).
-        warn_at_pct: a single fraction in (0, 1] or a list of fractions at
-            which to emit a warning (e.g. [0.8, 0.9, 0.95]). Ignored if
-            max_budget_usd is None. Pass None to disable warnings.
-        on_warn: callback `(cost, cap) -> None` for threshold warnings.
-            Defaults to a stderr print.
-        verbose: if True, print one short stderr line per streamed message
-            (text deltas, tool calls, results). Equivalent to setting
-            `on_message` to a default printer.
-        on_message: callback `(node_name, message) -> None` invoked for
-            every message yielded by the SDK. Use this to plug into a
-            logger or TUI. Overrides `verbose` when both are set.
-        extra_options: dict merged into ClaudeAgentOptions for escape-hatch
-            access to options not exposed here.
+    The node is an async callable: `await node(state) -> dict`.
+    Reads ``state["working_dir"]`` as cwd and writes output to
+    ``state[self.name]``.
     """
 
     def __init__(
@@ -196,15 +148,13 @@ class ClaudeAgentNode:
         deny: Sequence[str] = (),
         on_unmatched: UnmatchedPolicy = "deny",
         prompt_template: str = "{task_description}",
-        output_key: str = "last_result",
-        cwd_key: str = "working_dir",
         model: str | None = None,
         max_turns: int | None = None,
         max_budget_usd: float | None = None,
         hard_cap: bool = True,
         warn_at_pct: float | Sequence[float] | None = 0.8,
         on_warn: WarnCallback | None = None,
-        verbose: bool = False,
+        verbosity: Verbosity = Verbosity.silent,
         on_message: MessageCallback | None = None,
         extra_options: dict[str, Any] | None = None,
     ) -> None:
@@ -215,19 +165,16 @@ class ClaudeAgentNode:
         self._sdk_allowed_tools, self._allow_rules = _split_allow(self.allow, self.deny)
         self.on_unmatched = on_unmatched
         self.prompt_template = prompt_template
-        self.output_key = output_key
-        self.cwd_key = cwd_key
         self.model = model
         self.max_turns = max_turns
         self.max_budget_usd = max_budget_usd
         self.hard_cap = hard_cap
         self.warn_at_pct = self._resolve_warn_pcts(warn_at_pct, hard_cap)
         self.on_warn = on_warn
-        self.on_message: MessageCallback | None = on_message or (
-            _default_printer if verbose else None
-        )
+        self.verbosity = verbosity
+        self.on_message: MessageCallback | None = on_message or _make_printer(verbosity)
         self.extra_options = extra_options or {}
-        self.declared_outputs: tuple[str, ...] = (self.output_key, "last_cost_usd")
+        self.declared_outputs: tuple[str, ...] = (self.name, "last_cost_usd")
 
     @staticmethod
     def _resolve_warn_pcts(
@@ -276,7 +223,7 @@ class ClaudeAgentNode:
             ) from e
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
-        cwd = state.get(self.cwd_key)
+        cwd = state.get("working_dir")
         prompt = self._render_prompt(state)
         options = self._build_options(cwd)
 
@@ -289,8 +236,6 @@ class ClaudeAgentNode:
         )
 
         async def _prompt_stream():
-            # The SDK requires AsyncIterable when can_use_tool is set,
-            # which we always do. Wrap the rendered prompt accordingly.
             yield {"type": "user", "message": {"role": "user", "content": prompt}}
 
         async for message in query(prompt=_prompt_stream(), options=options):
@@ -306,7 +251,7 @@ class ClaudeAgentNode:
 
         final = result_text if result_text else "\n".join(text_chunks).strip()
         return {
-            self.output_key: final,
+            self.name: final,
             "last_cost_usd": tracker.last_cost_usd,
         }
 
@@ -314,17 +259,8 @@ class ClaudeAgentNode:
 class ShellNode:
     """A LangGraph node that runs a shell command.
 
-    Args:
-        name: node identifier.
-        command: a string (run via shell), a list[str] (argv), or a callable
-            taking state and returning either form.
-        cwd_key: state key holding the working directory.
-        output_key: state key to write captured stdout into.
-        check: raise on non-zero exit code.
-        timeout: seconds before the subprocess is killed.
-        verbose: if True, also echo each stdout line to stderr as it
-            arrives, prefixed with the node name. Captured stdout is
-            still written to `output_key` either way.
+    Reads ``state["working_dir"]`` as cwd and writes output to
+    ``state[self.name]``.
     """
 
     def __init__(
@@ -332,32 +268,28 @@ class ShellNode:
         *,
         name: str,
         command: str | list[str] | Callable[[dict[str, Any]], str | list[str]],
-        cwd_key: str = "working_dir",
-        output_key: str = "last_result",
         check: bool = True,
         timeout: float | None = None,
-        verbose: bool = False,
+        verbosity: Verbosity = Verbosity.silent,
     ) -> None:
         self.name = name
         self.command = command
-        self.cwd_key = cwd_key
-        self.output_key = output_key
         self.check = check
         self.timeout = timeout
-        self.verbose = verbose
-        self.declared_outputs: tuple[str, ...] = (self.output_key,)
+        self.verbosity = verbosity
+        self.declared_outputs: tuple[str, ...] = (self.name,)
 
-    def _resolve(self, state: dict[str, Any]) -> tuple[list[str], bool]:
+    def _resolve(self, state: dict[str, Any]) -> list[str]:
         cmd = self.command(state) if callable(self.command) else self.command
         if isinstance(cmd, str):
-            return shlex.split(cmd), False
-        return list(cmd), False
+            return shlex.split(cmd)
+        return list(cmd)
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
-        argv, _ = self._resolve(state)
-        cwd = state.get(self.cwd_key)
+        argv = self._resolve(state)
+        cwd = state.get("working_dir")
 
-        if not self.verbose:
+        if self.verbosity == Verbosity.silent:
 
             def run() -> subprocess.CompletedProcess[str]:
                 return subprocess.run(
@@ -370,7 +302,7 @@ class ShellNode:
                 )
 
             result = await asyncio.to_thread(run)
-            return {self.output_key: result.stdout.strip()}
+            return {self.name: result.stdout.strip()}
 
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -411,4 +343,4 @@ class ShellNode:
                 output="".join(stdout_chunks),
                 stderr="".join(stderr_chunks),
             )
-        return {self.output_key: "".join(stdout_chunks).strip()}
+        return {self.name: "".join(stdout_chunks).strip()}

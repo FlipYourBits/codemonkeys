@@ -7,13 +7,13 @@ parallel fan-out (same semantics as `chain()`).
 from __future__ import annotations
 
 import inspect
-from collections.abc import Sequence
-from pathlib import Path
+from collections.abc import Callable, Sequence
 from typing import Any, Union
 
 from langgraph.graph import StateGraph
 
 from langclaude.graphs import chain
+from langclaude.nodes.base import Verbosity
 from langclaude.registry import register, resolve
 
 Step = Union[str, tuple[str, str]]
@@ -26,13 +26,13 @@ class Pipeline:
         working_dir: repo root passed into state as "working_dir".
         task: task description passed into state as "task_description".
         steps: list of node name strings, (graph_name, registry_key) tuples,
-            or nested lists for parallel fan-out.
-        extra_skills: skill names injected into every node whose factory
-            accepts an `extra_skills` parameter.
+            or nested lists for parallel fan-out. Duplicate strings are
+            auto-suffixed (e.g. "python_lint", "python_lint_2").
         config: per-node overrides keyed by step name or graph_name.
         custom_nodes: dict mapping namespaced names to node callables.
             Registered before resolution. Inline alternative to register().
-        verbose: default verbose flag for nodes that accept it.
+        verbosity: default verbosity for nodes that accept it. Per-node
+            config overrides this.
         extra_state: additional key-value pairs merged into initial state.
     """
 
@@ -42,10 +42,10 @@ class Pipeline:
         working_dir: str,
         task: str = "",
         steps: Sequence[Any],
-        extra_skills: Sequence[str | Path] = (),
+        model: str | None = None,
         config: dict[str, dict[str, Any]] | None = None,
         custom_nodes: dict[str, Any] | None = None,
-        verbose: bool = False,
+        verbosity: Verbosity = Verbosity.silent,
         extra_state: dict[str, Any] | None = None,
     ) -> None:
         if not steps:
@@ -53,18 +53,25 @@ class Pipeline:
         self.working_dir = working_dir
         self.task = task
         self.steps = list(steps)
-        self.extra_skills = list(extra_skills)
+        self.model = model
         self.config = dict(config or {})
         self.custom_nodes = dict(custom_nodes or {})
-        self.verbose = verbose
+        self.verbosity = verbosity
         self.extra_state = dict(extra_state or {})
 
         self._register_custom_nodes()
         self._app = self._build()
 
+    @staticmethod
+    def _wrap_as_factory(node: Any) -> Callable[..., Any]:
+        def factory(**kw: Any) -> Any:
+            return node
+
+        return factory
+
     def _register_custom_nodes(self) -> None:
         for key, node in self.custom_nodes.items():
-            factory = (lambda _n=node, **kw: _n) if callable(node) else node
+            factory = self._wrap_as_factory(node)
             if "/" not in key:
                 register(key, factory, namespace="custom")
             else:
@@ -75,13 +82,11 @@ class Pipeline:
         sig = inspect.signature(factory)
         params = sig.parameters
 
-        if "extra_skills" in params and self.extra_skills:
-            existing = list(overrides.get("extra_skills", ()))
-            merged = list(dict.fromkeys([*self.extra_skills, *existing]))
-            overrides["extra_skills"] = merged
+        if "verbosity" in params and "verbosity" not in overrides:
+            overrides["verbosity"] = self.verbosity
 
-        if "verbose" in params and "verbose" not in overrides:
-            overrides["verbose"] = self.verbose
+        if self.model and "model" not in overrides:
+            overrides["model"] = self.model
 
         if overrides:
             return factory(**overrides)
@@ -113,28 +118,42 @@ class Pipeline:
 
         return _wrapper
 
-    def _instantiate(self, name: str) -> tuple[str, Any]:
+    def _dedup_name(self, name: str, seen: dict[str, int]) -> str:
+        seen[name] = seen.get(name, 0) + 1
+        if seen[name] == 1:
+            return name
+        return f"{name}_{seen[name]}"
+
+    def _instantiate(
+        self, name: str, seen: dict[str, int]
+    ) -> tuple[str, Any]:
         factory = resolve(name)
-        graph_name = name.rsplit("/", 1)[-1]
+        base_name = name.rsplit("/", 1)[-1]
+        graph_name = self._dedup_name(base_name, seen)
         overrides = dict(self.config.get(name, {}))
+        overrides.update(self.config.get(graph_name, {}))
+        if graph_name != base_name:
+            overrides.setdefault("name", graph_name)
         node = self._apply_overrides(factory, overrides)
         return graph_name, self._merge_wrap(node)
 
-    def _resolve_step(self, step: Any) -> Any:
+    def _resolve_step(self, step: Any, seen: dict[str, int]) -> Any:
         if isinstance(step, list):
-            return [self._resolve_step(s) for s in step]
+            return [self._resolve_step(s, seen) for s in step]
         if isinstance(step, tuple):
             graph_name, registry_key = step
+            seen[graph_name] = seen.get(graph_name, 0) + 1
             factory = resolve(registry_key)
             overrides = dict(self.config.get(registry_key, {}))
             overrides.update(self.config.get(graph_name, {}))
             node = self._apply_overrides(factory, overrides)
             return graph_name, self._merge_wrap(node)
-        return self._instantiate(step)
+        return self._instantiate(step, seen)
 
     def _build(self) -> Any:
         graph = StateGraph(dict)
-        resolved = [self._resolve_step(s) for s in self.steps]
+        seen: dict[str, int] = {}
+        resolved = [self._resolve_step(s, seen) for s in self.steps]
         chain(graph, *resolved)
         return graph.compile()
 

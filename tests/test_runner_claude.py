@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 from langclaude.nodes.base import ClaudeAgentNode
-from langclaude.nodes.pytest_node import claude_pytest_node
+from langclaude.nodes.python_test import python_test_node
 
 
 class TestPytestClaudeNode:
     def test_returns_claude_agent_node(self):
-        node = claude_pytest_node()
+        node = python_test_node()
         assert isinstance(node, ClaudeAgentNode)
 
-    def test_default_is_readonly(self):
-        node = claude_pytest_node()
-        assert "Edit" in node.deny
+    def test_default_allows_edit(self):
+        node = python_test_node()
+        assert "Edit" in node.allow
 
-    def test_readwrite_when_edit_allowed(self):
-        node = claude_pytest_node(
-            allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-            deny=["Bash(git push*)"],
-        )
-        assert "Edit" not in node.deny
+    def test_default_allows_pytest_bash(self):
+        node = python_test_node()
+        assert "Bash(python -m pytest*)" in node.allow
+
+    def test_no_blanket_bash(self):
+        node = python_test_node()
+        assert "Bash" not in node.allow
+
+    def test_custom_deny_overrides_default(self):
+        node = python_test_node(deny=["Edit"])
+        assert "Edit" in node.deny

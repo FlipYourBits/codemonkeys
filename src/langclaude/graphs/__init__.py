@@ -23,8 +23,8 @@ def chain(graph: StateGraph, *steps: Any) -> None:
     Example::
 
         chain(graph,
-            ("new_branch", claude_new_branch_node()),
-            ("implementer", claude_feature_implementer_node()),
+            ("git_new_branch", git_new_branch_node()),
+            ("implementer", implement_feature_node()),
             [
                 ("code_review", review),
                 ("security_audit", security),

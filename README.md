@@ -5,7 +5,9 @@ LangGraph nodes powered by the [Claude Agent SDK](https://code.claude.com/docs/e
 ## Install
 
 ```bash
-pip install -e .
+pip install -e .              # core only (ruff bundled)
+pip install -e ".[python]"    # + pytest, pytest-cov, pip-audit
+pip install -e ".[dev]"       # [python] + test runner deps
 ```
 
 ```bash
@@ -16,20 +18,20 @@ export ANTHROPIC_API_KEY=...
 
 ```python
 import asyncio
-from langclaude import Pipeline
+from langclaude import Pipeline, PYTHON_CLEAN_CODE
 
 async def main():
     pipeline = Pipeline(
         working_dir="/path/to/repo",
         task="Add a /healthz endpoint that returns 200 OK",
         steps=[
-            "new_branch",
+            "git_new_branch",
             "implement_feature",
-            "ruff_fix",
-            "ruff_fmt",
-            ["code_review", "security_audit", "pytest"],
+            "python_lint",
+            "python_format",
+            ["code_review", "security_audit", "python_test"],
         ],
-        extra_skills=["python-clean-code"],
+        extra_skills=[PYTHON_CLEAN_CODE],
     )
     final = await pipeline.run()
     print(final)
@@ -47,8 +49,8 @@ Every node does one thing. The table is grouped by what that thing is.
 
 | Factory | Registry name | Output key | What it does |
 |---|---|---|---|
-| `claude_new_branch_node()` | `new_branch` | `branch_name` | Generates a branch name from the task description. In interactive mode, prompts for approval and handles dirty-tree safety (stash/commit/carry). Falls back to auto mode when stdin isn't a TTY. |
-| `claude_feature_implementer_node()` | `implement_feature` | `last_result` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. Does not run tests. |
+| `git_new_branch_node()` | `new_branch` | `branch_name` | Generates a branch name from the task description. In interactive mode, prompts for approval and handles dirty-tree safety (stash/commit/carry). Falls back to auto mode when stdin isn't a TTY. |
+| `implement_feature_node()` | `implement_feature` | `last_result` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. Does not run tests. |
 
 ### Quality nodes
 
@@ -56,46 +58,45 @@ Each owns a single concern. They do not overlap — code review doesn't run lint
 
 | Factory | Registry name | Output key | What it does |
 |---|---|---|---|
-| `claude_code_review_node()` | `code_review` | `review_findings` | **Semantic code review.** Reads the code and looks for things linters can't catch: logic errors, functions >50 lines, deep nesting, error handling gaps, resource leaks, concurrency bugs, API contract violations, dead code. Does NOT run linters, type-checkers, tests, or security scanners. |
-| `claude_security_audit_node()` | `security_audit` | `security_findings` | **Security review.** Runs installed security scanners (semgrep, gitleaks, etc.) then traces data flow through the code looking for injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. Does NOT check code quality or run tests. |
-| `claude_docs_review_node()` | `docs_review` | `docs_findings` | **Doc drift detection.** Checks docstrings, README, and CHANGELOG against the actual code for accuracy. Catches stale examples, missing docs for new public APIs, inconsistent terminology. Does NOT review code quality or security. |
-| `claude_pytest_node()` | `pytest` | `test_findings` | **Test runner.** Runs pytest, reads failing tests and the code under test to identify root causes. |
-| `claude_coverage_node()` | `coverage` | `coverage_findings` | **Coverage analysis.** Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` (changed files only) or `mode="full"`. |
-| `claude_dependency_audit_node()` | `dependency_audit` | `dep_findings` | **Dependency vulnerabilities.** Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
+| `code_review_node()` | `code_review` | `review_findings` | **Semantic code review.** Reads the code and looks for things linters can't catch: logic errors, functions >50 lines, deep nesting, error handling gaps, resource leaks, concurrency bugs, API contract violations, dead code. Does NOT run linters, type-checkers, tests, or security scanners. |
+| `security_audit_node()` | `security_audit` | `security_findings` | **Security review.** Reads the code and traces data flow from inputs to sinks looking for injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. Pure semantic analysis — no external scanners required. Does NOT check code quality or run tests. |
+| `docs_review_node()` | `docs_review` | `docs_findings` | **Doc drift detection.** Checks docstrings, README, and CHANGELOG against the actual code for accuracy. Catches stale examples, missing docs for new public APIs, inconsistent terminology. Does NOT review code quality or security. |
+| `python_test_node()` | `python_test` | `test_findings` | **Test runner.** Runs pytest, reads failing tests and the code under test to identify root causes. |
+| `python_coverage_node()` | `python_coverage` | `coverage_findings` | **Coverage analysis.** Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` (changed files only) or `mode="full"`. |
+| `dependency_audit_node()` | `dependency_audit` | `dep_findings` | **Dependency vulnerabilities.** Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
 
-### Deterministic nodes
+### Python tooling nodes
 
 | Factory | Registry name | Output key | What it does |
 |---|---|---|---|
-| `shell_ruff_fix_node()` | `ruff_fix` | `ruff_fix_output` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
-| `shell_ruff_fmt_node()` | `ruff_fmt` | `ruff_fmt_output` | Runs `ruff format`. |
+| `python_lint_node()` | `python_lint` | `lint_output` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
+| `python_format_node()` | `python_format` | `format_output` | Runs `ruff format`. |
 
 All quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing — see [Permissions control behavior](#permissions-control-behavior).
 
 ## Permissions control behavior
 
-Each node's behavior is controlled by three levers:
+Every node always tries to find and fix issues. Permissions decide what actually happens:
 
-1. **allow/deny** — what tools the agent can use. Default: read-only. Pass Edit/Write to enable fixing.
+1. **allow/deny** — what tools the agent can use. Default: read-only (Edit/Write denied), so fixes are blocked and the node reports findings only.
 2. **on_unmatched** — what happens for tool calls not covered by allow/deny:
-   - `"deny"`: block (default — safest)
-   - `"allow"`: auto-approve (CI / fully automatic)
-   - `ask_via_stdin`: prompt the user interactively
-3. **System prompt** — adjusts automatically. Read-only nodes report findings; read-write nodes also fix them.
+   - `"deny"`: block (default — safest, report-only)
+   - `"allow"`: auto-approve (CI / fully automatic fixing)
+   - `ask_via_stdin`: prompt the user per edit
 
 ```python
-# Report only (default):
-claude_code_review_node()
+# Report only (default — Edit/Write denied):
+code_review_node()
 
-# Review and fix automatically:
-claude_code_review_node(
+# Auto-fix everything:
+code_review_node(
     allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
     deny=["Bash(git push*)"],
 )
 
-# Review and fix with user approval per edit:
+# Prompt user per edit:
 from langclaude import ask_via_stdin
-claude_code_review_node(
+code_review_node(
     allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
     deny=["Bash(git push*)"],
     on_unmatched=ask_via_stdin,
@@ -120,21 +121,23 @@ Deny always wins over allow.
 `Pipeline` resolves step names from the registry, injects config, and builds a LangGraph workflow.
 
 ```python
+from langclaude.skills import PYTHON_CLEAN_CODE
+
 Pipeline(
     working_dir="/path/to/repo",
     task="description of what to do",
     steps=[
-        "new_branch",
+        "git_new_branch",
         "implement_feature",
-        "ruff_fix",
-        ["code_review", "security_audit", "pytest"],  # parallel
-        ("ruff_final", "ruff_fix"),  # tuple: (graph_name, registry_key)
+        "python_lint",
+        ["code_review", "security_audit", "python_test"],  # parallel
+        ("lint_final", "python_lint"),  # tuple: (graph_name, registry_key)
         "custom/commit",
     ],
-    extra_skills=["python-clean-code"],
+    extra_skills=[PYTHON_CLEAN_CODE],
     config={
         "code_review": {"mode": "diff"},
-        "coverage": {"mode": "diff", "base_ref_key": "base_ref"},
+        "python_coverage": {"mode": "diff", "base_ref_key": "base_ref"},
     },
     custom_nodes={"custom/commit": my_commit_factory},
     verbose=True,
@@ -158,8 +161,9 @@ Every built-in node has a string name. User nodes are registered under a namespa
 from langclaude import register, resolve, list_builtins
 
 list_builtins()
-# ['code_review', 'coverage', 'dependency_audit', 'docs_review',
-#  'implement_feature', 'new_branch', 'pytest', 'ruff_fix', 'ruff_fmt',
+# ['code_review', 'dependency_audit', 'docs_review',
+#  'implement_feature', 'new_branch', 'python_coverage',
+#  'python_test', 'python_lint', 'python_format',
 #  'security_audit']
 
 register("deploy", my_deploy_factory, namespace="acme")
@@ -188,15 +192,15 @@ For full control, skip `Pipeline` and wire nodes directly:
 
 ```python
 from langgraph.graph import StateGraph
-from langclaude import chain, claude_new_branch_node, claude_feature_implementer_node
+from langclaude import chain, git_new_branch_node, implement_feature_node
 
 graph = StateGraph(dict)
 chain(graph,
-    ("new_branch", claude_new_branch_node()),
-    ("implement", claude_feature_implementer_node()),
+    ("git_new_branch", git_new_branch_node()),
+    ("implement", implement_feature_node()),
     [
-        ("code_review", claude_code_review_node(mode="diff")),
-        ("security_audit", claude_security_audit_node(mode="diff")),
+        ("code_review", code_review_node(mode="diff")),
+        ("security_audit", security_audit_node(mode="diff")),
     ],
 )
 app = graph.compile()
@@ -209,12 +213,12 @@ app = graph.compile()
 **`ClaudeAgentNode`** — wraps `claude_agent_sdk.query()`. All `claude_*` factories build on this:
 
 ```python
-from langclaude import ClaudeAgentNode
+from langclaude import ClaudeAgentNode, PYTHON_CLEAN_CODE
 
 reviewer = ClaudeAgentNode(
     name="reviewer",
     system_prompt="You review pull requests.",
-    skills=["python-clean-code"],
+    skills=[PYTHON_CLEAN_CODE],
     allow=["Read", "Glob", "Grep", "Bash(git diff*)"],
     deny=["Bash(git push*)"],
     prompt_template="Review the diff for {branch_name}.",
@@ -258,18 +262,24 @@ validate_node_outputs(audit, review, coverage)  # raises OutputKeyConflict
 
 ## Language skills
 
-Node-specific behavior (what code review looks for, what security audit traces, etc.) is embedded directly in each node's system prompt. Language-specific clean code and security guidance are separate `.md` files under `langclaude/skills/`:
+Node-specific behavior (what code review looks for, what security audit traces, etc.) is embedded directly in each node's system prompt. Language-specific clean code and security guidance are Python constants under `langclaude.skills`:
 
-| Skill | Usage |
+```python
+from langclaude.skills import PYTHON_CLEAN_CODE, PYTHON_SECURITY
+
+implement_feature_node(extra_skills=[PYTHON_CLEAN_CODE])
+```
+
+| Constant | Module |
 |---|---|
-| `python-clean-code` | `extra_skills=["python-clean-code"]` |
-| `python-security` | `extra_skills=["python-security"]` |
-| `javascript-clean-code` | `extra_skills=["javascript-clean-code"]` |
-| `javascript-security` | `extra_skills=["javascript-security"]` |
-| `rust-clean-code` | `extra_skills=["rust-clean-code"]` |
-| `rust-security` | `extra_skills=["rust-security"]` |
+| `PYTHON_CLEAN_CODE` | `langclaude.skills.python` |
+| `PYTHON_SECURITY` | `langclaude.skills.python` |
+| `JAVASCRIPT_CLEAN_CODE` | `langclaude.skills.javascript` |
+| `JAVASCRIPT_SECURITY` | `langclaude.skills.javascript` |
+| `RUST_CLEAN_CODE` | `langclaude.skills.rust` |
+| `RUST_SECURITY` | `langclaude.skills.rust` |
 
-Pass on any node factory via `extra_skills`, or on a raw `ClaudeAgentNode` via `skills`. Accepts bundled stems or paths to your own `.md` files.
+All constants are also re-exported from `langclaude.skills` and `langclaude`. Pass on any node factory via `extra_skills`, or on a raw `ClaudeAgentNode` via `skills`. For custom skills, pass a `Path` to your own file.
 
 ## Using Amazon Bedrock or Google Vertex AI
 
@@ -289,7 +299,7 @@ export ANTHROPIC_VERTEX_PROJECT_ID=my-project
 Pass the provider-specific model ID directly:
 
 ```python
-claude_feature_implementer_node(model="us.anthropic.claude-opus-4-7-20251201-v1:0")
+implement_feature_node(model="us.anthropic.claude-opus-4-7-20251201-v1:0")
 ```
 
 Cost reporting works regardless of backend.

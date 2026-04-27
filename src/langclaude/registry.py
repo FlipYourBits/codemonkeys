@@ -15,28 +15,35 @@ _USER_REGISTRY: dict[str, Callable[..., Any]] = {}
 
 
 def _register_builtins() -> None:
-    from langclaude.nodes.new_branch import claude_new_branch_node
-    from langclaude.nodes.code_review import claude_code_review_node
-    from langclaude.nodes.coverage import claude_coverage_node
-    from langclaude.nodes.dependency_audit import claude_dependency_audit_node
-    from langclaude.nodes.docs_review import claude_docs_review_node
-    from langclaude.nodes.implement_feature import claude_feature_implementer_node
-    from langclaude.nodes.pytest_node import claude_pytest_node
-    from langclaude.nodes.ruff import shell_ruff_fix_node, shell_ruff_fmt_node
-    from langclaude.nodes.security_audit import claude_security_audit_node
+    from langclaude.nodes.code_review import code_review_node
+    from langclaude.nodes.dependency_audit import dependency_audit_node
+    from langclaude.nodes.docs_review import docs_review_node
+    from langclaude.nodes.git_commit import git_commit_node
+    from langclaude.nodes.git_new_branch import git_new_branch_node
+    from langclaude.nodes.implement_feature import implement_feature_node
+    from langclaude.nodes.python_coverage import python_coverage_node
+    from langclaude.nodes.python_implement_feature import python_implement_feature_node
+    from langclaude.nodes.python_plan_feature import python_plan_feature_node
+    from langclaude.nodes.python_test import python_test_node
+    from langclaude.nodes.python_format import python_format_node
+    from langclaude.nodes.python_lint import python_lint_node
+    from langclaude.nodes.security_audit import security_audit_node
 
     _BUILTINS.update(
         {
-            "new_branch": claude_new_branch_node,
-            "implement_feature": claude_feature_implementer_node,
-            "code_review": claude_code_review_node,
-            "security_audit": claude_security_audit_node,
-            "docs_review": claude_docs_review_node,
-            "ruff_fix": shell_ruff_fix_node,
-            "ruff_fmt": shell_ruff_fmt_node,
-            "pytest": claude_pytest_node,
-            "coverage": claude_coverage_node,
-            "dependency_audit": claude_dependency_audit_node,
+            "git_new_branch": git_new_branch_node,
+            "git_commit": git_commit_node,
+            "implement_feature": implement_feature_node,
+            "python_implement_feature": python_implement_feature_node,
+            "python_plan_feature": python_plan_feature_node,
+            "code_review": code_review_node,
+            "security_audit": security_audit_node,
+            "docs_review": docs_review_node,
+            "python_lint": python_lint_node,
+            "python_format": python_format_node,
+            "python_test": python_test_node,
+            "python_coverage": python_coverage_node,
+            "dependency_audit": dependency_audit_node,
         }
     )
 

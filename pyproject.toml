@@ -20,20 +20,19 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    # Both SDKs are pre-1.0, so minor bumps can break us. Cap to the current
-    # minor and bump intentionally when we test against a new release.
-    # claude-agent-sdk is pre-1.0; cap at next minor and bump intentionally.
     "claude-agent-sdk>=0.1.0,<0.2",
-    # langgraph already cut a 1.0; allow 0.2.x and the 1.x line, cap below 2.
     "langgraph>=0.2.0,<2",
-    # ruff is bundled so ruff_node works out of the box. Pre-1.0; cap at <1.
-    # If you pin ruff yourself in the consuming project, pip will reconcile.
-    "ruff>=0.5,<1",
 ]
 
 [project.optional-dependencies]
-dev = [
+python = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pip-audit>=2.7",
+    "ruff>=0.5,<1",
+]
+dev = [
+    "langclaude[python]",
     "pytest-asyncio>=0.23",
 ]
 

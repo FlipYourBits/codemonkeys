@@ -24,21 +24,24 @@ class TestBuiltins:
     def test_known_builtins_exist(self):
         builtins = list_builtins()
         expected = {
-            "new_branch",
+            "git_new_branch",
+            "git_commit",
             "implement_feature",
             "code_review",
             "security_audit",
             "docs_review",
-            "ruff_fix",
-            "ruff_fmt",
-            "pytest",
-            "coverage",
+            "python_lint",
+            "python_format",
+            "python_test",
+            "python_coverage",
             "dependency_audit",
+            "python_implement_feature",
+            "python_plan_feature",
         }
         assert expected == set(builtins)
 
     def test_resolve_builtin(self):
-        factory = resolve("ruff_fix")
+        factory = resolve("python_lint")
         assert callable(factory)
 
     def test_resolve_unknown_raises(self):

@@ -2,7 +2,7 @@
 
 `validate_node_outputs(*nodes)` walks the nodes you've added to a
 StateGraph and raises if any output key is written by ≥2 nodes. This
-catches the classic footgun: two `claude_code_review_node` instances both
+catches the classic footgun: two `code_review_node` instances both
 defaulting to `review_findings`, with the second silently overwriting
 the first.
 
@@ -12,7 +12,6 @@ and reduced/summed by the consumer; those don't trigger the error.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from typing import Any
 
 # Keys that are *meant* to be written by many nodes — the consumer reduces.
@@ -30,16 +29,9 @@ class OutputKeyConflict(ValueError):
 
 
 def _outputs_of(node: Any) -> tuple[str, ...]:
-    """Best-effort extraction of declared output keys for a node.
-
-    Looks for a `declared_outputs` attribute (preferred); falls back to
-    `output_key` if present; otherwise returns ()."""
     declared = getattr(node, "declared_outputs", None)
     if declared:
         return tuple(declared)
-    single = getattr(node, "output_key", None)
-    if isinstance(single, str):
-        return (single,)
     return ()
 
 
@@ -51,11 +43,6 @@ def validate_node_outputs(*nodes: Any) -> None:
     lambdas). For full coverage, ensure every node either has
     `declared_outputs: tuple[str, ...]` or `output_key: str` set.
     """
-    return validate_outputs_iter(nodes)
-
-
-def validate_outputs_iter(nodes: Iterable[Any]) -> None:
-    """Same as validate_node_outputs but takes an iterable."""
     seen: dict[str, list[str]] = {}
     for node in nodes:
         owner = (

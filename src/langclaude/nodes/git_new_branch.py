@@ -18,8 +18,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
-from langclaude.models import HAIKU_4_5
-from langclaude.nodes.base import ClaudeAgentNode
+from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
 
 Mode = Literal["interactive", "auto"]
@@ -141,52 +140,32 @@ async def ask_dirty_tree_via_stdin(status: str) -> str:
     return "carry"
 
 
-def claude_new_branch_node(
+def git_new_branch_node(
     *,
-    name: str = "branch_namer",
+    name: str = "git_new_branch",
     mode: Mode = "interactive",
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] = (),
     on_unmatched: UnmatchedPolicy = "deny",
-    model: str | None = HAIKU_4_5,
     max_turns: int = 1,
-    output_key: str = "branch_name",
-    verbose: bool = False,
+    verbosity: Verbosity = Verbosity.silent,
     ask_name: AskBranchName = ask_branch_name_via_stdin,
     ask_dirty: AskDirtyTree = ask_dirty_tree_via_stdin,
     **kwargs: Any,
 ) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
-    """Build a node that generates a branch name, handles dirty trees,
-    and creates + switches to the new branch.
-
-    State input:
-        working_dir: repo root.
-        task_description: used to generate the branch name.
-
-    State output:
-        branch_name: the final branch name.
-
-    Args:
-        mode: "interactive" prompts for approval and dirty-tree handling.
-            "auto" accepts the name and carries uncommitted changes.
-            Interactive falls back to auto when stdin isn't a TTY.
-        ask_name: async callback for branch name approval.
-        ask_dirty: async callback for dirty-tree handling.
-    """
+    inner_name = f"{name}_inner"
     allow_list = list(allow) if allow is not None else []
     namer = ClaudeAgentNode(
-        name=f"{name}_inner",
+        name=inner_name,
         system_prompt=_SYSTEM_PROMPT,
         skills=[*extra_skills],
         allow=allow_list,
         deny=list(deny),
         prompt_template=_PROMPT_TEMPLATE,
-        output_key=output_key,
         on_unmatched=on_unmatched,
-        model=model,
         max_turns=max_turns,
-        verbose=verbose,
+        verbosity=verbosity,
         **kwargs,
     )
 
@@ -197,7 +176,7 @@ def claude_new_branch_node(
             effective = "auto"
 
         result = await namer(state)
-        proposed = result[output_key].strip()
+        proposed = result[inner_name].strip()
 
         if effective == "interactive":
             action, branch_name = await ask_name(proposed)
@@ -226,7 +205,6 @@ def claude_new_branch_node(
                             _run(["git", "commit", "-m", msg or "WIP"], cwd),
                         )
                     )
-            # auto mode: carry changes (do nothing)
 
         proc = await asyncio.to_thread(
             lambda: _run(["git", "checkout", "-b", branch_name], cwd)
@@ -239,8 +217,8 @@ def claude_new_branch_node(
                 stderr=proc.stderr,
             )
 
-        return {output_key: branch_name}
+        return {name: branch_name}
 
     run.__name__ = name
-    run.declared_outputs = (output_key,)  # type: ignore[attr-defined]
+    run.declared_outputs = (name,)  # type: ignore[attr-defined]
     return run

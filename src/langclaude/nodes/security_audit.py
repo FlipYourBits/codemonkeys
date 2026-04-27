@@ -1,267 +1,124 @@
-"""Security-audit node: runs security scanners and performs semantic review.
+"""Security-audit node: semantic security review via code analysis.
 
 Owns security concerns exclusively: injection, auth, secrets, crypto,
-data exposure. Runs security-specific scanners (semgrep, gitleaks, etc.)
-and traces data flow through the code. Does NOT check code quality,
-run tests, or audit dependencies — other nodes own those.
+data exposure. Reads the code and traces data flow — no external
+scanners required. Does NOT check code quality, run tests, or audit
+dependencies — other nodes own those.
 
-When Edit/Write are in the allow list (and not denied), the agent also
-fixes vulnerabilities it finds.
+After each audit pass, the user can review findings and give feedback
+until satisfied. Falls back to auto-approve when stdin isn't a TTY.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+import sys
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
-from langclaude.models import DEFAULT
-from langclaude.nodes.base import ClaudeAgentNode
+from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
+from langclaude.skills.security_audit import SKILL
+
+AskFeedback = Callable[[str], Awaitable[str | None]]
+
+_SYSTEM_PROMPT = (
+    "You are a senior security engineer auditing a code repository. "
+    "Read the code directly — trace data flow from inputs to sinks. "
+    "Follow the skill below. Review the code, then fix each vulnerability — "
+    "make the smallest correct change per issue, verify by re-reading the file. "
+    "Do not push. Output JSON only as your final message."
+)
 
 Mode = Literal["diff", "full"]
 
-_SKILL = """\
-
-# Security audit
-
-You are conducting a security audit of a code repository. Your goal is to identify high-confidence, exploitable vulnerabilities — not theoretical or stylistic issues. Better to miss speculative findings than flood the report with false positives.
-
-## Scope
-
-- **Diff mode**: only review changes between the base ref and `HEAD`. Do not flag pre-existing issues outside the diff.
-- **Full mode**: review the entire current tree.
-
-## Phase 1 — Run security scanners
-
-Run whichever security scanners are installed via Bash: semgrep, gitleaks, pip-audit, trivy, etc. Only run tools that are actually installed. Treat scanner output as **leads, not verdicts** — you must still confirm exploitability by reading the code before reporting.
-
-Do NOT run linters (ruff, eslint), formatters, type-checkers, or test suites — other nodes handle those. Do NOT run dependency auditors (pip-audit for vuln scanning) — the dependency audit node handles that. Focus on source code security scanners only.
-
-## Phase 2 — Semantic review
-
-For diff mode, run `git diff BASE_REF...HEAD` and read every changed file. For full mode, walk the tree (use `Glob` + `Read`).
-
-Trace data flow from untrusted inputs (HTTP handlers, CLI args, env vars, queue consumers, file ingest, IPC) to sinks. Look for:
-
-### Injection
-- SQL via string concat / f-strings into raw queries
-- Command injection via `subprocess(shell=True)`, `os.system`, backticks, `exec`
-- Path traversal — user-controlled paths joined to filesystem operations without confining to a base dir
-- XXE — XML parsers with external entity resolution enabled
-- SSRF — outbound requests built from user input without host allowlist
-- Template injection — user input rendered through Jinja/EJS/etc. as template, not data
-- LDAP / NoSQL / GraphQL injection where applicable
-
-### Authentication & authorization
-- Authn bypass paths (missing `@require_auth`, conditional skips)
-- Authorization checks at the wrong layer (UI-only, missing on API)
-- IDOR — operations that trust a client-supplied resource ID without ownership check
-- JWT issues — `alg: none` accepted, no signature verification, weak secret, missing `exp`
-- Session fixation, missing httpOnly/secure cookie flags on auth cookies
-
-### Secrets & crypto
-- Hardcoded keys, tokens, passwords, connection strings (cross-check with gitleaks output)
-- Weak hashes for passwords (raw SHA, MD5) — should be bcrypt/argon2/scrypt
-- Weak crypto primitives (DES, RC4, ECB mode, PKCS#1 v1.5)
-- Predictable randomness for security-critical values (`random` instead of `secrets`)
-- TLS verification disabled (`verify=False`, `rejectUnauthorized: false`)
-- Missing `secrets.compare_digest` for token comparison (timing attack)
-
-### Code execution
-- Unsafe deserialization — `pickle.loads`, `yaml.load` (without `SafeLoader`), Java `ObjectInputStream`, .NET `BinaryFormatter`, Ruby `Marshal.load`, PHP `unserialize`
-- Dynamic code execution — `eval`, `exec`, `Function()`, `setTimeout(string)`, dynamic `require`/`import` from user input
-- XSS — user input rendered into HTML without escaping (reflected/stored/DOM)
-- Prototype pollution in JS — recursive merges over user-controlled objects
-
-### Data exposure
-- PII / credentials in logs, error responses, or debug output
-- Verbose stack traces returned to clients
-- Missing redaction in telemetry
-- Overly broad CORS (`*` with credentials)
-
-### Other
-- Race conditions on auth or financial state (TOCTOU)
-- Missing rate limits on auth endpoints (only flag if it enables credential stuffing — not generic DoS)
-- Insecure defaults in framework config
-
-## Triage
-
-- Cross-reference scanner findings against your semantic review. Drop scanner findings you cannot confirm by reading the code.
-- Drop duplicates (same vuln reported by multiple sources — keep the one with strongest evidence).
-- Apply confidence threshold: report only findings ≥ 0.8 confidence of real exploitability. Below that, drop.
-
-## Exclusions — DO NOT REPORT
-
-- Code quality, complexity, or maintainability concerns (code review owns these)
-- Dependency vulnerabilities (dependency audit owns these)
-- Test failures or missing tests (test nodes own these)
-- Denial of service or resource exhaustion (CPU, memory, file handles)
-- Generic rate limiting concerns
-- Lack of input validation on fields with no security impact
-- Performance issues
-- Pre-existing issues outside the diff (in diff mode)
-
-## Output
-
-Your final reply must be a single fenced JSON block matching this schema, and nothing else after it:
-
-```json
-{
-  "mode": "diff" | "full",
-  "scanners_run": ["semgrep", "gitleaks", "pip-audit"],
-  "scanners_skipped": ["npm audit"],
-  "findings": [
-    {
-      "file": "path/to/file.py",
-      "line": 42,
-      "severity": "HIGH" | "MEDIUM" | "LOW",
-      "category": "sql_injection",
-      "source": "semantic" | "semgrep" | "gitleaks" | "pip-audit" | "npm-audit" | "govulncheck" | "cargo-audit" | "trivy",
-      "description": "User input passed to SQL query without parameterization.",
-      "exploit_scenario": "Attacker sends '1; DROP TABLE users--' as the search param, dropping the users table.",
-      "recommendation": "Use parameterized queries (cursor.execute(query, (param,))).",
-      "confidence": 0.95
-    }
-  ],
-  "summary": {
-    "files_reviewed": 12,
-    "high": 1,
-    "medium": 0,
-    "low": 0
-  }
-}
-```
-
-Severity guide:
-- **HIGH**: directly exploitable → RCE, auth bypass, data breach, account takeover
-- **MEDIUM**: exploitable under specific but realistic conditions
-- **LOW**: defense-in-depth or limited-impact issues
-
-If there are no findings, return the JSON with an empty `findings` array."""
-
-_REVIEW_ONLY_PROMPT = (
-    "You are a senior security engineer auditing a code repository. "
-    "Use Bash to run git diff and any installed security scanners "
-    "(semgrep, gitleaks, pip-audit, npm audit, govulncheck, cargo audit, "
-    "trivy, etc.) — only run tools that are installed. "
-    "Then perform semantic security review and triage following the "
-    "skill below. Do not edit files; do not push. "
-    "Output JSON only as your final message." + _SKILL
-)
-
-_REVIEW_AND_FIX_PROMPT = (
-    "You are a senior security engineer auditing a code repository. "
-    "Use Bash to run git diff and any installed security scanners "
-    "(semgrep, gitleaks, pip-audit, npm audit, govulncheck, cargo audit, "
-    "trivy, etc.) — only run tools that are installed. "
-    "Then perform semantic security review and triage following the "
-    "skill below. After reviewing, fix each vulnerability you "
-    "found — make the smallest correct change per issue, verify by "
-    "re-reading the file. Do not push. "
-    "Output JSON only as your final message." + _SKILL
-)
-
-_READONLY_ALLOW: tuple[str, ...] = ("Read", "Glob", "Grep", "Bash")
-
-_READONLY_DENY: tuple[str, ...] = (
-    "Edit",
-    "Write",
-    "Bash(rm*)",
-    "Bash(git push*)",
-    "Bash(git commit*)",
-    "Bash(git reset*)",
-    "Bash(git checkout*)",
-    "Bash(curl*)",
-    "Bash(wget*)",
-)
-
-_READWRITE_DENY: tuple[str, ...] = (
-    "Bash(rm -rf*)",
-    "Bash(rm*)",
-    "Bash(git push*)",
-    "Bash(git commit*)",
-    "Bash(git reset*)",
-    "Bash(git checkout*)",
-    "Bash(curl*)",
-    "Bash(wget*)",
-)
+_ALLOW = [
+    "Read", "Glob", "Grep", "Edit", "Write",
+    "Bash(git diff*)",
+    "Bash(git log*)",
+    "Bash(git show*)",
+    "Bash(git blame*)",
+    "Bash(git status*)",
+    "Bash(git ls-files*)",
+]
 
 
-def _has_write_tools(allow: Sequence[str]) -> bool:
-    allow_names = {a.split("(")[0] for a in allow}
-    return "Edit" in allow_names or "Write" in allow_names
+async def ask_audit_feedback_via_stdin(findings: str) -> str | None:
+    if not sys.stdin.isatty():
+        return None
+    print(f"\n{'=' * 60}", file=sys.stderr)
+    print(findings, file=sys.stderr)
+    print(f"{'=' * 60}", file=sys.stderr)
+    answer = await asyncio.to_thread(
+        input, "\n[security_audit] Approve? (y)es or provide feedback: ",
+    )
+    a = answer.strip()
+    if a.lower() in ("y", "yes", ""):
+        return None
+    return a
 
 
-def claude_security_audit_node(
+def security_audit_node(
     *,
     name: str = "security_audit",
     mode: Mode = "diff",
-    base_ref_key: str = "base_ref",
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] | None = None,
     on_unmatched: UnmatchedPolicy = "deny",
-    model: str | None = DEFAULT,
     max_turns: int | None = None,
-    output_key: str = "security_findings",
-    verbose: bool = False,
+    verbosity: Verbosity = Verbosity.silent,
+    ask_feedback: AskFeedback = ask_audit_feedback_via_stdin,
     **kwargs: Any,
-) -> ClaudeAgentNode:
-    """Build a security-audit node.
-
-    By default the node is read-only (Edit/Write denied). To enable
-    fixing, pass allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"]
-    and a deny list without Edit/Write. The system prompt adjusts
-    automatically.
-
-    State input:
-        working_dir: repo root.
-        base_ref (or ``base_ref_key``): git ref for diff mode.
-
-    State output:
-        ``output_key`` (default ``security_findings``): fenced JSON block.
-    """
-    if allow is not None:
-        allow_list = list(allow)
-    else:
-        allow_list = list(_READONLY_ALLOW)
-
-    if deny is not None:
-        deny_list = list(deny)
-    else:
-        deny_list = list(
-            _READONLY_DENY if not _has_write_tools(allow_list) else _READWRITE_DENY
-        )
-
-    can_fix = _has_write_tools(allow_list)
-    system_prompt = _REVIEW_AND_FIX_PROMPT if can_fix else _REVIEW_ONLY_PROMPT
+) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+    inner_name = f"{name}_inner"
 
     if mode == "diff":
-        prompt_template = (
+        initial_template = (
             "DIFF mode — report only vulnerabilities introduced by the "
-            "diff against {%s}. Start by running `git diff {%s}...HEAD` "
-            "and any installed security scanners. "
-            "Then proceed to semantic review and triage."
-        ) % (base_ref_key, base_ref_key)
+            "diff against {base_ref}. Start by running `git diff {base_ref}...HEAD` "
+            "and reading the changed files."
+        )
     else:
-        prompt_template = (
+        initial_template = (
             "FULL mode — audit the repository at {working_dir}. "
-            "Start by listing files and running any installed security "
-            "scanners. Then proceed to semantic review and triage."
+            "Start by listing files and reading the code."
         )
 
-    return ClaudeAgentNode(
-        name=name,
-        system_prompt=system_prompt,
+    auditor = ClaudeAgentNode(
+        name=inner_name,
+        system_prompt=_SYSTEM_PROMPT + SKILL,
         skills=[*extra_skills],
-        allow=allow_list,
-        deny=deny_list,
+        allow=list(allow) if allow is not None else _ALLOW,
+        deny=list(deny) if deny is not None else [],
         on_unmatched=on_unmatched,
-        prompt_template=prompt_template,
-        output_key=output_key,
-        model=model,
+        prompt_template="{_audit_prompt}",
         max_turns=max_turns,
-        verbose=verbose,
+        verbosity=verbosity,
         **kwargs,
     )
+
+    async def run(state: dict[str, Any]) -> dict[str, Any]:
+        initial_prompt = initial_template.format(**state)
+        prompt = initial_prompt
+        total_cost = 0.0
+
+        while True:
+            result = await auditor({**state, "_audit_prompt": prompt})
+            findings = result[inner_name]
+            total_cost += result.get("last_cost_usd", 0.0)
+
+            feedback = await ask_feedback(findings)
+            if feedback is None:
+                return {name: findings, "last_cost_usd": total_cost}
+
+            prompt = (
+                f"Your previous audit findings:\n\n{findings}\n\n"
+                f"User feedback:\n\n{feedback}\n\n"
+                f"Address the feedback — re-audit or fix as needed."
+            )
+
+    run.__name__ = name
+    run.declared_outputs = (name, "last_cost_usd")  # type: ignore[attr-defined]
+    return run

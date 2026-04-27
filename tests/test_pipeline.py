@@ -22,7 +22,7 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp/repo",
             task="add healthz",
-            steps=["ruff_fix", "ruff_fmt"],
+            steps=["python_lint", "python_format"],
         )
         assert p.working_dir == "/tmp/repo"
 
@@ -38,7 +38,7 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[["ruff_fix", "ruff_fmt"]],
+            steps=[["python_lint", "python_format"]],
         )
         assert p._app is not None
 
@@ -46,8 +46,8 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["ruff_fix"],
-            config={"ruff_fix": {"fix": False}},
+            steps=["python_lint"],
+            config={"python_lint": {"fix": False}},
         )
         assert p._app is not None
 
@@ -55,10 +55,18 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["ruff_fix", ("ruff_final", "ruff_fix")],
+            steps=["python_lint", ("python_ruff_final", "python_lint")],
             config={
-                "ruff_final": {"name": "ruff_final", "output_key": "ruff_final_output"}
+                "python_ruff_final": {"name": "python_ruff_final"}
             },
+        )
+        assert p._app is not None
+
+    def test_duplicate_step_auto_suffixed(self):
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["python_lint", "python_format", "python_lint"],
         )
         assert p._app is not None
 
