@@ -56,9 +56,7 @@ class TestPipelineConstruction:
             working_dir="/tmp",
             task="test",
             steps=["python_lint", ("python_ruff_final", "python_lint")],
-            config={
-                "python_ruff_final": {"name": "python_ruff_final"}
-            },
+            config={"python_ruff_final": {"name": "python_ruff_final"}},
         )
         assert p._app is not None
 
@@ -104,6 +102,44 @@ class TestPipelineCustomNodes:
         final = asyncio.get_event_loop().run_until_complete(p.run())
         assert calls == ["a", "b"]
         assert final.get("a_out") == "done"
+
+
+class TestCostTracking:
+    def test_node_costs_accumulated(self):
+        costs = []
+
+        async def step_a(state):
+            costs.append("a")
+            return {"a": "done", "last_cost_usd": 0.05}
+
+        async def step_b(state):
+            costs.append("b")
+            return {"b": "done", "last_cost_usd": 0.10}
+
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["custom/a", "custom/b"],
+            custom_nodes={"custom/a": step_a, "custom/b": step_b},
+        )
+        final = asyncio.get_event_loop().run_until_complete(p.run())
+        assert final["node_costs"] == {"a": 0.05, "b": 0.10}
+        assert final["total_cost_usd"] == pytest.approx(0.15)
+        assert "last_cost_usd" not in final
+
+    def test_node_costs_zero_for_no_cost_node(self):
+        async def step_a(state):
+            return {"a": "done"}
+
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["custom/a"],
+            custom_nodes={"custom/a": step_a},
+        )
+        final = asyncio.get_event_loop().run_until_complete(p.run())
+        assert final["node_costs"] == {"a": 0.0}
+        assert final["total_cost_usd"] == 0.0
 
 
 class TestPublicAPI:

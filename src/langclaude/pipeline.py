@@ -85,7 +85,7 @@ class Pipeline:
         if "verbosity" in params and "verbosity" not in overrides:
             overrides["verbosity"] = self.verbosity
 
-        if self.model and "model" not in overrides:
+        if self.model and "model" in params and "model" not in overrides:
             overrides["model"] = self.model
 
         if overrides:
@@ -93,28 +93,52 @@ class Pipeline:
         return factory()
 
     @staticmethod
-    def _merge_wrap(node: Any) -> Any:
-        """Wrap a node callable so it merges incoming state with its output.
-
-        ``StateGraph(dict)`` replaces state with whatever the node returns.
-        We want partial-dict semantics: the node returns only new/changed keys
-        and everything else is preserved.
-        """
+    def _is_async(node: Any) -> bool:
         if inspect.iscoroutinefunction(node):
+            return True
+        call = getattr(node, "__call__", None)
+        return call is not None and inspect.iscoroutinefunction(call)
+
+    def _make_tracking_wrap(self, graph_name: str, node: Any) -> Any:
+        if Pipeline._is_async(node):
 
             async def _wrapper(state):
                 result = await node(state)
-                if isinstance(result, dict):
-                    return {**state, **result}
-                return result
+                if not isinstance(result, dict):
+                    return result
+                cost = result.pop("last_cost_usd", 0.0)
+                node_costs = {**state.get("node_costs", {}), graph_name: cost}
+                total_cost = state.get("total_cost_usd", 0.0) + cost
+                node_outputs = {**state.get("node_outputs", {})}
+                if graph_name in result:
+                    node_outputs[graph_name] = result[graph_name]
+                return {
+                    **state,
+                    **result,
+                    "node_costs": node_costs,
+                    "total_cost_usd": total_cost,
+                    "node_outputs": node_outputs,
+                }
 
             return _wrapper
 
         def _wrapper(state):
             result = node(state)
-            if isinstance(result, dict):
-                return {**state, **result}
-            return result
+            if not isinstance(result, dict):
+                return result
+            cost = result.pop("last_cost_usd", 0.0)
+            node_costs = {**state.get("node_costs", {}), graph_name: cost}
+            total_cost = state.get("total_cost_usd", 0.0) + cost
+            node_outputs = {**state.get("node_outputs", {})}
+            if graph_name in result:
+                node_outputs[graph_name] = result[graph_name]
+            return {
+                **state,
+                **result,
+                "node_costs": node_costs,
+                "total_cost_usd": total_cost,
+                "node_outputs": node_outputs,
+            }
 
         return _wrapper
 
@@ -124,9 +148,7 @@ class Pipeline:
             return name
         return f"{name}_{seen[name]}"
 
-    def _instantiate(
-        self, name: str, seen: dict[str, int]
-    ) -> tuple[str, Any]:
+    def _instantiate(self, name: str, seen: dict[str, int]) -> tuple[str, Any]:
         factory = resolve(name)
         base_name = name.rsplit("/", 1)[-1]
         graph_name = self._dedup_name(base_name, seen)
@@ -135,7 +157,7 @@ class Pipeline:
         if graph_name != base_name:
             overrides.setdefault("name", graph_name)
         node = self._apply_overrides(factory, overrides)
-        return graph_name, self._merge_wrap(node)
+        return graph_name, self._make_tracking_wrap(graph_name, node)
 
     def _resolve_step(self, step: Any, seen: dict[str, int]) -> Any:
         if isinstance(step, list):
@@ -147,7 +169,7 @@ class Pipeline:
             overrides = dict(self.config.get(registry_key, {}))
             overrides.update(self.config.get(graph_name, {}))
             node = self._apply_overrides(factory, overrides)
-            return graph_name, self._merge_wrap(node)
+            return graph_name, self._make_tracking_wrap(graph_name, node)
         return self._instantiate(step, seen)
 
     def _build(self) -> Any:
