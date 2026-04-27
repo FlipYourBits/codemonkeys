@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
-from langclaude.permissions import PermissionRule, ask_via_stdin
+from agentpipe.permissions import PermissionRule, ask_via_stdin
 
 
 class TestPermissionRuleEdgeCases:
@@ -29,7 +29,5 @@ class TestAskViaStdin:
     def test_non_tty_returns_false(self):
         with patch("sys.stdin") as mock_stdin:
             mock_stdin.isatty.return_value = False
-            result = asyncio.get_event_loop().run_until_complete(
-                ask_via_stdin("Bash", {"command": "ls"})
-            )
+            result = asyncio.run(ask_via_stdin("Bash", {"command": "ls"}))
             assert result is False

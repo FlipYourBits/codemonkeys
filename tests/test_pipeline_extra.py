@@ -6,12 +6,12 @@ import asyncio
 
 import pytest
 
-from langclaude.pipeline import Pipeline
+from agentpipe.pipeline import Pipeline
 
 
 @pytest.fixture(autouse=True)
 def _clean_user_registry():
-    from langclaude import registry as reg
+    from agentpipe import registry as reg
 
     snapshot = dict(reg._USER_REGISTRY)
     yield
@@ -47,7 +47,7 @@ class TestIsAsync:
         assert Pipeline._is_async(Node()) is False
 
 
-class TestMergeWrap:
+class TestRunNode:
     def _make_pipeline(self):
         async def _dummy(state):
             return {}
@@ -59,43 +59,37 @@ class TestMergeWrap:
             custom_nodes={"custom/dummy": _dummy},
         )
 
-    def test_sync_node_merges_state(self):
+    def test_sync_node_returns_dict(self):
         def node(state):
             return {"out": "val"}
 
         p = self._make_pipeline()
-        wrapped = p._make_tracking_wrap("out", node)
-        result = wrapped({"existing": 1})
-        assert result["existing"] == 1
+        result = asyncio.run(p._run_node("out", node, {"existing": 1}))
         assert result["out"] == "val"
 
-    def test_async_node_merges_state(self):
+    def test_async_node_returns_dict(self):
         async def node(state):
             return {"out": "val"}
 
         p = self._make_pipeline()
-        wrapped = p._make_tracking_wrap("out", node)
-        result = asyncio.get_event_loop().run_until_complete(wrapped({"existing": 1}))
-        assert result["existing"] == 1
+        result = asyncio.run(p._run_node("out", node, {"existing": 1}))
         assert result["out"] == "val"
 
-    def test_sync_non_dict_passthrough(self):
+    def test_sync_non_dict_returns_empty(self):
         def node(state):
             return "not a dict"
 
         p = self._make_pipeline()
-        wrapped = p._make_tracking_wrap("node", node)
-        result = wrapped({"existing": 1})
-        assert result == "not a dict"
+        result = asyncio.run(p._run_node("node", node, {"existing": 1}))
+        assert result == {}
 
-    def test_async_non_dict_passthrough(self):
+    def test_async_non_dict_returns_empty(self):
         async def node(state):
             return "not a dict"
 
         p = self._make_pipeline()
-        wrapped = p._make_tracking_wrap("node", node)
-        result = asyncio.get_event_loop().run_until_complete(wrapped({"existing": 1}))
-        assert result == "not a dict"
+        result = asyncio.run(p._run_node("node", node, {"existing": 1}))
+        assert result == {}
 
 
 class TestDedupName:
@@ -132,7 +126,7 @@ class TestPipelineSyncCustomNode:
             steps=["custom/sync"],
             custom_nodes={"custom/sync": sync_node},
         )
-        final = asyncio.get_event_loop().run_until_complete(p.run())
+        final = asyncio.run(p.run())
         assert final.get("sync_out") == "ok"
 
     def test_extra_state_passed(self):
@@ -149,7 +143,7 @@ class TestPipelineSyncCustomNode:
             custom_nodes={"custom/cap": capture_node},
             extra_state={"base_ref": "develop"},
         )
-        asyncio.get_event_loop().run_until_complete(p.run())
+        asyncio.run(p.run())
         assert captures["base_ref"] == "develop"
 
     def test_run_with_extra_kwargs(self):
@@ -165,7 +159,7 @@ class TestPipelineSyncCustomNode:
             steps=["custom/cap"],
             custom_nodes={"custom/cap": capture_node},
         )
-        asyncio.get_event_loop().run_until_complete(p.run(custom_key="custom_val"))
+        asyncio.run(p.run(custom_key="custom_val"))
         assert captures["custom_key"] == "custom_val"
 
 

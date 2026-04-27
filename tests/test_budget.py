@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from langclaude.budget import BudgetTracker
+from agentpipe.budget import BudgetTracker
 
 
 class TestBudgetTracker:

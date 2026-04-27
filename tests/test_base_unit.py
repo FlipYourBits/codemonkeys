@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from langclaude.nodes.base import (
+from agentpipe.nodes.base import (
     ClaudeAgentNode,
     ShellNode,
     Verbosity,
@@ -287,24 +287,20 @@ class TestShellNode:
 
     def test_silent_run(self):
         node = ShellNode(name="t", command="echo hello")
-        result = asyncio.get_event_loop().run_until_complete(
-            node({"working_dir": None})
-        )
+        result = asyncio.run(node({"working_dir": None}))
         assert result["t"] == "hello"
 
     def test_check_failure_raises(self):
         node = ShellNode(name="t", command="false", check=True)
         with pytest.raises(subprocess.CalledProcessError):
-            asyncio.get_event_loop().run_until_complete(node({"working_dir": None}))
+            asyncio.run(node({"working_dir": None}))
 
     def test_no_check_captures_output(self):
         node = ShellNode(name="t", command="echo ok && exit 1", check=False)
         # The command runs as a list from shlex so this won't work as expected
         # Test with a simple false command
         node2 = ShellNode(name="t", command="false", check=False)
-        result = asyncio.get_event_loop().run_until_complete(
-            node2({"working_dir": None})
-        )
+        result = asyncio.run(node2({"working_dir": None}))
         assert result["t"] == ""
 
     def test_declared_outputs(self):
@@ -315,9 +311,7 @@ class TestShellNode:
         node = ShellNode(
             name="t", command="echo verbose_test", verbosity=Verbosity.normal
         )
-        result = asyncio.get_event_loop().run_until_complete(
-            node({"working_dir": None})
-        )
+        result = asyncio.run(node({"working_dir": None}))
         assert "verbose_test" in result["t"]
 
     def test_verbose_check_failure(self):
@@ -325,7 +319,7 @@ class TestShellNode:
             name="t", command="false", check=True, verbosity=Verbosity.normal
         )
         with pytest.raises(subprocess.CalledProcessError):
-            asyncio.get_event_loop().run_until_complete(node({"working_dir": None}))
+            asyncio.run(node({"working_dir": None}))
 
     def test_verbose_timeout(self):
         node = ShellNode(
@@ -335,4 +329,4 @@ class TestShellNode:
             verbosity=Verbosity.normal,
         )
         with pytest.raises(subprocess.TimeoutExpired):
-            asyncio.get_event_loop().run_until_complete(node({"working_dir": None}))
+            asyncio.run(node({"working_dir": None}))

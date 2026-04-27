@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from langclaude.nodes.base import _split_allow
+from agentpipe.nodes.base import _split_allow
 
 
 class TestSplitAllow:

@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "langclaude"
+name = "agentpipe"
 version = "0.1.0"
-description = "LangGraph nodes powered by the Claude Agent SDK, with bundled skills and per-node permissions."
+description = "Deterministic AI pipelines powered by the Claude Agent SDK, with per-node permissions and model selection."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [{ name = "FlipYourBits" }]
-keywords = ["langgraph", "claude", "agent-sdk", "anthropic", "ai-agents"]
+keywords = ["claude", "agent-sdk", "anthropic", "ai-agents", "pipeline"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -21,7 +21,6 @@ classifiers = [
 ]
 dependencies = [
     "claude-agent-sdk>=0.1.0,<0.2",
-    "langgraph>=1.0.10,<2",
     "rich>=13.0,<14",
 ]
 
@@ -33,15 +32,15 @@ python = [
     "ruff>=0.5,<1",
 ]
 dev = [
-    "langclaude[python]",
+    "agentpipe[python]",
     "pytest-asyncio>=0.23",
 ]
 
 [project.urls]
-Homepage = "https://github.com/FlipYourBits/langclaude"
+Homepage = "https://github.com/FlipYourBits/agentpipe"
 
 [tool.hatch.build.targets.wheel]
-packages = ["langclaude"]
+packages = ["agentpipe"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

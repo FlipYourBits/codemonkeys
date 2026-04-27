@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from langclaude.graphs.python_new_feature import build_pipeline
-from langclaude.nodes.base import Verbosity
+from agentpipe.graphs.python_new_feature import build_pipeline
+from agentpipe.nodes.base import Verbosity
 
 
 class TestNewFeatureBuildPipeline:

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import pytest
 
-from langclaude.display import Display
-from langclaude.nodes.base import _make_printer, Verbosity
+from agentpipe.display import Display
+from agentpipe.nodes.base import _make_printer, Verbosity
 
 
 class TestDisplayNonLive:

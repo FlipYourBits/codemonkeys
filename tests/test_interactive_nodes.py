@@ -11,14 +11,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from langclaude.nodes.base import ClaudeAgentNode
-from langclaude.nodes.code_review import code_review_node
-from langclaude.nodes.docs_review import docs_review_node
-from langclaude.nodes.git_commit import git_commit_node
-from langclaude.nodes.git_new_branch import git_new_branch_node
-from langclaude.nodes.python_implement_feature import python_implement_feature_node
-from langclaude.nodes.python_plan_feature import python_plan_feature_node
-from langclaude.nodes.security_audit import security_audit_node
+from agentpipe.nodes.base import ClaudeAgentNode
+from agentpipe.nodes.code_review import code_review_node
+from agentpipe.nodes.docs_review import docs_review_node
+from agentpipe.nodes.git_commit import git_commit_node
+from agentpipe.nodes.git_new_branch import git_new_branch_node
+from agentpipe.nodes.python_implement_feature import python_implement_feature_node
+from agentpipe.nodes.python_plan_feature import python_plan_feature_node
+from agentpipe.nodes.security_audit import security_audit_node
 
 
 # ---------- code_review_node ----------
@@ -113,7 +113,7 @@ class TestGitCommitNode:
                 "last_cost_usd": 0.01,
             }
             with patch(
-                "langclaude.nodes.git_commit._push", return_value="pushed to origin"
+                "agentpipe.nodes.git_commit._push", return_value="pushed to origin"
             ):
                 result = await node({"working_dir": "/tmp"})
 
@@ -171,8 +171,8 @@ class TestGitNewBranchNode:
             ClaudeAgentNode, "__call__", new_callable=AsyncMock
         ) as mock_call:
             mock_call.return_value = {"git_new_branch_inner": "feat/new-thing"}
-            with patch("langclaude.nodes.git_new_branch._is_dirty", return_value=False):
-                with patch("langclaude.nodes.git_new_branch._run") as mock_run:
+            with patch("agentpipe.nodes.git_new_branch._is_dirty", return_value=False):
+                with patch("agentpipe.nodes.git_new_branch._run") as mock_run:
                     mock_run.return_value.returncode = 0
                     mock_run.return_value.stdout = ""
                     mock_run.return_value.stderr = ""
@@ -206,9 +206,9 @@ class TestGitNewBranchNode:
             ) as mock_call:
                 mock_call.return_value = {"git_new_branch_inner": "feat/proposed"}
                 with patch(
-                    "langclaude.nodes.git_new_branch._is_dirty", return_value=False
+                    "agentpipe.nodes.git_new_branch._is_dirty", return_value=False
                 ):
-                    with patch("langclaude.nodes.git_new_branch._run") as mock_run:
+                    with patch("agentpipe.nodes.git_new_branch._run") as mock_run:
                         mock_run.return_value.returncode = 0
                         mock_run.return_value.stdout = ""
                         mock_run.return_value.stderr = ""
@@ -260,13 +260,13 @@ class TestGitNewBranchNode:
             ) as mock_call:
                 mock_call.return_value = {"git_new_branch_inner": "feat/x"}
                 with patch(
-                    "langclaude.nodes.git_new_branch._is_dirty", return_value=True
+                    "agentpipe.nodes.git_new_branch._is_dirty", return_value=True
                 ):
                     with patch(
-                        "langclaude.nodes.git_new_branch._git_status_summary",
+                        "agentpipe.nodes.git_new_branch._git_status_summary",
                         return_value="M foo.py",
                     ):
-                        with patch("langclaude.nodes.git_new_branch._run") as mock_run:
+                        with patch("agentpipe.nodes.git_new_branch._run") as mock_run:
                             mock_run.return_value.returncode = 0
                             mock_run.return_value.stdout = ""
                             mock_run.return_value.stderr = ""
@@ -300,13 +300,13 @@ class TestGitNewBranchNode:
             ) as mock_call:
                 mock_call.return_value = {"git_new_branch_inner": "feat/x"}
                 with patch(
-                    "langclaude.nodes.git_new_branch._is_dirty", return_value=True
+                    "agentpipe.nodes.git_new_branch._is_dirty", return_value=True
                 ):
                     with patch(
-                        "langclaude.nodes.git_new_branch._git_status_summary",
+                        "agentpipe.nodes.git_new_branch._git_status_summary",
                         return_value="M foo.py",
                     ):
-                        with patch("langclaude.nodes.git_new_branch._run") as mock_run:
+                        with patch("agentpipe.nodes.git_new_branch._run") as mock_run:
                             mock_run.return_value.returncode = 0
                             mock_run.return_value.stdout = ""
                             mock_run.return_value.stderr = ""
@@ -340,10 +340,10 @@ class TestGitNewBranchNode:
             ) as mock_call:
                 mock_call.return_value = {"git_new_branch_inner": "feat/x"}
                 with patch(
-                    "langclaude.nodes.git_new_branch._is_dirty", return_value=True
+                    "agentpipe.nodes.git_new_branch._is_dirty", return_value=True
                 ):
                     with patch(
-                        "langclaude.nodes.git_new_branch._git_status_summary",
+                        "agentpipe.nodes.git_new_branch._git_status_summary",
                         return_value="M foo.py",
                     ):
                         with pytest.raises(RuntimeError, match="aborted"):
@@ -358,8 +358,8 @@ class TestGitNewBranchNode:
             ClaudeAgentNode, "__call__", new_callable=AsyncMock
         ) as mock_call:
             mock_call.return_value = {"git_new_branch_inner": "feat/x"}
-            with patch("langclaude.nodes.git_new_branch._is_dirty", return_value=False):
-                with patch("langclaude.nodes.git_new_branch._run") as mock_run:
+            with patch("agentpipe.nodes.git_new_branch._is_dirty", return_value=False):
+                with patch("agentpipe.nodes.git_new_branch._run") as mock_run:
                     import subprocess
 
                     mock_run.return_value.returncode = 128

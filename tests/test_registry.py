@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from langclaude.registry import (
+from agentpipe.registry import (
     list_builtins,
     list_registered,
     register,
@@ -12,7 +12,7 @@ from langclaude.registry import (
 
 @pytest.fixture(autouse=True)
 def _clean_user_registry():
-    from langclaude import registry as reg
+    from agentpipe import registry as reg
 
     snapshot = dict(reg._USER_REGISTRY)
     yield

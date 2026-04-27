@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
-from langclaude.permissions import PermissionRule, build_can_use_tool
+from agentpipe.permissions import PermissionRule, build_can_use_tool
 
 
 class TestPermissionRule:

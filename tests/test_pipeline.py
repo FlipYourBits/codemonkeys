@@ -4,13 +4,13 @@ import asyncio
 
 import pytest
 
-from langclaude.pipeline import Pipeline
-from langclaude.nodes.base import Verbosity
+from agentpipe.pipeline import Pipeline
+from agentpipe.nodes.base import Verbosity
 
 
 @pytest.fixture(autouse=True)
 def _clean_user_registry():
-    from langclaude import registry as reg
+    from agentpipe import registry as reg
 
     snapshot = dict(reg._USER_REGISTRY)
     yield
@@ -34,7 +34,7 @@ class TestPipelineConstruction:
     def test_unknown_step_raises(self):
         with pytest.raises(KeyError, match="nonexistent"):
             p = Pipeline(working_dir="/tmp", task="x", steps=["nonexistent"])
-            asyncio.get_event_loop().run_until_complete(p.run())
+            asyncio.run(p.run())
 
     def test_parallel_steps(self):
         p = Pipeline(
@@ -101,7 +101,7 @@ class TestPipelineCustomNodes:
             steps=["custom/a", "custom/b"],
             custom_nodes={"custom/a": step_a, "custom/b": step_b},
         )
-        final = asyncio.get_event_loop().run_until_complete(p.run())
+        final = asyncio.run(p.run())
         assert calls == ["a", "b"]
         assert final.get("a_out") == "done"
 
@@ -124,7 +124,7 @@ class TestCostTracking:
             steps=["custom/a", "custom/b"],
             custom_nodes={"custom/a": step_a, "custom/b": step_b},
         )
-        final = asyncio.get_event_loop().run_until_complete(p.run())
+        final = asyncio.run(p.run())
         assert final["node_costs"] == {"a": 0.05, "b": 0.10}
         assert final["total_cost_usd"] == pytest.approx(0.15)
         assert "last_cost_usd" not in final
@@ -139,7 +139,7 @@ class TestCostTracking:
             steps=["custom/a"],
             custom_nodes={"custom/a": step_a},
         )
-        final = asyncio.get_event_loop().run_until_complete(p.run())
+        final = asyncio.run(p.run())
         assert final["node_costs"] == {"a": 0.0}
         assert final["total_cost_usd"] == 0.0
 
@@ -162,7 +162,7 @@ class TestRequiresConfig:
             custom_nodes={"custom/a": step_a, "custom/b": step_b},
             config={"b": {"requires": ["a"]}},
         )
-        final = asyncio.get_event_loop().run_until_complete(p.run())
+        final = asyncio.run(p.run())
         assert final["b"] == "saw context"
 
     def test_no_requires_no_prior_results(self):
@@ -179,7 +179,7 @@ class TestRequiresConfig:
             steps=["custom/a", "custom/b"],
             custom_nodes={"custom/a": step_a, "custom/b": step_b},
         )
-        final = asyncio.get_event_loop().run_until_complete(p.run())
+        final = asyncio.run(p.run())
         assert final["b"] == "no context"
 
     def test_requires_invalid_node_raises(self):
@@ -194,7 +194,7 @@ class TestRequiresConfig:
                 custom_nodes={"custom/a": step_a},
                 config={"a": {"requires": ["nonexistent"]}},
             )
-            asyncio.get_event_loop().run_until_complete(p.run())
+            asyncio.run(p.run())
 
 
 class TestStatusLine:
@@ -209,7 +209,7 @@ class TestStatusLine:
             custom_nodes={"custom/a": step_a},
             verbosity=Verbosity.normal,
         )
-        asyncio.get_event_loop().run_until_complete(p.run())
+        asyncio.run(p.run())
         err = capsys.readouterr().err
         assert "a" in err
         assert "done" in err
@@ -225,7 +225,7 @@ class TestStatusLine:
             custom_nodes={"custom/a": step_a},
             verbosity=Verbosity.normal,
         )
-        asyncio.get_event_loop().run_until_complete(p.run())
+        asyncio.run(p.run())
         assert p._display is not None
 
     def test_silent_verbosity_no_output(self, capsys):
@@ -239,14 +239,14 @@ class TestStatusLine:
             custom_nodes={"custom/a": step_a},
             verbosity=Verbosity.silent,
         )
-        asyncio.get_event_loop().run_until_complete(p.run())
+        asyncio.run(p.run())
         err = capsys.readouterr().err
         assert err == ""
 
 
 class TestPublicAPI:
-    def test_importable_from_langclaude(self):
-        from langclaude import (
+    def test_importable_from_agentpipe(self):
+        from agentpipe import (
             Display,
             Pipeline,
             register,
@@ -255,5 +255,12 @@ class TestPublicAPI:
             resolve,
         )
 
-        for obj in (Display, Pipeline, register, list_builtins, list_registered, resolve):
+        for obj in (
+            Display,
+            Pipeline,
+            register,
+            list_builtins,
+            list_registered,
+            resolve,
+        ):
             assert obj is not None

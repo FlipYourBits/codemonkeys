@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from langclaude.budget import default_on_warn
+from agentpipe.budget import default_on_warn
 
 
 class TestDefaultOnWarn:

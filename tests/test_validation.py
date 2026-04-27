@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from langclaude import (
+from agentpipe import (
     OutputKeyConflict,
     code_review_node,
     dependency_audit_node,

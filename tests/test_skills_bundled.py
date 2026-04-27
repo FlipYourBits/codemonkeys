@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from langclaude.skills import (
+from agentpipe.skills import (
     JAVASCRIPT_CLEAN_CODE,
     JAVASCRIPT_SECURITY,
     PYTHON_CLEAN_CODE,

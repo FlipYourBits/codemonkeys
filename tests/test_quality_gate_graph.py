@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from langclaude.graphs.python_quality_gate import build_pipeline
-from langclaude.models import HAIKU_4_5, SONNET_4_6
-from langclaude.nodes.base import Verbosity
+from agentpipe.graphs.python_quality_gate import build_pipeline
+from agentpipe.models import HAIKU_4_5, SONNET_4_6
+from agentpipe.nodes.base import Verbosity
 
 
 class TestBuildPipeline:
@@ -29,7 +29,6 @@ class TestBuildPipeline:
 
     def test_diff_mode_sets_config_overrides(self):
         p = build_pipeline("/tmp/repo", mode="diff")
-        assert p.config["python_coverage"]["mode"] == "diff"
         assert p.config["code_review"]["mode"] == "diff"
         assert p.config["security_audit"]["mode"] == "diff"
         assert p.config["docs_review"]["mode"] == "diff"
@@ -49,7 +48,6 @@ class TestBuildPipeline:
             "python_format",
             [
                 "python_test",
-                "python_coverage",
                 "code_review",
                 "security_audit",
                 "docs_review",
@@ -76,7 +74,6 @@ class TestBuildPipeline:
         assert "docs_review" in requires
         assert "python_dependency_audit" in requires
         assert "python_test" in requires
-        assert "python_coverage" in requires
 
     def test_resolve_findings_interactive_by_default(self):
         p = build_pipeline("/tmp/repo", mode="full")
@@ -96,7 +93,6 @@ class TestModelTiers:
     def test_cheap_nodes_use_sonnet(self):
         p = build_pipeline("/tmp/repo", mode="full")
         assert p.config["python_test"]["model"] == SONNET_4_6
-        assert p.config["python_coverage"]["model"] == SONNET_4_6
         assert p.config["docs_review"]["model"] == SONNET_4_6
 
     def test_dep_audit_uses_haiku(self):

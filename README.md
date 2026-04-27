@@ -1,13 +1,45 @@
-# langclaude
+# agentpipe
 
-LangGraph nodes powered by the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview). Each node is a self-contained Claude agent session that owns a single concern — run a tool, analyze, and optionally fix — controlled by permissions.
+Deterministic AI pipelines with per-node model selection, least-privilege permissions, and guaranteed execution. Built on the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
+
+## Why not just use Claude Code?
+
+Claude Code (with plugins like superpowers) is excellent for interactive work — brainstorming, implementing features with human-in-the-loop review, debugging. A skilled developer steering Claude through a conversation will outperform any automated pipeline for novel, judgment-heavy tasks.
+
+agentpipe solves a different problem: **repeatable, unattended, cost-controlled code operations** where you need guarantees that a conversation can't provide.
+
+### What agentpipe gives you
+
+**Per-node model selection.** Each pipeline step runs its own Claude instance on a specific model. Run dependency audit on Haiku ($0.25/MTok), test analysis on Sonnet ($3/MTok), and code review on Opus ($15/MTok). A Claude Code session uses one model for all subagents unless you manually override each dispatch.
+
+**Per-node permissions.** Each node gets explicit allow/deny lists. The code reviewer can Read and Grep but can't Edit. The test runner can run pytest but can't pip install. The commit node can `git add` and `git commit` but not `git push`. Claude Code subagents inherit the session's permission mode — a subagent asked to "review code" could still edit files if it decides to.
+
+**Guaranteed execution.** The pipeline topology is deterministic. If you define 5 parallel review nodes, all 5 run. A skill prompt says "run lint, then review, then test" but Claude might skip steps, combine them, or decide one isn't needed. The pipeline doesn't interpret — it executes.
+
+**Cost tracking and controls.** Every node reports its token cost. Per-node budget caps, model tier selection, and structured run logs (`.agentpipe/runs/`) give you visibility and control over spend. A Claude Code session gives you a single bill at the end.
+
+**Structured, machine-readable output.** Each node produces JSON findings with severity, file, line, category. Downstream nodes consume this programmatically — `resolve_findings` parses upstream JSON and presents a numbered list for the user to triage. Claude Code subagents produce free-text summaries that require human interpretation.
+
+### When Claude Code alone is enough
+
+- **Interactive development** — brainstorming, planning, implementing features with a human reviewing each step.
+- **One-off tasks** — "fix this bug," "add this endpoint," "refactor this module." The overhead of defining a pipeline isn't worth it for work you'll do once.
+- **Novel, ambiguous work** — tasks where you don't know the steps upfront. A conversation adapts; a pipeline executes a fixed topology.
+- **Small repos or solo projects** — if the cost of running 5 parallel review nodes isn't justified by the codebase size or team requirements.
+
+### When you need agentpipe
+
+- **CI/CD quality gates** — run on every PR with guaranteed lint, test, review, security scan, dependency audit. Post structured results. No human babysitting.
+- **Compliance/audit pipelines** — nightly security scan with Opus, license check with Haiku, SBOM generation with a shell node. Read-only permissions guarantee audit integrity.
+- **Codebase migrations** — plan → implement → test → review across 50 modules. Each step has least-privilege permissions and a cost ceiling. Track spend per module.
+- **Multi-team repos** — Python quality gate for backend, JS gate for frontend, shared security audit. Each sub-pipeline uses language-specific skills and models.
 
 ## Install
 
 ```bash
-pip install -e .              # core only (ruff bundled)
-pip install -e ".[python]"    # + pytest, pytest-cov, pip-audit
-pip install -e ".[dev]"       # [python] + test runner deps
+pip install -e .              # core only
+pip install -e ".[python]"    # + pytest, pytest-cov, pip-audit, ruff
+pip install -e ".[dev]"       # + pytest-asyncio
 ```
 
 ```bash
@@ -18,7 +50,7 @@ export ANTHROPIC_API_KEY=...
 
 ```python
 import asyncio
-from langclaude import Pipeline
+from agentpipe import Pipeline
 
 async def main():
     pipeline = Pipeline(
@@ -32,62 +64,62 @@ async def main():
             ["code_review", "security_audit", "python_test"],
         ],
     )
-    final = await pipeline.run()
-    print(final)
+    result = await pipeline.run()
+    pipeline.print_results()
 
 asyncio.run(main())
 ```
 
-Steps are strings resolved from the built-in registry. Lists create parallel fan-out.
+Steps are strings resolved from the built-in registry. Lists create parallel fan-out via `asyncio.gather`.
 
 ## Built-in nodes
 
-Every node does one thing. The table is grouped by what that thing is.
+Every node does one thing. The registry name doubles as the output key in state.
 
-### Workflow nodes
+### Workflow
 
-| Factory | Registry name | Output key | What it does |
-|---|---|---|---|
-| `git_new_branch_node()` | `git_new_branch` | `git_new_branch` | Generates a branch name from the task description. In interactive mode, prompts for approval and handles dirty-tree safety (stash/commit/carry). Falls back to auto mode when stdin isn't a TTY. |
-| `git_commit_node()` | `git_commit` | `git_commit` | Reviews uncommitted changes, writes a conventional commit message, stages and commits. Optionally prompts to push. |
-| `implement_feature_node()` | `implement_feature` | `implement_feature` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. Does not run tests. |
-| `python_plan_feature_node()` | `python_plan_feature` | `python_plan_feature` | Interactive planning: explores the codebase and produces a step-by-step implementation plan. User can give feedback until approved. |
-| `python_implement_feature_node()` | `python_implement_feature` | `python_implement_feature` | Python-specific implementation with interactive review. Follows Python clean-code and security guidelines. |
+| Node | What it does |
+|---|---|
+| `git_new_branch` | Generates a branch name from the task description. Interactive mode prompts for approval and handles dirty-tree safety. |
+| `git_commit` | Reviews uncommitted changes, writes a conventional commit message, stages and commits. |
+| `implement_feature` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. |
+| `python_plan_feature` | Interactive planning: explores the codebase and produces a step-by-step implementation plan. |
+| `python_implement_feature` | Python-specific implementation with interactive review. Follows clean-code and security guidelines. |
 
-### Quality nodes
+### Quality
 
 Each owns a single concern. They do not overlap — code review doesn't run linters, security audit doesn't check code quality, etc.
 
-| Factory | Registry name | Output key | What it does |
-|---|---|---|---|
-| `code_review_node()` | `code_review` | `code_review` | **Semantic code review.** Reads the code and looks for things linters can't catch: logic errors, functions >50 lines, deep nesting, error handling gaps, resource leaks, concurrency bugs, API contract violations, dead code. Does NOT run linters, type-checkers, tests, or security scanners. |
-| `security_audit_node()` | `security_audit` | `security_audit` | **Security review.** Reads the code and traces data flow from inputs to sinks looking for injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. Pure semantic analysis — no external scanners required. Does NOT check code quality or run tests. |
-| `docs_review_node()` | `docs_review` | `docs_review` | **Doc drift detection.** Checks docstrings, README, and CHANGELOG against the actual code for accuracy. Catches stale examples, missing docs for new public APIs, inconsistent terminology. Does NOT review code quality or security. |
-| `python_test_node()` | `python_test` | `python_test` | **Test runner.** Runs pytest, reads failing tests and the code under test to identify root causes. |
-| `python_coverage_node()` | `python_coverage` | `python_coverage` | **Coverage analysis.** Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` (changed files only) or `mode="full"`. |
-| `dependency_audit_node()` | `dependency_audit` | `dependency_audit` | **Dependency vulnerabilities.** Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
+| Node | What it does |
+|---|---|
+| `code_review` | Semantic code review. Logic errors, deep nesting, error handling gaps, resource leaks, concurrency bugs, dead code. Does NOT run linters or tests. |
+| `security_audit` | Traces data flow from inputs to sinks. Injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. No external scanners. |
+| `docs_review` | Doc drift detection. Checks docstrings, README, CHANGELOG against actual code for accuracy. |
+| `python_test` | Runs pytest, reads failing tests and the code under test to identify root causes. |
+| `python_coverage` | Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` or `mode="full"`. |
+| `dependency_audit` | Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
 
-### Python tooling nodes
+### Python tooling
 
-| Factory | Registry name | Output key | What it does |
-|---|---|---|---|
-| `python_lint_node()` | `python_lint` | `python_lint` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
-| `python_format_node()` | `python_format` | `python_format` | Runs `ruff format`. |
+| Node | What it does |
+|---|---|
+| `python_lint` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
+| `python_format` | Runs `ruff format`. |
 
-All quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing — see [Permissions control behavior](#permissions-control-behavior).
+All quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing.
 
-## Permissions control behavior
+## Permissions
 
 Every node always tries to find and fix issues. Permissions decide what actually happens:
 
-1. **allow/deny** — what tools the agent can use. Default: read-only (Edit/Write denied), so fixes are blocked and the node reports findings only.
+1. **allow/deny** — what tools the agent can use. Default: read-only (Edit/Write denied).
 2. **on_unmatched** — what happens for tool calls not covered by allow/deny:
-   - `"deny"`: block (default — safest, report-only)
-   - `"allow"`: auto-approve (CI / fully automatic fixing)
-   - `ask_via_stdin`: prompt the user per edit
+   - `"deny"`: block (default — report-only)
+   - `"allow"`: auto-approve (CI / fully automatic)
+   - `ask_via_stdin`: prompt the user per call
 
 ```python
-# Report only (default — Edit/Write denied):
+# Report only (default):
 code_review_node()
 
 # Auto-fix everything:
@@ -97,7 +129,7 @@ code_review_node(
 )
 
 # Prompt user per edit:
-from langclaude import ask_via_stdin
+from agentpipe import ask_via_stdin
 code_review_node(
     allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
     deny=["Bash(git push*)"],
@@ -120,10 +152,11 @@ Deny always wins over allow.
 
 ## Pipeline
 
-`Pipeline` resolves step names from the registry, injects config, and builds a LangGraph workflow.
+`Pipeline` resolves step names from the registry, injects config, and runs the workflow with `asyncio`.
 
 ```python
-from langclaude.nodes.base import Verbosity
+from agentpipe import Pipeline
+from agentpipe.nodes.base import Verbosity
 
 Pipeline(
     working_dir="/path/to/repo",
@@ -133,12 +166,12 @@ Pipeline(
         "implement_feature",
         "python_lint",
         ["code_review", "security_audit", "python_test"],  # parallel
-        ("lint_final", "python_lint"),  # tuple: (graph_name, registry_key)
+        ("lint_final", "python_lint"),  # tuple: (alias, registry_key)
         "custom/commit",
     ],
     config={
         "code_review": {"mode": "diff"},
-        "python_coverage": {"mode": "diff"},
+        "python_test": {"requires": ["code_review"]},
     },
     custom_nodes={"custom/commit": my_commit_factory},
     model="claude-sonnet-4-6",
@@ -149,11 +182,11 @@ Pipeline(
 
 | Parameter | What it does |
 |---|---|
-| **steps** | List of registry names, `(alias, registry_key)` tuples for duplicates, or nested lists for parallel fan-out. |
-| **config** | Per-step overrides passed as kwargs to the node factory. |
-| **custom_nodes** | Registered before resolution. Keys must be namespaced (`"custom/name"`). |
-| **model** | Default model for all nodes that accept it. Per-node config overrides this. |
-| **verbosity** | Default verbosity for nodes that accept it (`Verbosity.silent`, `.normal`, `.verbose`). Per-node config overrides this. |
+| **steps** | Registry names, `(alias, registry_key)` tuples for duplicates, or nested lists for parallel fan-out. |
+| **config** | Per-step overrides passed as kwargs to the node factory. Supports `requires` to inject prior node output. |
+| **custom_nodes** | Registered before resolution. Keys should be namespaced (`"custom/name"`). |
+| **model** | Default model for all nodes. Per-node config overrides. |
+| **verbosity** | `Verbosity.silent` (default), `.normal`, or `.verbose`. Per-node config overrides. |
 | **extra_state** | Additional key-value pairs merged into the initial state dict. |
 
 ## Registry
@@ -161,7 +194,7 @@ Pipeline(
 Every built-in node has a string name. User nodes are registered under a namespace:
 
 ```python
-from langclaude import register, resolve, list_builtins
+from agentpipe import register, resolve, list_builtins
 
 list_builtins()
 # ['code_review', 'dependency_audit', 'docs_review',
@@ -174,50 +207,26 @@ register("deploy", my_deploy_factory, namespace="acme")
 resolve("acme/deploy")  # returns my_deploy_factory
 ```
 
-## Pre-built graphs
+## Pre-built pipelines
 
-Both graphs use `Pipeline` under the hood.
-
-**`python_new_feature`** — end-to-end: branch creation, interactive planning, Python-specific implementation with review, lint + format, test, coverage, code review, security audit, docs review, dependency audit, final lint, commit. All steps run sequentially.
+**`python_new_feature`** — end-to-end: branch → plan → implement → lint → format → test → coverage → code review → security audit → docs review → dependency audit → final lint → commit.
 
 ```bash
-python -m langclaude.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
+python -m agentpipe.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
 ```
 
-**`python_quality_gate`** — quality checks: lint, format, test, coverage, code review, security audit, docs review, dependency audit, final lint. No branch, no commit.
+**`python_quality_gate`** — lint → format → parallel (test + code review + security audit + docs review + dependency audit) → resolve findings → final lint. No branch, no commit.
 
 ```bash
-python -m langclaude.graphs.python_quality_gate /path/to/repo
+python -m agentpipe.graphs.python_quality_gate /path/to/repo
 ```
 
-## Manual wiring with chain()
+## Building blocks
 
-For full control, skip `Pipeline` and wire nodes directly:
-
-```python
-from langgraph.graph import StateGraph
-from langclaude import chain, git_new_branch_node, implement_feature_node
-
-graph = StateGraph(dict)
-chain(graph,
-    ("git_new_branch", git_new_branch_node()),
-    ("implement", implement_feature_node()),
-    [
-        ("code_review", code_review_node(mode="diff")),
-        ("security_audit", security_audit_node(mode="diff")),
-    ],
-)
-app = graph.compile()
-```
-
-`chain()` wires nodes in sequence with `START`/`END` added automatically. Lists create parallel fan-out.
-
-## Low-level building blocks
-
-**`ClaudeAgentNode`** — wraps `claude_agent_sdk.query()`. All `claude_*` factories build on this:
+**`ClaudeAgentNode`** — wraps `claude_agent_sdk.query()`:
 
 ```python
-from langclaude import ClaudeAgentNode, PYTHON_CLEAN_CODE
+from agentpipe import ClaudeAgentNode, PYTHON_CLEAN_CODE
 
 reviewer = ClaudeAgentNode(
     name="reviewer",
@@ -229,62 +238,48 @@ reviewer = ClaudeAgentNode(
 )
 ```
 
-**`ShellNode`** — runs a subprocess. `command` accepts a string, a list, or a callable taking state:
+**`ShellNode`** — runs a subprocess:
 
 ```python
-from langclaude import ShellNode
+from agentpipe import ShellNode
 
 run_tests = ShellNode(name="tests", command="pytest -x")
 ```
 
-**Plain functions** — any `(state) -> dict` callable is a valid LangGraph node.
+**Plain functions** — any `(state) -> dict` callable works as a node.
 
 ## Cost controls
 
 ```python
 ClaudeAgentNode(
     ...,
-    max_budget_usd=0.50,       # hard cap — SDK aborts the run
-    hard_cap=False,            # set False for warning-only (no abort)
-    warn_at_pct=[0.8, 0.95],  # warn at 80% and 95%
-    on_warn=None,              # default: print to stderr
+    max_budget_usd=0.50,
+    hard_cap=False,            # False = warning-only
+    warn_at_pct=[0.8, 0.95],
 )
 ```
 
-Each run writes `last_cost_usd` into state. Other levers: cheaper models (`model="claude-sonnet-4-6"`), turn caps (`max_turns=10`), tighter allow lists.
-
-## Output-key collision detection
-
-```python
-from langclaude import validate_node_outputs
-
-validate_node_outputs(audit, review, coverage)  # raises OutputKeyConflict
-```
-
-`last_cost_usd`, `last_result`, and `artifacts` are on a merge-OK allow-list.
+Each run writes `last_cost_usd` into state and logs per-node costs to `.agentpipe/runs/`. Other levers: cheaper models, turn caps (`max_turns=10`), tighter allow lists.
 
 ## Language skills
 
-Node-specific behavior (what code review looks for, what security audit traces, etc.) is embedded directly in each node's system prompt. Language-specific clean code and security guidance are Python constants under `langclaude.skills`:
+Language-specific clean code and security guidance are constants under `agentpipe.skills`:
 
 ```python
-from langclaude.skills import PYTHON_CLEAN_CODE, PYTHON_SECURITY
+from agentpipe.skills import PYTHON_CLEAN_CODE, PYTHON_SECURITY
 
 implement_feature_node(extra_skills=[PYTHON_CLEAN_CODE])
 ```
 
-| Constant | Module |
+| Constant | Language |
 |---|---|
-| `PYTHON_CLEAN_CODE` | `langclaude.skills.python` |
-| `PYTHON_SECURITY` | `langclaude.skills.python` |
-| `JAVASCRIPT_CLEAN_CODE` | `langclaude.skills.javascript` |
-| `JAVASCRIPT_SECURITY` | `langclaude.skills.javascript` |
-| `RUST_CLEAN_CODE` | `langclaude.skills.rust` |
-| `RUST_SECURITY` | `langclaude.skills.rust` |
+| `PYTHON_CLEAN_CODE`, `PYTHON_SECURITY` | Python |
+| `JAVASCRIPT_CLEAN_CODE`, `JAVASCRIPT_SECURITY` | JavaScript |
+| `RUST_CLEAN_CODE`, `RUST_SECURITY` | Rust |
 
-All constants are also re-exported from `langclaude.skills` and `langclaude`. Pass on any node factory via `extra_skills`, or on a raw `ClaudeAgentNode` via `skills`. For custom skills, pass a `Path` to your own file.
+Pass via `extra_skills` on any node factory, or `skills` on a raw `ClaudeAgentNode`.
 
-## Using Amazon Bedrock or Google Vertex AI
+## Bedrock and Vertex AI
 
 The Claude Agent SDK honors the same backend toggles as Claude Code:
 
@@ -304,8 +299,6 @@ Pass the provider-specific model ID directly:
 ```python
 implement_feature_node(model="us.anthropic.claude-opus-4-7-20251201-v1:0")
 ```
-
-Cost reporting works regardless of backend.
 
 ## Tests
 
