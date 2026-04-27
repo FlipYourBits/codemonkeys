@@ -143,7 +143,7 @@ class Display:
 
     def print_results(self, node_costs: dict[str, float]) -> None:
         self.stop()
-        table = Table(title="Results", show_header=True, expand=False)
+        table = Table(title=self.title, show_header=True, expand=False)
         table.add_column("Node", style="bold")
         table.add_column("Cost", justify="right")
         total = 0.0
