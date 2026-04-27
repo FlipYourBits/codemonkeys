@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
-from langclaude.skills.docs_review import SKILL
+from langclaude.skills.docs_review import DOCS_REVIEW
 
 _SYSTEM_PROMPT = (
     "You are reviewing docs for drift against the code they describe. "
@@ -70,7 +70,7 @@ def docs_review_node(
 
     return ClaudeAgentNode(
         name=name,
-        system_prompt=_SYSTEM_PROMPT + SKILL,
+        system_prompt=_SYSTEM_PROMPT + DOCS_REVIEW,
         skills=[*extra_skills],
         allow=list(allow) if allow is not None else _ALLOW,
         deny=list(deny) if deny is not None else [],

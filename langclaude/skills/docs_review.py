@@ -1,6 +1,6 @@
 """Docs-review skill: documentation drift detection rubric."""
 
-SKILL = """\
+DOCS_REVIEW = """\
 
 # Docs review
 

@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
-from langclaude.skills.code_review import SKILL
+from langclaude.skills.code_review import CODE_REVIEW
 
 _SYSTEM_PROMPT = (
     "You are a senior engineer conducting a semantic code review. "
@@ -65,7 +65,7 @@ def code_review_node(
 
     return ClaudeAgentNode(
         name=name,
-        system_prompt=_SYSTEM_PROMPT + SKILL,
+        system_prompt=_SYSTEM_PROMPT + CODE_REVIEW,
         skills=[*extra_skills],
         allow=list(allow) if allow is not None else _ALLOW,
         deny=list(deny) if deny is not None else [],

@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
-from langclaude.skills.security_audit import SKILL
+from langclaude.skills.security_audit import SECURITY_AUDIT
 
 _SYSTEM_PROMPT = (
     "You are a senior security engineer auditing a code repository. "
@@ -64,7 +64,7 @@ def security_audit_node(
 
     return ClaudeAgentNode(
         name=name,
-        system_prompt=_SYSTEM_PROMPT + SKILL,
+        system_prompt=_SYSTEM_PROMPT + SECURITY_AUDIT,
         skills=[*extra_skills],
         allow=list(allow) if allow is not None else _ALLOW,
         deny=list(deny) if deny is not None else [],

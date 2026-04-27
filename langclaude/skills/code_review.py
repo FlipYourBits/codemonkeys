@@ -1,6 +1,6 @@
 """Code-review skill: semantic code quality review rubric."""
 
-SKILL = """\
+CODE_REVIEW = """\
 
 # Code review
 

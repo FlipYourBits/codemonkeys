@@ -1,6 +1,6 @@
 """Security-audit skill: vulnerability detection rubric."""
 
-SKILL = """\
+SECURITY_AUDIT = """\
 
 # Security audit
 
