@@ -5,11 +5,11 @@ import pytest
 from langclaude import (
     OutputKeyConflict,
     claude_code_review_node,
+    claude_coverage_node,
+    claude_dependency_audit_node,
     claude_issue_fixer_node,
+    claude_pytest_node,
     claude_security_audit_node,
-    py_dependency_audit_node,
-    py_test_coverage_node,
-    py_test_runner_node,
     validate_node_outputs,
 )
 
@@ -17,11 +17,11 @@ from langclaude import (
 class TestValidateNodeOutputs:
     def test_clean_pipeline_passes(self):
         validate_node_outputs(
-            py_dependency_audit_node(),
+            claude_dependency_audit_node(),
             claude_security_audit_node(),
             claude_code_review_node(),
-            py_test_coverage_node(),
-            py_test_runner_node(),
+            claude_coverage_node(),
+            claude_pytest_node(),
             claude_issue_fixer_node(),
         )
 

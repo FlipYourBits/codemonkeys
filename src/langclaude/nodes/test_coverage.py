@@ -1,167 +1,131 @@
-"""Test-coverage node: runs a coverage tool and emits per-file uncovered
-ranges as `missing_coverage` findings. Deterministic — no LLM call.
+"""Coverage node: Claude agent that runs coverage tools, analyzes gaps,
+and optionally writes tests to fill them — all in one session.
 
-v1 supports Python (`pytest --cov` producing coverage.json). Extending to
-other runners means adding a parser branch in `_collect_uncovered`.
-
-In diff mode, only lines belonging to files changed since `base_ref` are
-flagged. In full mode, every uncovered line in the project is flagged.
+When Edit/Write are denied (default), the agent runs coverage and reports
+uncovered areas. When allowed, it also writes tests to cover important gaps.
+Control interactive approval via on_unmatched.
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
-import shutil
-import subprocess
-from collections.abc import Awaitable, Callable
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
+from langclaude.models import DEFAULT
+from langclaude.nodes.base import ClaudeAgentNode
+from langclaude.permissions import UnmatchedPolicy
+
 Mode = Literal["diff", "full"]
 
+_READONLY_PROMPT = (
+    "You are a senior engineer analyzing test coverage. "
+    "Use Bash to run `pytest --cov` (or the project's coverage tool). "
+    "Identify uncovered lines and branches. "
+    "Do not edit files. Do not push. "
+    "Output JSON only as your final message — a list of findings with "
+    "file, line, severity, category, description, and recommendation."
+)
 
-def _run(argv: list[str], cwd: str, timeout: int = 600) -> tuple[int, str, str]:
-    proc = subprocess.run(
-        argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False
-    )
-    return proc.returncode, proc.stdout, proc.stderr
+_READWRITE_PROMPT = (
+    "You are a senior engineer analyzing test coverage. "
+    "Use Bash to run `pytest --cov` (or the project's coverage tool). "
+    "Identify uncovered lines and branches. "
+    "Then write tests to cover the most important gaps — focus on "
+    "business logic and error paths. Re-run coverage to verify "
+    "improvement. Do not push. "
+    "Output JSON only as your final message — a list of findings with "
+    "file, line, severity, category, description, recommendation, and "
+    "whether you fixed it."
+)
 
+_READONLY_ALLOW: tuple[str, ...] = ("Read", "Glob", "Grep", "Bash")
 
-def _changed_files(cwd: str, base_ref: str) -> set[str]:
-    if not shutil.which("git"):
-        return set()
-    _, stdout, _ = _run(["git", "diff", "--name-only", f"{base_ref}...HEAD"], cwd, 30)
-    return {line.strip() for line in stdout.splitlines() if line.strip()}
+_READONLY_DENY: tuple[str, ...] = (
+    "Edit",
+    "Write",
+    "Bash(rm*)",
+    "Bash(git push*)",
+    "Bash(git commit*)",
+    "Bash(git reset*)",
+)
 
-
-def _condense_ranges(lines: list[int]) -> list[tuple[int, int]]:
-    """[1,2,3,7,8] -> [(1,3),(7,8)]."""
-    if not lines:
-        return []
-    lines = sorted(set(lines))
-    ranges: list[tuple[int, int]] = []
-    start = end = lines[0]
-    for n in lines[1:]:
-        if n == end + 1:
-            end = n
-        else:
-            ranges.append((start, end))
-            start = end = n
-    ranges.append((start, end))
-    return ranges
-
-
-def _pytest_cov(cwd: str, report_path: Path) -> dict[str, Any] | None:
-    """Run pytest with coverage and load the JSON report."""
-    if not shutil.which("pytest") and not shutil.which("py.test"):
-        return None
-    code, _, _ = _run(
-        [
-            "pytest",
-            "--cov",
-            f"--cov-report=json:{report_path}",
-            "--cov-report=",
-            "-q",
-            "--no-header",
-        ],
-        cwd,
-    )
-    # Non-zero is fine — we want the coverage file even if some tests failed.
-    if not report_path.exists():
-        return None
-    try:
-        return json.loads(report_path.read_text())
-    except json.JSONDecodeError:
-        return None
+_READWRITE_DENY: tuple[str, ...] = (
+    "Bash(rm -rf*)",
+    "Bash(rm*)",
+    "Bash(git push*)",
+    "Bash(git commit*)",
+    "Bash(git reset*)",
+)
 
 
-def _findings_from_coverage_json(
-    data: dict[str, Any], scope_files: set[str] | None
-) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    for file_path, file_data in (data.get("files") or {}).items():
-        if scope_files is not None and file_path not in scope_files:
-            continue
-        missing = file_data.get("missing_lines") or []
-        if not missing:
-            continue
-        for start, end in _condense_ranges(missing):
-            count = end - start + 1
-            findings.append(
-                {
-                    "file": file_path,
-                    "line": start,
-                    "severity": "LOW",
-                    "category": "missing_coverage",
-                    "source": "pytest-cov",
-                    "description": (
-                        f"{count} uncovered line(s) at {file_path}:{start}"
-                        + (f"-{end}" if end != start else "")
-                    ),
-                    "recommendation": "Add a test exercising this branch.",
-                    "confidence": 1.0,
-                    "line_end": end,
-                }
-            )
-    return findings
+def _has_write_tools(allow: Sequence[str]) -> bool:
+    allow_names = {a.split("(")[0] for a in allow}
+    return "Edit" in allow_names or "Write" in allow_names
 
 
-def py_test_coverage_node(
+def claude_coverage_node(
     *,
     name: str = "test_coverage",
     mode: Mode = "diff",
     base_ref_key: str = "base_ref",
+    extra_skills: Sequence[str | Path] = (),
+    allow: Sequence[str] | None = None,
+    deny: Sequence[str] | None = None,
+    on_unmatched: UnmatchedPolicy = "deny",
+    model: str | None = DEFAULT,
+    max_turns: int | None = None,
     output_key: str = "coverage_findings",
-    cwd_key: str = "working_dir",
-    report_filename: str = ".langclaude-coverage.json",
-) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
-    """Build a deterministic test-coverage node (Python / pytest-cov).
+    verbose: bool = False,
+    **kwargs: Any,
+) -> ClaudeAgentNode:
+    """Build a coverage node.
+
+    By default read-only: runs coverage and reports gaps. To enable
+    writing tests, pass Edit/Write in the allow list.
 
     State input:
-        `cwd_key`: repo root.
-        `base_ref_key`: required in diff mode; ignored in full mode.
+        working_dir: repo root.
+        base_ref (or ``base_ref_key``): git ref for diff mode.
 
     State output:
-        `output_key`: list of finding dicts. Empty if pytest/coverage
-            aren't installed or no source files are changed.
-        "coverage_summary": {"files_reviewed", "uncovered_findings"}.
-
-    Notes:
-        - Runs `pytest --cov --cov-report=json:<file>` in the repo. Tests
-          have side effects — only use this on a clean tree or in a
-          dedicated CI step.
-        - The JSON report is written to `<cwd>/<report_filename>`. Add
-          that filename to your `.gitignore`.
+        ``output_key``: findings JSON.
     """
+    if allow is not None:
+        allow_list = list(allow)
+    else:
+        allow_list = list(_READONLY_ALLOW)
 
-    async def run(state: dict[str, Any]) -> dict[str, Any]:
-        cwd = state.get(cwd_key) or "."
-        report_path = Path(cwd) / report_filename
-        data = await asyncio.to_thread(_pytest_cov, cwd, report_path)
-        if data is None:
-            return {
-                output_key: [],
-                "coverage_summary": {"files_reviewed": 0, "uncovered_findings": 0},
-            }
+    if deny is not None:
+        deny_list = list(deny)
+    else:
+        deny_list = list(_READONLY_DENY if not _has_write_tools(allow_list) else _READWRITE_DENY)
 
-        scope_files: set[str] | None = None
-        if mode == "diff":
-            base_ref = state.get(base_ref_key) or "main"
-            scope_files = await asyncio.to_thread(_changed_files, cwd, base_ref)
+    can_fix = _has_write_tools(allow_list)
+    system_prompt = _READWRITE_PROMPT if can_fix else _READONLY_PROMPT
 
-        findings = _findings_from_coverage_json(data, scope_files)
-        files_reviewed = len(
-            {f for f in (data.get("files") or {}) if scope_files is None or f in scope_files}
+    if mode == "diff":
+        prompt_template = (
+            "DIFF mode — analyze coverage only for files changed since "
+            "{%s}. Run `pytest --cov` in {working_dir}."
+        ) % base_ref_key
+    else:
+        prompt_template = (
+            "FULL mode — analyze coverage for the entire repo at "
+            "{working_dir}. Run `pytest --cov`."
         )
-        return {
-            output_key: findings,
-            "coverage_summary": {
-                "files_reviewed": files_reviewed,
-                "uncovered_findings": len(findings),
-            },
-        }
 
-    run.__name__ = name
-    run.declared_outputs = (output_key, "coverage_summary")  # type: ignore[attr-defined]
-    return run
+    return ClaudeAgentNode(
+        name=name,
+        system_prompt=system_prompt,
+        skills=[*extra_skills],
+        allow=allow_list,
+        deny=deny_list,
+        on_unmatched=on_unmatched,
+        prompt_template=prompt_template,
+        output_key=output_key,
+        model=model,
+        max_turns=max_turns,
+        verbose=verbose,
+        **kwargs,
+    )

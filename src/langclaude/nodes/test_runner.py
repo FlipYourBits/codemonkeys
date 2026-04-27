@@ -1,145 +1,116 @@
-"""Test-runner node: runs the project's test suite and reports failures
-as findings. Deterministic — no LLM call.
+"""Pytest node: Claude agent that runs the test suite, analyzes failures,
+and optionally fixes them — all in one session.
 
-Failing tests come back as `category: "failing_test"` findings. The
-intent is *report only* — feed these into `claude_bug_fixer_node` for root-cause
-analysis rather than into `claude_issue_fixer_node` (auto-fixing failing tests
-is a known footgun: the agent may weaken assertions instead of fixing
-the bug).
-
-v1 supports pytest. Extending to other runners means adding a parser
-branch in `_parse_pytest_json`-style helpers.
+When Edit/Write are denied (default), the agent runs pytest and reports
+findings. When allowed, it also diagnoses and fixes failing tests.
+Control interactive approval via on_unmatched.
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
-import shutil
-import subprocess
-from collections.abc import Awaitable, Callable
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from langclaude.models import DEFAULT
+from langclaude.nodes.base import ClaudeAgentNode
+from langclaude.permissions import UnmatchedPolicy
 
-def _run(argv: list[str], cwd: str, timeout: int = 600) -> tuple[int, str, str]:
-    proc = subprocess.run(
-        argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False
-    )
-    return proc.returncode, proc.stdout, proc.stderr
+_READONLY_PROMPT = (
+    "You are a senior engineer running the project's test suite. "
+    "Use Bash to run pytest (or the project's test runner). "
+    "Analyze any failures: read the failing test and the code under test "
+    "to identify the root cause. "
+    "Do not edit files. Do not push. "
+    "Output JSON only as your final message — a list of findings with "
+    "file, line, severity, category, description, and recommendation."
+)
 
+_READWRITE_PROMPT = (
+    "You are a senior engineer running the project's test suite. "
+    "Use Bash to run pytest (or the project's test runner). "
+    "Analyze any failures: read the failing test and the code under test "
+    "to identify the root cause. Then fix the underlying bug — do not "
+    "weaken assertions or delete tests. Make the smallest correct change. "
+    "Re-run the tests to verify your fix. Do not push. "
+    "Output JSON only as your final message — a list of findings with "
+    "file, line, severity, category, description, recommendation, and "
+    "whether you fixed it."
+)
 
-def _pytest_json(cwd: str, report_path: Path) -> dict[str, Any] | None:
-    """Run pytest with the json-report plugin if available."""
-    if not (shutil.which("pytest") or shutil.which("py.test")):
-        return None
-    code, _, _ = _run(
-        [
-            "pytest",
-            f"--json-report",
-            f"--json-report-file={report_path}",
-            "-q",
-            "--no-header",
-        ],
-        cwd,
-    )
-    if not report_path.exists():
-        return None
-    try:
-        return json.loads(report_path.read_text())
-    except json.JSONDecodeError:
-        return None
+_READONLY_ALLOW: tuple[str, ...] = ("Read", "Glob", "Grep", "Bash")
 
+_READONLY_DENY: tuple[str, ...] = (
+    "Edit",
+    "Write",
+    "Bash(rm*)",
+    "Bash(git push*)",
+    "Bash(git commit*)",
+    "Bash(git reset*)",
+)
 
-def _findings_from_pytest_json(data: dict[str, Any]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    for test in data.get("tests") or []:
-        outcome = test.get("outcome")
-        if outcome not in ("failed", "error"):
-            continue
-        nodeid = test.get("nodeid", "")
-        location = test.get("location") or [None, None, None]
-        file_path = location[0] or nodeid.split("::", 1)[0]
-        line = location[1] or 0
-        call = test.get("call") or {}
-        longrepr = (call.get("longrepr") or "").strip()
-        first_line = longrepr.splitlines()[0] if longrepr else "test failed"
-        findings.append(
-            {
-                "file": file_path,
-                "line": int(line) + 1 if isinstance(line, int) else 0,
-                "severity": "HIGH" if outcome == "failed" else "MEDIUM",
-                "category": "failing_test",
-                "source": "pytest",
-                "description": f"{nodeid} {outcome}: {first_line}",
-                "recommendation": (
-                    "Investigate the failure with claude_bug_fixer_node — root-cause "
-                    "the bug, do not weaken the assertion."
-                ),
-                "confidence": 1.0,
-                "nodeid": nodeid,
-                "traceback": longrepr,
-            }
-        )
-    return findings
+_READWRITE_DENY: tuple[str, ...] = (
+    "Bash(rm -rf*)",
+    "Bash(rm*)",
+    "Bash(git push*)",
+    "Bash(git commit*)",
+    "Bash(git reset*)",
+)
 
 
-def py_test_runner_node(
+def _has_write_tools(allow: Sequence[str]) -> bool:
+    allow_names = {a.split("(")[0] for a in allow}
+    return "Edit" in allow_names or "Write" in allow_names
+
+
+def claude_pytest_node(
     *,
-    name: str = "test_runner",
+    name: str = "pytest",
+    extra_skills: Sequence[str | Path] = (),
+    allow: Sequence[str] | None = None,
+    deny: Sequence[str] | None = None,
+    on_unmatched: UnmatchedPolicy = "deny",
+    model: str | None = DEFAULT,
+    max_turns: int | None = None,
     output_key: str = "test_findings",
-    cwd_key: str = "working_dir",
-    report_filename: str = ".langclaude-pytest.json",
-) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
-    """Build a deterministic test-runner node (Python / pytest).
+    verbose: bool = False,
+    **kwargs: Any,
+) -> ClaudeAgentNode:
+    """Build a pytest node.
+
+    By default read-only: runs tests and reports failures. To enable
+    fixing, pass Edit/Write in the allow list.
 
     State input:
-        `cwd_key`: repo root.
+        working_dir: repo root.
 
     State output:
-        `output_key`: list of finding dicts (one per failing test).
-            Empty when all tests pass or pytest isn't installed.
-        "test_summary": {"passed", "failed", "errors", "skipped"}.
-
-    Notes:
-        - Requires `pytest-json-report`. Install with `pip install
-          pytest-json-report`. If missing, the node returns an empty
-          result with a hint in `test_summary["error"]`.
-        - Tests have side effects — only use on a clean tree or in CI.
-        - Failing-test findings are intended for `claude_bug_fixer_node`, not
-          `claude_issue_fixer_node`. Auto-applying fixes for failing tests is
-          dangerous (the agent may weaken assertions instead of fixing
-          the underlying bug).
+        ``output_key``: findings JSON.
     """
+    if allow is not None:
+        allow_list = list(allow)
+    else:
+        allow_list = list(_READONLY_ALLOW)
 
-    async def run(state: dict[str, Any]) -> dict[str, Any]:
-        cwd = state.get(cwd_key) or "."
-        report_path = Path(cwd) / report_filename
-        data = await asyncio.to_thread(_pytest_json, cwd, report_path)
-        if data is None:
-            return {
-                output_key: [],
-                "test_summary": {
-                    "error": "pytest or pytest-json-report not available",
-                    "passed": 0,
-                    "failed": 0,
-                    "errors": 0,
-                    "skipped": 0,
-                },
-            }
+    if deny is not None:
+        deny_list = list(deny)
+    else:
+        deny_list = list(_READONLY_DENY if not _has_write_tools(allow_list) else _READWRITE_DENY)
 
-        findings = _findings_from_pytest_json(data)
-        summary = data.get("summary") or {}
-        return {
-            output_key: findings,
-            "test_summary": {
-                "passed": summary.get("passed", 0),
-                "failed": summary.get("failed", 0),
-                "errors": summary.get("error", 0),
-                "skipped": summary.get("skipped", 0),
-            },
-        }
+    can_fix = _has_write_tools(allow_list)
+    system_prompt = _READWRITE_PROMPT if can_fix else _READONLY_PROMPT
 
-    run.__name__ = name
-    run.declared_outputs = (output_key, "test_summary")  # type: ignore[attr-defined]
-    return run
+    return ClaudeAgentNode(
+        name=name,
+        system_prompt=system_prompt,
+        skills=[*extra_skills],
+        allow=allow_list,
+        deny=deny_list,
+        on_unmatched=on_unmatched,
+        prompt_template="Run the test suite in {working_dir} and analyze any failures.",
+        output_key=output_key,
+        model=model,
+        max_turns=max_turns,
+        verbose=verbose,
+        **kwargs,
+    )

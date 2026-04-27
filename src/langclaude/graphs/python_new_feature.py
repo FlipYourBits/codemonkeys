@@ -19,16 +19,16 @@ from langgraph.graph import StateGraph
 from langclaude.graphs import chain
 from langclaude.nodes.base import ShellNode
 from langclaude.nodes.branch_namer import claude_new_branch_node
-from langclaude.nodes.bug_fixer import claude_python_bug_fixer_node
+from langclaude.nodes.bug_fixer import claude_bug_fixer_node
 from langclaude.nodes.code_review import claude_code_review_node
-from langclaude.nodes.dependency_audit import py_dependency_audit_node
+from langclaude.nodes.dependency_audit import claude_dependency_audit_node
 from langclaude.nodes.docs_review import claude_docs_review_node
-from langclaude.nodes.feature_implementer import claude_python_feature_implementer_node
-from langclaude.nodes.issue_fixer import claude_python_issue_fixer_node
+from langclaude.nodes.feature_implementer import claude_feature_implementer_node
+from langclaude.nodes.issue_fixer import claude_issue_fixer_node
 from langclaude.nodes.ruff_node import shell_ruff_fix_node, shell_ruff_fmt_node
 from langclaude.nodes.security_audit import claude_security_audit_node
-from langclaude.nodes.test_coverage import py_test_coverage_node
-from langclaude.nodes.test_runner import py_test_runner_node
+from langclaude.nodes.test_coverage import claude_coverage_node
+from langclaude.nodes.test_runner import claude_pytest_node
 
 
 def build_graph(*, base_ref: str = "main", verbose: bool = True):
@@ -36,24 +36,25 @@ def build_graph(*, base_ref: str = "main", verbose: bool = True):
 
     chain(graph,
         ("new_branch", claude_new_branch_node()),
-        ("implementer", claude_python_feature_implementer_node(verbose=verbose)),
+        ("implementer", claude_feature_implementer_node(extra_skills=["python-clean-code"], verbose=verbose)),
         ("ruff_fix", shell_ruff_fix_node()),
         ("ruff_fmt", shell_ruff_fmt_node()),
-        ("test_runner", py_test_runner_node()),
-        ("test_coverage", py_test_coverage_node(mode="diff", base_ref_key="base_ref")),
+        ("test_runner", claude_pytest_node()),
+        ("test_coverage", claude_coverage_node(mode="diff", base_ref_key="base_ref")),
         [
             ("code_review", claude_code_review_node(mode="diff", verbose=verbose)),
             ("security_audit", claude_security_audit_node(mode="diff", verbose=verbose)),
             ("docs_review", claude_docs_review_node(mode="diff", verbose=verbose)),
-            ("dep_audit", py_dependency_audit_node()),
+            ("dep_audit", claude_dependency_audit_node()),
         ],
-        ("issue_fixer", claude_python_issue_fixer_node(
+        ("issue_fixer", claude_issue_fixer_node(
+            extra_skills=["python-clean-code"],
             findings_keys=("review_findings", "security_findings", "docs_findings"),
             mode="auto",
             severity_threshold="MEDIUM",
             verbose=verbose,
         )),
-        ("bug_fixer", claude_python_bug_fixer_node(verbose=verbose)),
+        ("bug_fixer", claude_bug_fixer_node(extra_skills=["python-clean-code"], verbose=verbose)),
         ("ruff_final", shell_ruff_fix_node(name="ruff_final", output_key="ruff_final_output")),
         ("commit", ShellNode(
             name="commit",

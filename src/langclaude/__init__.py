@@ -17,7 +17,7 @@ from langclaude.nodes.base import ClaudeAgentNode, ShellNode
 from langclaude.nodes.branch_namer import claude_new_branch_node
 from langclaude.nodes.bug_fixer import claude_bug_fixer_node
 from langclaude.nodes.code_review import claude_code_review_node
-from langclaude.nodes.dependency_audit import py_dependency_audit_node
+from langclaude.nodes.dependency_audit import claude_dependency_audit_node
 from langclaude.nodes.docs_review import claude_docs_review_node
 from langclaude.nodes.feature_implementer import claude_feature_implementer_node
 from langclaude.nodes.issue_fixer import (
@@ -26,8 +26,8 @@ from langclaude.nodes.issue_fixer import (
 )
 from langclaude.nodes.ruff_node import shell_ruff_fix_node, shell_ruff_fmt_node
 from langclaude.nodes.security_audit import claude_security_audit_node
-from langclaude.nodes.test_coverage import py_test_coverage_node
-from langclaude.nodes.test_runner import py_test_runner_node
+from langclaude.nodes.test_coverage import claude_coverage_node
+from langclaude.nodes.test_runner import claude_pytest_node
 from langclaude.permissions import (
     PermissionRule,
     ask_via_stdin,
@@ -67,9 +67,9 @@ __all__ = [
     "default_on_warn",
     "parse_findings",
     "passes_threshold",
-    "py_dependency_audit_node",
-    "py_test_coverage_node",
-    "py_test_runner_node",
+    "claude_coverage_node",
+    "claude_dependency_audit_node",
+    "claude_pytest_node",
     "shell_ruff_fix_node",
     "shell_ruff_fmt_node",
     "validate_node_outputs",

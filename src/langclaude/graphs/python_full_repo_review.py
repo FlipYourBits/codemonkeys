@@ -17,12 +17,12 @@ from langgraph.graph import StateGraph
 
 from langclaude.graphs import chain
 from langclaude.nodes.code_review import claude_code_review_node
-from langclaude.nodes.dependency_audit import py_dependency_audit_node
+from langclaude.nodes.dependency_audit import claude_dependency_audit_node
 from langclaude.nodes.docs_review import claude_docs_review_node
 from langclaude.nodes.ruff_node import shell_ruff_fix_node
 from langclaude.nodes.security_audit import claude_security_audit_node
-from langclaude.nodes.test_coverage import py_test_coverage_node
-from langclaude.nodes.test_runner import py_test_runner_node
+from langclaude.nodes.test_coverage import claude_coverage_node
+from langclaude.nodes.test_runner import claude_pytest_node
 
 
 def build_graph(*, verbose: bool = True):
@@ -31,11 +31,11 @@ def build_graph(*, verbose: bool = True):
     chain(graph,
         [
             ("ruff", shell_ruff_fix_node(name="ruff", fix=False, fail_on_findings=False)),
-            [("test_runner", py_test_runner_node()), ("test_coverage", py_test_coverage_node(mode="full"))],
+            [("test_runner", claude_pytest_node()), ("test_coverage", claude_coverage_node(mode="full"))],
             ("code_review", claude_code_review_node(mode="full", verbose=verbose)),
             ("security_audit", claude_security_audit_node(mode="full", verbose=verbose)),
             ("docs_review", claude_docs_review_node(mode="full", verbose=verbose)),
-            ("dep_audit", py_dependency_audit_node()),
+            ("dep_audit", claude_dependency_audit_node()),
         ],
     )
 
