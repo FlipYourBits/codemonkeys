@@ -18,76 +18,160 @@ export ANTHROPIC_API_KEY=...
 
 ```python
 import asyncio
-from langgraph.graph import StateGraph
-from langclaude import chain, claude_new_branch_node, claude_feature_implementer_node
+from langclaude import Pipeline
 
 async def main():
-    graph = StateGraph(dict)
-    chain(graph,
-        ("new_branch", claude_new_branch_node()),
-        ("implement", claude_feature_implementer_node()),
+    pipeline = Pipeline(
+        working_dir="/path/to/repo",
+        task="Add a /healthz endpoint that returns 200 OK",
+        steps=[
+            "new_branch",
+            "implement_feature",
+            "ruff_fix",
+            "ruff_fmt",
+            ["code_review", "security_audit"],
+        ],
+        extra_skills=["python-clean-code"],
     )
-    app = graph.compile()
-
-    final = await app.ainvoke({
-        "working_dir": "/path/to/repo",
-        "task_description": "Add a /healthz endpoint that returns 200 OK",
-    })
+    final = await pipeline.run()
     print(final)
 
 asyncio.run(main())
 ```
 
-`chain()` wires nodes in sequence and adds `START`/`END` automatically. Lists create parallel processes:
+Steps are strings resolved from the built-in registry. Lists create parallel fan-out. Config overrides and custom nodes are passed as dicts.
+
+## Pipeline
 
 ```python
-chain(graph,
-    ("implement", claude_feature_implementer_node(extra_skills=["python-clean-code"])),
-    ("ruff_fix", shell_ruff_fix_node()),
-    [
-        ("code_review", claude_code_review_node(mode="diff")),
-        ("security_audit", claude_security_audit_node(mode="diff")),
+Pipeline(
+    working_dir="/path/to/repo",
+    task="description of what to do",
+    steps=[
+        "new_branch",
+        "implement_feature",
+        "ruff_fix",
+        ["code_review", "security_audit", "docs_review"],
+        ("ruff_final", "ruff_fix"),       # tuple: (graph_name, registry_key) for aliases
+        "custom/commit",
     ],
-    ("issue_fixer", claude_issue_fixer_node()),
+    extra_skills=["python-clean-code"],   # injected into every node that accepts it
+    config={
+        "code_review": {"mode": "diff", "allow": ["Read", "Glob", "Grep", "Bash", "Edit", "Write"]},
+        "security_audit": {"mode": "diff"},
+    },
+    custom_nodes={"custom/commit": my_commit_factory},
+    verbose=True,
+    extra_state={"base_ref": "main"},
 )
+```
+
+- **steps**: list of registry names, `(alias, registry_key)` tuples, or nested lists for parallel.
+- **config**: per-step overrides passed as kwargs to the node factory.
+- **custom_nodes**: registered before resolution. Keys must be namespaced (`"custom/name"`).
+- **extra_skills**: merged into every node whose factory accepts `extra_skills`.
+- **extra_state**: additional key-value pairs merged into the initial state dict.
+
+## Registry
+
+Every built-in node has a string name. User nodes are registered under a namespace:
+
+```python
+from langclaude import register, resolve, list_builtins
+
+list_builtins()
+# ['code_review', 'coverage', 'dependency_audit', 'docs_review',
+#  'implement_feature', 'new_branch', 'pytest', 'ruff_fix', 'ruff_fmt',
+#  'security_audit']
+
+register("deploy", my_deploy_factory, namespace="acme")
+resolve("acme/deploy")  # returns my_deploy_factory
 ```
 
 ## Built-in nodes
 
-Node factory functions are prefixed by type: `claude_` (Claude Agent SDK), `shell_` (subprocess), `py_` (pure Python).
+| Factory | Registry name | Default output key | Description |
+|---|---|---|---|
+| `claude_new_branch_node()` | `new_branch` | `branch_name` | Generates branch name, handles dirty tree, creates branch |
+| `claude_feature_implementer_node()` | `implement_feature` | `last_result` | Implements feature from task_description |
+| `claude_code_review_node()` | `code_review` | `review_findings` | Runs linters + semantic review. Allow Edit/Write to also fix. |
+| `claude_security_audit_node()` | `security_audit` | `security_findings` | Runs security scanners + review. Allow Edit/Write to also fix. |
+| `claude_docs_review_node()` | `docs_review` | `docs_findings` | Checks docs for drift. Allow Edit/Write to also fix. |
+| `claude_pytest_node()` | `pytest` | `test_findings` | Runs pytest, analyzes failures. Allow Edit/Write to also fix. |
+| `claude_coverage_node()` | `coverage` | `coverage_findings` | Runs coverage, finds gaps. Allow Edit/Write to add tests. |
+| `claude_dependency_audit_node()` | `dependency_audit` | `dep_findings` | Runs SCA scanners. Allow Edit/Write to upgrade deps. |
+| `shell_ruff_fix_node()` | `ruff_fix` | `ruff_fix_output` | Runs `ruff check --fix` |
+| `shell_ruff_fmt_node()` | `ruff_fmt` | `ruff_fmt_output` | Runs `ruff format` |
 
-### Claude nodes
+## Permissions control behavior
 
-| Factory | Default output key | Description |
-|---|---|---|
-| `claude_new_branch_node()` | `branch_name` | Generates a branch name, prompts for approval (interactive mode), checks for dirty tree (stash/commit/carry), and creates + switches to the branch. Pass `mode="auto"` for CI. |
-| `claude_feature_implementer_node()` | `last_result` | Implements a feature described in `task_description`. Reads code and makes edits. Pass `extra_skills=["python-clean-code"]` for language-specific guidance. |
-| `claude_bug_fixer_node()` | `last_result` | Diagnoses and fixes a bug from `task_description`. Adds a regression test. |
-| `claude_code_review_node()` | `review_findings` | Runs linters, git diff, and type-checkers via Bash, then performs semantic code review. Supports `mode="diff"` (scoped to changes) or `mode="full"` (whole repo). |
-| `claude_security_audit_node()` | `security_findings` | Runs security scanners (semgrep, gitleaks, pip-audit, etc.) via Bash, then performs semantic security review. Supports `mode="diff"` or `mode="full"`. |
-| `claude_docs_review_node()` | `docs_findings` | Reads doc files and checks for drift against the code. Supports `mode="diff"` or `mode="full"`. |
-| `claude_issue_fixer_node()` | `applied_fixes` | Consumes findings from review nodes and applies fixes. Supports `mode="interactive"` (prompt per finding), `mode="auto"` (severity threshold), or `mode="all"`. |
+Each node's behavior is controlled by three levers:
 
-### Shell nodes
+1. **allow/deny** — what tools the agent can use. Default: read-only. Pass Edit/Write to enable fixing.
+2. **on_unmatched** — what happens for unmatched tool calls:
+   - `"allow"`: auto-approve (CI / fully automatic)
+   - `"deny"`: refuse (default)
+   - `ask_via_stdin`: prompt the user (interactive)
+3. **System prompt** — adjusts automatically based on permissions. Read-only nodes report findings; read-write nodes also fix them.
 
-| Factory | Default output key | Description |
-|---|---|---|
-| `shell_ruff_fix_node()` | `ruff_fix_output` | Runs `ruff check --fix` to auto-fix lint violations. Pass `fix=False` for check-only. |
-| `shell_ruff_fmt_node()` | `ruff_fmt_output` | Runs `ruff format` to reformat code. |
+```python
+# Report only (default):
+claude_security_audit_node()
 
-Both invoke `python -m ruff` so they work whether or not the venv is activated. Ruff is a runtime dependency.
+# Fix automatically:
+claude_security_audit_node(
+    allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+    deny=["Bash(git push*)"],
+)
 
-### Python nodes
+# Fix with user approval per edit:
+from langclaude import ask_via_stdin
+claude_security_audit_node(
+    allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+    deny=["Bash(git push*)"],
+    on_unmatched=ask_via_stdin,
+)
+```
 
-| Factory | Default output key | Description |
-|---|---|---|
-| `py_pytest_runner_node()` | `test_findings` | Runs pytest with `pytest-json-report`, parses failures into structured findings. Also writes `test_summary`. |
-| `py_pytest_coverage_node()` | `coverage_findings` | Runs `pytest --cov`, parses coverage JSON, emits uncovered line ranges as findings. Supports `mode="diff"` (only changed files) or `mode="full"`. Also writes `coverage_summary`. |
-| `py_dependency_audit_node()` | `dep_findings` | Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit) and parses results into findings. |
+## Manual wiring with chain()
 
-### Low-level building blocks
+For full control, skip `Pipeline` and wire nodes directly:
 
-**`ClaudeAgentNode`** — wraps `claude_agent_sdk.query()`. All `claude_*` factories build on this. Use it directly for custom nodes:
+```python
+from langgraph.graph import StateGraph
+from langclaude import chain, claude_new_branch_node, claude_feature_implementer_node
+
+graph = StateGraph(dict)
+chain(graph,
+    ("new_branch", claude_new_branch_node()),
+    ("implement", claude_feature_implementer_node()),
+    [
+        ("code_review", claude_code_review_node(mode="diff")),
+        ("security_audit", claude_security_audit_node(mode="diff")),
+    ],
+)
+app = graph.compile()
+```
+
+`chain()` wires nodes in sequence and adds `START`/`END` automatically. Lists create parallel fan-out.
+
+## Pre-built graphs
+
+**`python_new_feature`** — end-to-end: branch creation, implementation, lint, parallel reviews with fixing enabled, final lint, commit.
+
+```bash
+python -m langclaude.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
+```
+
+**`python_full_repo_review`** — read-only analysis: lint, tests, coverage, code review, security audit, docs review, and dependency audit all run in parallel.
+
+```bash
+python -m langclaude.graphs.python_full_repo_review /path/to/repo
+```
+
+## Low-level building blocks
+
+**`ClaudeAgentNode`** — wraps `claude_agent_sdk.query()`. All `claude_*` factories build on this:
 
 ```python
 from langclaude import ClaudeAgentNode
@@ -112,20 +196,6 @@ run_tests = ShellNode(name="tests", command="pytest -x")
 ```
 
 **Plain functions** — any `(state) -> dict` callable is a valid LangGraph node, no wrapper needed.
-
-## Pre-built graphs
-
-**`python_new_feature`** — end-to-end: branch creation, implementation, lint, test, parallel reviews, issue fixing, bug fixing, final lint, commit.
-
-```bash
-python -m langclaude.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
-```
-
-**`python_full_repo_review`** — read-only analysis: lint, tests, coverage, code review, security audit, docs review, and dependency audit all run in parallel.
-
-```bash
-python -m langclaude.graphs.python_full_repo_review /path/to/repo
-```
 
 ## Permission rules
 
