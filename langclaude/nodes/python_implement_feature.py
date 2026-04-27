@@ -28,7 +28,11 @@ _SYSTEM_PROMPT = (
 )
 
 _ALLOW = [
-    "Read", "Glob", "Grep", "Edit", "Write",
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
     "Bash(git diff*)",
     "Bash(git log*)",
     "Bash(git show*)",
@@ -50,7 +54,8 @@ async def ask_impl_feedback_via_stdin(summary: str) -> str | None:
     print(summary, file=sys.stderr)
     print(f"{'=' * 60}", file=sys.stderr)
     answer = await asyncio.to_thread(
-        input, "\n[implement] Approve? (y)es or describe what to fix: ",
+        input,
+        "\n[implement] Approve? (y)es or describe what to fix: ",
     )
     a = answer.strip()
     if a.lower() in ("y", "yes", ""):
@@ -90,8 +95,7 @@ def python_implement_feature_node(
 
         if plan:
             initial_prompt = (
-                f"Implement the following plan:\n\n{plan}\n\n"
-                f"Original task:\n\n{task}"
+                f"Implement the following plan:\n\n{plan}\n\nOriginal task:\n\n{task}"
             )
         else:
             initial_prompt = f"Implement the following task:\n\n{task}"

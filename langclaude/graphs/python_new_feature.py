@@ -6,7 +6,7 @@ implements with user review, lints, runs all review nodes in parallel
 
 Run with:
 
-    python -m langclaude.graphs.python_new_feature /path/to/repo "add a retry decorator"
+    python -m langclaude.graphs.python_new_feature /path/to/repo "add a retry decorator" --verbosity verbose
 """
 
 from __future__ import annotations
@@ -77,7 +77,9 @@ if __name__ == "__main__":
     parser.add_argument("working_dir", help="Path to the repository root")
     parser.add_argument("task", help="Task description for the feature")
     parser.add_argument(
-        "--base-ref", default="main", help="Git ref to diff against for certain nodes e.g. code_review (default: main)",
+        "--base-ref",
+        default="main",
+        help="Git ref to diff against for certain nodes e.g. code_review (default: main)",
     )
     parser.add_argument(
         "--verbosity",

@@ -56,7 +56,8 @@ async def ask_push_via_stdin(summary: str) -> Literal["push", "skip", "feedback"
     print(summary, file=sys.stderr)
     print(f"{'=' * 60}", file=sys.stderr)
     answer = await asyncio.to_thread(
-        input, "\n[git_commit] (p)ush / (s)kip push / or provide feedback: ",
+        input,
+        "\n[git_commit] (p)ush / (s)kip push / or provide feedback: ",
     )
     a = answer.strip()
     if a.lower() in ("p", "push", "y", "yes", ""):

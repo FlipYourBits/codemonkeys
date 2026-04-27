@@ -30,7 +30,9 @@ _SYSTEM_PROMPT = (
 )
 
 _ALLOW = [
-    "Read", "Glob", "Grep",
+    "Read",
+    "Glob",
+    "Grep",
     "Bash(git diff*)",
     "Bash(git log*)",
     "Bash(git show*)",
@@ -51,7 +53,8 @@ async def ask_plan_feedback_via_stdin(plan: str) -> str | None:
     print(plan, file=sys.stderr)
     print(f"{'=' * 60}", file=sys.stderr)
     answer = await asyncio.to_thread(
-        input, "\n[plan] Approve? (y)es or provide feedback: ",
+        input,
+        "\n[plan] Approve? (y)es or provide feedback: ",
     )
     a = answer.strip()
     if a.lower() in ("y", "yes", ""):

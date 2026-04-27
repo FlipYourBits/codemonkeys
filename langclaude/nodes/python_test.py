@@ -27,7 +27,11 @@ _SYSTEM_PROMPT = (
 )
 
 _ALLOW = [
-    "Read", "Glob", "Grep", "Edit", "Write",
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
     "Bash(git diff*)",
     "Bash(git log*)",
     "Bash(git show*)",

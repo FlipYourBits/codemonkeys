@@ -1,4 +1,4 @@
-"""Dependency-audit node: runs SCA tools and fixes vulnerable dependencies.
+"""Python dependency-audit node: runs pip-audit and fixes vulnerable packages.
 
 The agent always attempts to audit and upgrade. Permissions control what
 actually happens: deny Edit/Write for report-only, allow for auto-fix,
@@ -15,19 +15,22 @@ from langclaude.nodes.base import ClaudeAgentNode, Verbosity
 from langclaude.permissions import UnmatchedPolicy
 
 _SYSTEM_PROMPT = (
-    "You are auditing project dependencies for known vulnerabilities. "
-    "Use Bash to run whichever SCA tools are installed: pip-audit, "
-    "npm audit, govulncheck, cargo audit, bundler-audit. "
-    "Only run tools that are installed and relevant to the project's "
-    "ecosystem. After identifying vulnerabilities, upgrade affected "
-    "dependencies to patched versions. Verify the upgrade doesn't break "
-    "tests. Do not push. Output JSON only as your final message — a list "
-    "of findings with file, line, severity, category (vulnerable_dependency), "
+    "You are auditing Python dependencies for known vulnerabilities. "
+    "Use pip-audit to scan for CVEs. If pip-audit is not installed, "
+    "check requirements.txt / pyproject.toml manually against known "
+    "vulnerability databases. Upgrade affected packages to patched "
+    "versions. Do not install packages. Do not run tests. Do not push. "
+    "Output JSON only as your final message — a list of findings with "
+    "file, line, severity, category (vulnerable_dependency), "
     "source, description, recommendation, confidence, and whether you fixed it."
 )
 
 _ALLOW = [
-    "Read", "Glob", "Grep", "Edit", "Write",
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
     "Bash(git diff*)",
     "Bash(git log*)",
     "Bash(git show*)",
@@ -37,17 +40,20 @@ _ALLOW = [
     "Bash(pip-audit*)",
     "Bash(pip list*)",
     "Bash(pip show*)",
-    "Bash(npm audit*)",
-    "Bash(npm ls*)",
-    "Bash(govulncheck*)",
-    "Bash(cargo audit*)",
-    "Bash(bundler-audit*)",
+]
+
+_DENY = [
+    "Bash(pip install*)",
+    "Bash(pip uninstall*)",
+    "Bash(python -m pip*)",
+    "Bash(python -m pytest*)",
+    "Bash(pytest*)",
 ]
 
 
-def dependency_audit_node(
+def python_dependency_audit_node(
     *,
-    name: str = "dependency_audit",
+    name: str = "python_dependency_audit",
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] | None = None,
@@ -61,9 +67,9 @@ def dependency_audit_node(
         system_prompt=_SYSTEM_PROMPT,
         skills=[*extra_skills],
         allow=list(allow) if allow is not None else _ALLOW,
-        deny=list(deny) if deny is not None else [],
+        deny=list(deny) if deny is not None else _DENY,
         on_unmatched=on_unmatched,
-        prompt_template="Audit dependencies in {working_dir} for known vulnerabilities.",
+        prompt_template="Audit Python dependencies in {working_dir} for known vulnerabilities.",
         max_turns=max_turns,
         verbosity=verbosity,
         **kwargs,

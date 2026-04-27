@@ -22,13 +22,18 @@ _SYSTEM_PROMPT = (
     "Identify uncovered lines and branches. Write tests to cover the most "
     "important gaps — focus on business logic and error paths. Re-run "
     "coverage to verify improvement. Do not push. "
+    "Do not install packages — use only tools already available. "
     "Output JSON only as your final message — a list of findings with "
     "file, line, severity, category, description, recommendation, and "
     "whether you fixed it."
 )
 
 _ALLOW = [
-    "Read", "Glob", "Grep", "Edit", "Write",
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
     "Bash(git diff*)",
     "Bash(git log*)",
     "Bash(git show*)",
@@ -37,6 +42,13 @@ _ALLOW = [
     "Bash(git ls-files*)",
     "Bash(python -m pytest*)",
     "Bash(python -m coverage*)",
+]
+
+
+_DENY = [
+    "Bash(pip install*)",
+    "Bash(pip uninstall*)",
+    "Bash(python -m pip*)",
 ]
 
 
@@ -68,7 +80,7 @@ def python_coverage_node(
         system_prompt=_SYSTEM_PROMPT,
         skills=[*extra_skills],
         allow=list(allow) if allow is not None else _ALLOW,
-        deny=list(deny) if deny is not None else [],
+        deny=list(deny) if deny is not None else _DENY,
         on_unmatched=on_unmatched,
         prompt_template=prompt_template,
         max_turns=max_turns,
