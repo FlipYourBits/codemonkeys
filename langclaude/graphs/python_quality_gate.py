@@ -76,12 +76,11 @@ async def main(
     )
     final = await pipeline.run()
 
-    print("\n=== Quality Gate Results ===")
-    node_costs = final.get("node_costs", {})
-    for name, cost in node_costs.items():
-        print(f"{name:<25}${cost:.4f}")
-    print("─" * 33)
-    print(f"{'total':<25}${final.get('total_cost_usd', 0):.4f}")
+    if pipeline._display is not None:
+        pipeline._display.print_results(final.get("node_costs", {}))
+    else:
+        from langclaude.display import Display
+        Display(steps=[], title="Quality Gate Results", live=False).print_results(final.get("node_costs", {}))
 
 
 if __name__ == "__main__":

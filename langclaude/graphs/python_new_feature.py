@@ -63,11 +63,11 @@ async def main(
     pipeline = build_pipeline(working_dir, task, base_ref=base_ref, verbosity=verbosity)
     final = await pipeline.run()
 
-    print("\n=== Results ===")
-    print(f"branch:   {final.get('git_new_branch', '?')}")
-    print(f"tests:    {str(final.get('python_test', '?'))[:200]}")
-    print(f"coverage: {str(final.get('python_coverage', '?'))[:200]}")
-    print(f"cost:     ${final.get('last_cost_usd', 0):.4f}")
+    if pipeline._display is not None:
+        pipeline._display.print_results(final.get("node_costs", {}))
+    else:
+        from langclaude.display import Display
+        Display(steps=[], title="Results", live=False).print_results(final.get("node_costs", {}))
 
 
 if __name__ == "__main__":
