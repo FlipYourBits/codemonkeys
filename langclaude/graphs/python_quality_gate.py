@@ -1,7 +1,9 @@
 """Python code quality gate.
 
-Sequential pipeline: lint, format, test, coverage, code review,
-security audit, doc review, dependency audit, final lint.
+Pipeline shape:
+
+    lint → format → [test, coverage, code_review, security, docs, dep_audit]
+        → resolve_findings (interactive) → lint
 
 Run with:
 
@@ -27,6 +29,7 @@ def build_pipeline(
     *,
     mode: Mode = "diff",
     base_ref: str = "main",
+    interactive: bool = True,
     verbosity: Verbosity = Verbosity.normal,
 ) -> Pipeline:
     config: dict[str, dict[str, Any]] = {}
@@ -37,7 +40,10 @@ def build_pipeline(
             config[node] = {"mode": "diff"}
 
     config["resolve_findings"] = {
+        "interactive": interactive,
         "requires": [
+            "python_test",
+            "python_coverage",
             "code_review",
             "security_audit",
             "docs_review",
@@ -51,12 +57,14 @@ def build_pipeline(
         steps=[
             "python_lint",
             "python_format",
-            "python_coverage",
-            "python_test",
-            "python_dependency_audit",
-            "code_review",
-            "security_audit",
-            "docs_review",
+            [
+                "python_test",
+                "python_coverage",
+                "code_review",
+                "security_audit",
+                "docs_review",
+                "python_dependency_audit",
+            ],
             "resolve_findings",
             "python_lint",
         ],
@@ -70,17 +78,24 @@ async def main(
     working_dir: str,
     mode: str = "full",
     base_ref: str = "main",
+    interactive: bool = True,
     verbosity: Verbosity = Verbosity.normal,
 ) -> None:
     pipeline = build_pipeline(
-        working_dir, mode=mode, base_ref=base_ref, verbosity=verbosity
+        working_dir,
+        mode=mode,
+        base_ref=base_ref,
+        interactive=interactive,
+        verbosity=verbosity,
     )
     final = await pipeline.run()
 
     if pipeline._display is not None:
         pipeline._display.print_results(final.get("node_costs", {}))
     else:
-        Display(steps=[], title="Quality Gate Results", live=False).print_results(final.get("node_costs", {}))
+        Display(steps=[], title="Quality Gate Results", live=False).print_results(
+            final.get("node_costs", {})
+        )
 
 
 if __name__ == "__main__":
@@ -105,6 +120,11 @@ if __name__ == "__main__":
         help="Git ref to diff against when --mode=diff (default: main)",
     )
     parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Auto-fix HIGH+ issues without prompting (default: interactive)",
+    )
+    parser.add_argument(
         "--verbosity",
         choices=[v.value for v in Verbosity],
         default=Verbosity.normal.value,
@@ -116,6 +136,7 @@ if __name__ == "__main__":
             args.working_dir,
             mode=args.mode,
             base_ref=args.base_ref,
+            interactive=not args.no_interactive,
             verbosity=Verbosity(args.verbosity),
         ),
     )

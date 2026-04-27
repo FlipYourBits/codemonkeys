@@ -46,25 +46,44 @@ class TestBuildPipeline:
         assert p.steps == [
             "python_lint",
             "python_format",
-            "python_coverage",
-            "python_test",
-            "python_dependency_audit",
-            "code_review",
-            "security_audit",
-            "docs_review",
+            [
+                "python_test",
+                "python_coverage",
+                "code_review",
+                "security_audit",
+                "docs_review",
+                "python_dependency_audit",
+            ],
             "resolve_findings",
             "python_lint",
         ]
 
+    def test_parallel_steps_present(self):
+        p = build_pipeline("/tmp/repo", mode="full")
+        parallel = p.steps[2]
+        assert isinstance(parallel, list)
+        assert "python_test" in parallel
+        assert "code_review" in parallel
+        assert "security_audit" in parallel
+
     def test_resolve_findings_has_requires(self):
         p = build_pipeline("/tmp/repo", mode="full")
         assert "resolve_findings" in p.config
-        assert p.config["resolve_findings"]["requires"] == [
-            "code_review",
-            "security_audit",
-            "docs_review",
-            "python_dependency_audit",
-        ]
+        requires = p.config["resolve_findings"]["requires"]
+        assert "code_review" in requires
+        assert "security_audit" in requires
+        assert "docs_review" in requires
+        assert "python_dependency_audit" in requires
+        assert "python_test" in requires
+        assert "python_coverage" in requires
+
+    def test_resolve_findings_interactive_by_default(self):
+        p = build_pipeline("/tmp/repo", mode="full")
+        assert p.config["resolve_findings"]["interactive"] is True
+
+    def test_no_interactive_flag(self):
+        p = build_pipeline("/tmp/repo", mode="full", interactive=False)
+        assert p.config["resolve_findings"]["interactive"] is False
 
     def test_python_lint_2_has_requires(self):
         p = build_pipeline("/tmp/repo", mode="full")
