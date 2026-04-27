@@ -129,6 +129,9 @@ class Pipeline:
                     if hasattr(node, 'on_message') and self.verbosity == Verbosity.verbose:
                         from langclaude.nodes.base import _make_printer
                         node.on_message = _make_printer(self.verbosity, display=self._display)
+                    if hasattr(node, 'on_warn'):
+                        from langclaude.budget import default_on_warn
+                        node.on_warn = lambda cost, cap: default_on_warn(cost, cap, display=self._display)
 
                 result = await node(state)
 
@@ -167,6 +170,9 @@ class Pipeline:
                 if hasattr(node, 'on_message') and self.verbosity == Verbosity.verbose:
                     from langclaude.nodes.base import _make_printer
                     node.on_message = _make_printer(self.verbosity, display=self._display)
+                if hasattr(node, 'on_warn'):
+                    from langclaude.budget import default_on_warn
+                    node.on_warn = lambda cost, cap: default_on_warn(cost, cap, display=self._display)
 
             result = node(state)
 

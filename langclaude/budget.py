@@ -20,12 +20,13 @@ from typing import Any
 WarnCallback = Callable[[float, float], None]
 
 
-def default_on_warn(cost_usd: float, max_budget_usd: float) -> None:
+def default_on_warn(cost_usd: float, max_budget_usd: float, *, display: Any | None = None) -> None:
     pct = (cost_usd / max_budget_usd * 100) if max_budget_usd else 0
-    print(
-        f"[langclaude] WARNING: spent ${cost_usd:.4f} ({pct:.0f}% of ${max_budget_usd:.4f} cap)",
-        file=sys.stderr,
-    )
+    msg = f"spent ${cost_usd:.4f} ({pct:.0f}% of ${max_budget_usd:.4f} cap)"
+    if display is not None:
+        display.warn(msg)
+    else:
+        print(f"[langclaude] WARNING: {msg}", file=sys.stderr)
 
 
 def _normalize_pcts(
