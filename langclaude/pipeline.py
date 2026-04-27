@@ -295,3 +295,7 @@ class Pipeline:
         finally:
             if self._display is not None:
                 self._display.stop()
+
+    def print_results(self) -> None:
+        display = self._display or Display(steps=[], title="Results", live=False)
+        display.print_results(self._node_costs)

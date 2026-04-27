@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from langclaude.display import Display
 from langclaude.nodes.base import Verbosity
 from langclaude.pipeline import Pipeline
 
@@ -64,10 +63,7 @@ async def main(
     pipeline = build_pipeline(working_dir, task, base_ref=base_ref, verbosity=verbosity)
     final = await pipeline.run()
 
-    if pipeline._display is not None:
-        pipeline._display.print_results(final.get("node_costs", {}))
-    else:
-        Display(steps=[], title="Results", live=False).print_results(final.get("node_costs", {}))
+    pipeline.print_results()
 
 
 if __name__ == "__main__":

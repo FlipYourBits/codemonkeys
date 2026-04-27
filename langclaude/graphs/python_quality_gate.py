@@ -17,7 +17,6 @@ import argparse
 import asyncio
 from typing import Any, Literal
 
-from langclaude.display import Display
 from langclaude.nodes.base import Verbosity
 from langclaude.pipeline import Pipeline
 
@@ -90,12 +89,7 @@ async def main(
     )
     final = await pipeline.run()
 
-    if pipeline._display is not None:
-        pipeline._display.print_results(final.get("node_costs", {}))
-    else:
-        Display(steps=[], title="Quality Gate Results", live=False).print_results(
-            final.get("node_costs", {})
-        )
+    pipeline.print_results()
 
 
 if __name__ == "__main__":
