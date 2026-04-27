@@ -17,6 +17,7 @@ import argparse
 import asyncio
 from typing import Any, Literal
 
+from langclaude.models import HAIKU_4_5, SONNET_4_6
 from langclaude.nodes.base import Verbosity
 from langclaude.pipeline import Pipeline
 
@@ -31,25 +32,55 @@ def build_pipeline(
     interactive: bool = True,
     verbosity: Verbosity = Verbosity.normal,
 ) -> Pipeline:
-    config: dict[str, dict[str, Any]] = {}
+    config: dict[str, dict[str, Any]] = {
+        "python_test": {
+            "model": SONNET_4_6,
+            "max_turns": 10,
+            "max_budget_usd": 0.50,
+        },
+        "python_coverage": {
+            "model": SONNET_4_6,
+            "max_turns": 8,
+            "max_budget_usd": 0.30,
+        },
+        "code_review": {
+            "max_turns": 6,
+            "max_budget_usd": 0.50,
+        },
+        "security_audit": {
+            "max_turns": 6,
+            "max_budget_usd": 0.50,
+        },
+        "docs_review": {
+            "model": SONNET_4_6,
+            "max_turns": 5,
+            "max_budget_usd": 0.20,
+        },
+        "python_dependency_audit": {
+            "model": HAIKU_4_5,
+            "max_turns": 5,
+            "max_budget_usd": 0.10,
+        },
+        "resolve_findings": {
+            "interactive": interactive,
+            "max_turns": 15,
+            "max_budget_usd": 1.00,
+            "requires": [
+                "python_test",
+                "python_coverage",
+                "code_review",
+                "security_audit",
+                "docs_review",
+                "python_dependency_audit",
+            ],
+        },
+        "python_lint_2": {"requires": ["python_lint"]},
+    }
     extra_state: dict[str, str] = {"base_ref": base_ref}
 
     if mode == "diff":
         for node in ("python_coverage", "code_review", "security_audit", "docs_review"):
-            config[node] = {"mode": "diff"}
-
-    config["resolve_findings"] = {
-        "interactive": interactive,
-        "requires": [
-            "python_test",
-            "python_coverage",
-            "code_review",
-            "security_audit",
-            "docs_review",
-            "python_dependency_audit",
-        ],
-    }
-    config["python_lint_2"] = {"requires": ["python_lint"]}
+            config[node]["mode"] = "diff"
 
     return Pipeline(
         working_dir=working_dir,

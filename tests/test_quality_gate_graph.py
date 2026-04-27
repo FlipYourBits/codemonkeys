@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from langclaude.graphs.python_quality_gate import build_pipeline
+from langclaude.models import HAIKU_4_5, SONNET_4_6
 from langclaude.nodes.base import Verbosity
 
 
@@ -9,7 +10,7 @@ class TestBuildPipeline:
         p = build_pipeline("/tmp/repo")
         assert len(p._ordered_names) > 0
         assert p.working_dir == "/tmp/repo"
-        assert p.config.get("code_review") == {"mode": "diff"}
+        assert p.config["code_review"]["mode"] == "diff"
 
     def test_builds_with_full_mode(self):
         p = build_pipeline("/tmp/repo", mode="full")
@@ -23,15 +24,15 @@ class TestBuildPipeline:
 
     def test_full_mode_no_mode_overrides(self):
         p = build_pipeline("/tmp/repo", mode="full")
-        assert "code_review" not in p.config or "mode" not in p.config.get("code_review", {})
+        assert "mode" not in p.config.get("code_review", {})
         assert p.extra_state == {"base_ref": "main"}
 
     def test_diff_mode_sets_config_overrides(self):
         p = build_pipeline("/tmp/repo", mode="diff")
-        assert p.config.get("python_coverage") == {"mode": "diff"}
-        assert p.config.get("code_review") == {"mode": "diff"}
-        assert p.config.get("security_audit") == {"mode": "diff"}
-        assert p.config.get("docs_review") == {"mode": "diff"}
+        assert p.config["python_coverage"]["mode"] == "diff"
+        assert p.config["code_review"]["mode"] == "diff"
+        assert p.config["security_audit"]["mode"] == "diff"
+        assert p.config["docs_review"]["mode"] == "diff"
 
     def test_diff_mode_default_base_ref(self):
         p = build_pipeline("/tmp/repo", mode="diff")
@@ -89,3 +90,39 @@ class TestBuildPipeline:
         p = build_pipeline("/tmp/repo", mode="full")
         assert "python_lint_2" in p.config
         assert p.config["python_lint_2"]["requires"] == ["python_lint"]
+
+
+class TestTokenReduction:
+    def test_cheap_nodes_use_sonnet(self):
+        p = build_pipeline("/tmp/repo", mode="full")
+        assert p.config["python_test"]["model"] == SONNET_4_6
+        assert p.config["python_coverage"]["model"] == SONNET_4_6
+        assert p.config["docs_review"]["model"] == SONNET_4_6
+
+    def test_dep_audit_uses_haiku(self):
+        p = build_pipeline("/tmp/repo", mode="full")
+        assert p.config["python_dependency_audit"]["model"] == HAIKU_4_5
+
+    def test_review_nodes_use_default_model(self):
+        p = build_pipeline("/tmp/repo", mode="full")
+        assert "model" not in p.config["code_review"]
+        assert "model" not in p.config["security_audit"]
+        assert "model" not in p.config["resolve_findings"]
+
+    def test_all_agent_nodes_have_max_turns(self):
+        p = build_pipeline("/tmp/repo", mode="full")
+        for name in (
+            "python_test", "python_coverage", "code_review",
+            "security_audit", "docs_review", "python_dependency_audit",
+            "resolve_findings",
+        ):
+            assert "max_turns" in p.config[name], f"{name} missing max_turns"
+
+    def test_all_agent_nodes_have_budget(self):
+        p = build_pipeline("/tmp/repo", mode="full")
+        for name in (
+            "python_test", "python_coverage", "code_review",
+            "security_audit", "docs_review", "python_dependency_audit",
+            "resolve_findings",
+        ):
+            assert "max_budget_usd" in p.config[name], f"{name} missing budget"
