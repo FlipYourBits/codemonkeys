@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from langclaude.pipeline import Pipeline
+from langclaude.nodes.base import Verbosity
 
 
 @pytest.fixture(autouse=True)
@@ -192,6 +193,39 @@ class TestRequiresConfig:
                 custom_nodes={"custom/a": step_a},
                 config={"a": {"requires": ["nonexistent"]}},
             )
+
+
+class TestStatusLine:
+    def test_normal_verbosity_prints_status(self, capsys):
+        async def step_a(state):
+            return {"a": "done", "last_cost_usd": 0.03}
+
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["custom/a"],
+            custom_nodes={"custom/a": step_a},
+            verbosity=Verbosity.normal,
+        )
+        asyncio.get_event_loop().run_until_complete(p.run())
+        err = capsys.readouterr().err
+        assert "a" in err
+        assert "done" in err
+
+    def test_silent_verbosity_no_output(self, capsys):
+        async def step_a(state):
+            return {"a": "done", "last_cost_usd": 0.0}
+
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=["custom/a"],
+            custom_nodes={"custom/a": step_a},
+            verbosity=Verbosity.silent,
+        )
+        asyncio.get_event_loop().run_until_complete(p.run())
+        err = capsys.readouterr().err
+        assert err == ""
 
 
 class TestPublicAPI:

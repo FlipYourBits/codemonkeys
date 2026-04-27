@@ -7,6 +7,8 @@ parallel fan-out (same semantics as `chain()`).
 from __future__ import annotations
 
 import inspect
+import sys
+import time
 from collections.abc import Callable, Sequence
 from typing import Any, Union
 
@@ -84,7 +86,10 @@ class Pipeline:
         params = sig.parameters
 
         if "verbosity" in params and "verbosity" not in overrides:
-            overrides["verbosity"] = self.verbosity
+            if self.verbosity == Verbosity.normal:
+                overrides["verbosity"] = Verbosity.silent
+            else:
+                overrides["verbosity"] = self.verbosity
 
         if self.model and "model" in params and "model" not in overrides:
             overrides["model"] = self.model
@@ -116,10 +121,26 @@ class Pipeline:
 
             async def _wrapper(state):
                 state = self._inject_prior_results(state, graph_name)
+
+                silent = self.verbosity == Verbosity.silent
+                if not silent:
+                    print(f"● {graph_name}...", end="", file=sys.stderr, flush=True)
+                    t0 = time.time()
+
                 result = await node(state)
+
                 if not isinstance(result, dict):
+                    if not silent:
+                        print(" done", file=sys.stderr)
                     return result
+
                 cost = result.pop("last_cost_usd", 0.0)
+
+                if not silent:
+                    elapsed = time.time() - t0
+                    cost_str = f", ${cost:.4f}" if cost > 0 else ""
+                    print(f" done ({elapsed:.1f}s{cost_str})", file=sys.stderr)
+
                 node_costs = {**state.get("node_costs", {}), graph_name: cost}
                 total_cost = state.get("total_cost_usd", 0.0) + cost
                 node_outputs = {**state.get("node_outputs", {})}
@@ -137,10 +158,26 @@ class Pipeline:
 
         def _wrapper(state):
             state = self._inject_prior_results(state, graph_name)
+
+            silent = self.verbosity == Verbosity.silent
+            if not silent:
+                print(f"● {graph_name}...", end="", file=sys.stderr, flush=True)
+                t0 = time.time()
+
             result = node(state)
+
             if not isinstance(result, dict):
+                if not silent:
+                    print(" done", file=sys.stderr)
                 return result
+
             cost = result.pop("last_cost_usd", 0.0)
+
+            if not silent:
+                elapsed = time.time() - t0
+                cost_str = f", ${cost:.4f}" if cost > 0 else ""
+                print(f" done ({elapsed:.1f}s{cost_str})", file=sys.stderr)
+
             node_costs = {**state.get("node_costs", {}), graph_name: cost}
             total_cost = state.get("total_cost_usd", 0.0) + cost
             node_outputs = {**state.get("node_outputs", {})}
