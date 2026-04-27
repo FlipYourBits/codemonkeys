@@ -35,8 +35,10 @@ class TestBuiltins:
             "python_test",
             "python_coverage",
             "dependency_audit",
+            "python_dependency_audit",
             "python_implement_feature",
             "python_plan_feature",
+            "resolve_findings",
         }
         assert expected == set(builtins)
 

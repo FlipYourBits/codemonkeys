@@ -17,6 +17,7 @@ _USER_REGISTRY: dict[str, Callable[..., Any]] = {}
 def _register_builtins() -> None:
     from langclaude.nodes.code_review import code_review_node
     from langclaude.nodes.dependency_audit import dependency_audit_node
+    from langclaude.nodes.python_dependency_audit import python_dependency_audit_node
     from langclaude.nodes.docs_review import docs_review_node
     from langclaude.nodes.git_commit import git_commit_node
     from langclaude.nodes.git_new_branch import git_new_branch_node
@@ -27,6 +28,7 @@ def _register_builtins() -> None:
     from langclaude.nodes.python_test import python_test_node
     from langclaude.nodes.python_format import python_format_node
     from langclaude.nodes.python_lint import python_lint_node
+    from langclaude.nodes.resolve_findings import resolve_findings_node
     from langclaude.nodes.security_audit import security_audit_node
 
     _BUILTINS.update(
@@ -44,6 +46,8 @@ def _register_builtins() -> None:
             "python_test": python_test_node,
             "python_coverage": python_coverage_node,
             "dependency_audit": dependency_audit_node,
+            "python_dependency_audit": python_dependency_audit_node,
+            "resolve_findings": resolve_findings_node,
         }
     )
 
