@@ -360,3 +360,30 @@ class TestClaudeAgentNodeOutput:
     def test_no_output_cls_is_none(self):
         node = ClaudeAgentNode(name="t")
         assert node.output_cls is None
+
+
+class TestShellNodeOutput:
+    def test_output_parses_json_stdout(self):
+        class MyOutput(BaseModel):
+            value: int
+
+        node = ShellNode(name="t", command='echo \'{"value": 42}\'', output=MyOutput)
+        result = asyncio.run(node({"working_dir": None}))
+        assert hasattr(result["t"], "value")
+        assert result["t"].value == 42
+
+    def test_no_output_returns_raw_string(self):
+        node = ShellNode(name="t", command="echo hello")
+        result = asyncio.run(node({"working_dir": None}))
+        assert result["t"] == "hello"
+
+    def test_output_cls_stored(self):
+        class MyOutput(BaseModel):
+            x: int
+
+        node = ShellNode(name="t", command="true", output=MyOutput)
+        assert node.output_cls is MyOutput
+
+    def test_no_output_cls_is_none(self):
+        node = ShellNode(name="t", command="true")
+        assert node.output_cls is None

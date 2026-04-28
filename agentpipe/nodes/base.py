@@ -324,12 +324,14 @@ class ShellNode:
         *,
         name: str,
         command: str | list[str] | Callable[[dict[str, Any]], str | list[str]],
+        output: type[_BaseModel] | None = None,
         check: bool = True,
         timeout: float | None = None,
         verbosity: Verbosity = Verbosity.silent,
     ) -> None:
         self.name = name
         self.command = command
+        self.output_cls: type[_BaseModel] | None = output
         self.check = check
         self.timeout = timeout
         self.verbosity = verbosity
@@ -359,7 +361,11 @@ class ShellNode:
                 )
 
             result = await asyncio.to_thread(run)
-            return {self.name: result.stdout.strip()}
+            stdout = result.stdout.strip()
+            if self.output_cls is not None:
+                from agentpipe.schema import parse_output
+                return {self.name: parse_output(self.output_cls, stdout)}
+            return {self.name: stdout}
 
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -402,4 +408,8 @@ class ShellNode:
                 output="".join(stdout_chunks),
                 stderr="".join(stderr_chunks),
             )
-        return {self.name: "".join(stdout_chunks).strip()}
+        stdout = "".join(stdout_chunks).strip()
+        if self.output_cls is not None:
+            from agentpipe.schema import parse_output
+            return {self.name: parse_output(self.output_cls, stdout)}
+        return {self.name: stdout}
