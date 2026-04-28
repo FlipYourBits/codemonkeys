@@ -13,44 +13,69 @@ Two friction points in agentpipe's current API:
 
 Nodes declare their output shape as a dataclass. The framework auto-generates JSON schema instructions for the prompt and parses the response into typed objects.
 
-#### Shared types (`agentpipe/types.py`)
+Each node defines its own output dataclass — there are no shared types. Nodes are fully independent.
+
+#### Example output dataclasses
 
 ```python
 from dataclasses import dataclass, field
 
-@dataclass
-class Finding:
-    file: str = field(metadata={"example": "path/to/file.py"})
-    line: int = field(metadata={"example": 42})
-    severity: str = field(metadata={"example": "HIGH", "enum": ["HIGH", "MEDIUM", "LOW"]})
-    category: str = field(metadata={"example": "logic_error"})
-    source: str = field(metadata={"example": "python_code_review"})
-    description: str = field(metadata={"example": "Off-by-one in loop bound."})
-    recommendation: str = field(metadata={"example": "Use < instead of <=."})
-    confidence: str = field(metadata={"example": "high", "enum": ["high", "medium", "low"]})
-```
-
-`Finding` is the contract between "nodes that report issues" and "nodes that fix issues." It lives in `agentpipe.types`, not in any node.
-
-Each node defines its own output dataclass that uses `Finding`:
-
-```python
+# In python_code_review.py
 @dataclass
 class ReviewOutput:
-    findings: list[Finding] = field(default_factory=list)
+    findings: list[dict] = field(
+        default_factory=list,
+        metadata={"example": [{
+            "file": "path/to/file.py",
+            "line": 42,
+            "severity": "HIGH",
+            "category": "logic_error",
+            "source": "python_code_review",
+            "description": "Off-by-one in loop bound.",
+            "recommendation": "Use < instead of <=.",
+            "confidence": "high",
+        }]},
+    )
     summary: dict[str, int] = field(
         default_factory=dict,
         metadata={"example": {"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}},
     )
+
+# In python_test.py — totally different shape
+@dataclass
+class TestOutput:
+    findings: list[dict] = field(
+        default_factory=list,
+        metadata={"example": [{
+            "file": "tests/test_foo.py",
+            "line": 10,
+            "severity": "HIGH",
+            "category": "test_failure",
+            "source": "python_test",
+            "description": "AssertionError in test_bar.",
+            "recommendation": "Fix the off-by-one in foo().",
+            "confidence": "high",
+        }]},
+    )
+    summary: dict[str, int] = field(
+        default_factory=dict,
+        metadata={"example": {
+            "tests_run": 50, "tests_passed": 48, "tests_failed": 2,
+            "tests_skipped": 0, "tests_xfailed": 0,
+            "high": 1, "medium": 1, "low": 0,
+        }},
+    )
 ```
+
+No shared base class. Each node owns its shape. This keeps nodes fully independent — adding a field to `TestOutput` can't break `PythonCodeReview`.
 
 #### Schema generation (`agentpipe/schema.py`)
 
-A single function `generate_output_instructions(cls) -> str` that:
+A function `generate_output_instructions(cls) -> str` that:
 
-1. Walks `dataclasses.fields(cls)` recursively
+1. Walks `dataclasses.fields(cls)`
 2. Builds a JSON example from `metadata["example"]` values
-3. Returns a markdown block:
+3. Returns a markdown block appended to the system prompt:
 
 ```
 ## Output
@@ -63,27 +88,28 @@ Final reply must be a single fenced JSON block matching this schema and nothing 
     {
       "file": "path/to/file.py",
       "line": 42,
+      "severity": "HIGH",
       ...
     }
   ],
   "summary": {"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}
 }
 ```
-
-If there are no findings, return an empty `findings` array.
 ```
 
-This replaces the hand-written output sections in every node's `_SKILL` constant.
+This replaces the hand-written `## Output` section in each node's `_SKILL`. The rest of `_SKILL` (behavior instructions, triage rules, severity guide) stays hand-written because it's node-specific.
+
+If a field has `metadata={"enum": ["HIGH", "MEDIUM", "LOW"]}`, append "One of: HIGH, MEDIUM, LOW" to the field description in the generated output.
 
 #### Response parsing (`agentpipe/schema.py`)
 
 A function `parse_output(cls, text: str) -> instance | None` that:
 
-1. Extracts JSON from the response (fenced block or raw)
-2. Recursively converts the dict to the dataclass (handling `list[Finding]`, nested dataclasses, etc.)
-3. Returns `None` on failure (malformed JSON, missing fields)
+1. Extracts JSON from the response (fenced block or raw JSON)
+2. Converts the dict to the dataclass via `cls(**data)`
+3. Returns `None` on failure (malformed JSON, missing required fields)
 
-No external dependencies — `dataclasses.fields()` + recursive dict-to-dataclass conversion is ~40 lines.
+No external dependencies — stdlib `dataclasses` + `json`. ~30-40 lines.
 
 #### Integration with `ClaudeAgentNode`
 
@@ -100,43 +126,47 @@ class ClaudeAgentNode:
 In `__call__`, after getting the response:
 
 ```python
+final = result_text if result_text else "\n".join(text_chunks).strip()
 if self.output_cls is not None:
     parsed = parse_output(self.output_cls, final)
     if parsed is not None:
         final = parsed
-# Store in state — either the parsed dataclass or raw text as fallback
+# Stores either a typed dataclass instance or raw text as fallback
 return {self.name: final, "last_cost_usd": tracker.last_cost_usd}
 ```
 
 #### Integration with `ShellNode`
 
-Same optional `output` parameter. If set, parse stdout as JSON into the dataclass:
+Same optional `output` parameter. If set, parse stdout as JSON into the dataclass after the command runs:
 
 ```python
+stdout = result.stdout.strip()
 if self.output_cls is not None:
-    parsed = parse_output(self.output_cls, result.stdout.strip())
+    parsed = parse_output(self.output_cls, stdout)
     if parsed is not None:
         return {self.name: parsed}
-return {self.name: result.stdout.strip()}
+return {self.name: stdout}
 ```
 
-Most ShellNodes won't use this — `PythonLint`, `PythonFormat`, and `PythonEnsureTools` produce plain text that nothing downstream consumes structurally. `PythonTypeCheck` is the exception: its embedded script already transforms mypy JSON into our findings format. Adding `output=TypeCheckOutput` would parse that JSON stdout into a typed object instead of storing raw text.
+Most ShellNodes won't use this — `PythonLint`, `PythonFormat`, and `PythonEnsureTools` produce plain text that nothing downstream consumes structurally. `PythonTypeCheck` is the exception: its embedded script transforms mypy JSON into a findings-like format. Adding `output=TypeCheckOutput` parses that stdout into a typed object.
 
 #### Integration with `ResolveFindings`
 
-ResolveFindings stops regex-parsing. It reads typed objects from state via duck typing:
+ResolveFindings doesn't need to know any node's output schema. It serializes whatever typed objects are in state into the prompt for its inner Claude agent:
 
 ```python
 for key in self._reads_from_keys:
     upstream = state[key]
-    if hasattr(upstream, "findings"):
-        all_findings.extend(upstream.findings)
-    # Fallback: if upstream is still a string (no output schema), use current regex parser
+    if dataclasses.is_dataclass(upstream):
+        serialized = json.dumps(dataclasses.asdict(upstream), indent=2)
+        parts.append(f"### {key}\n```json\n{serialized}\n```")
     elif isinstance(upstream, str):
-        all_findings.extend(_extract_findings_from_text(key, upstream))
+        parts.append(f"### {key}\n{upstream}")
 ```
 
-The fallback keeps backward compat with any node that doesn't use `output=`.
+Claude reads the JSON and interprets it — no duck typing, no shared contracts, no coupling. The inner agent handles whatever structure each upstream node produced.
+
+The existing regex-based `_extract_findings` becomes the fallback for string-typed upstream output (nodes without `output=`).
 
 ### 2. Better imports from `agentpipe.nodes`
 
@@ -157,31 +187,30 @@ from agentpipe.nodes import PythonLint, PythonTest, PythonCodeReview, ResolveFin
 
 ## Migration path for existing nodes
 
-Each node currently has a hand-written output section in its `_SKILL` string. Migration per node:
+Each node currently has a hand-written `## Output` section in its `_SKILL` string. Migration per node:
 
-1. Define a `*Output` dataclass (e.g. `ReviewOutput`, `SecurityOutput`, `TestOutput`) — most reuse `Finding` with different `summary` fields
-2. Remove the `## Output` section from `_SKILL`
+1. Define an output dataclass in the node's file (e.g. `ReviewOutput`, `TestOutput`)
+2. Remove the `## Output` section from `_SKILL` (keep everything above it — behavior, triage, severity guide)
 3. Pass `output=ReviewOutput` to `super().__init__()`
 4. The auto-generated schema replaces the hand-written one
 
-Nodes that share the same output shape (code review, security audit, docs review) can share one `ReviewOutput` class or define minimal subclasses.
+Each node's dataclass is independent — no shared types, no imports between nodes.
 
 ## Files to create/modify
 
 | File | Change |
 |---|---|
-| `agentpipe/types.py` | **New.** `Finding` dataclass, shared output types |
 | `agentpipe/schema.py` | **New.** `generate_output_instructions()`, `parse_output()` |
 | `agentpipe/nodes/base.py` | Add `output` param to `ClaudeAgentNode` and `ShellNode` |
-| `agentpipe/nodes/python_code_review.py` | Define `ReviewOutput`, remove hand-written `## Output` from `_SKILL`, pass `output=` |
+| `agentpipe/nodes/python_code_review.py` | Define `ReviewOutput`, remove `## Output` from `_SKILL`, pass `output=` |
 | `agentpipe/nodes/python_security_audit.py` | Same pattern |
 | `agentpipe/nodes/docs_review.py` | Same pattern |
 | `agentpipe/nodes/python_test.py` | Define `TestOutput`, same pattern |
 | `agentpipe/nodes/python_dependency_audit.py` | Define `AuditOutput`, same pattern |
-| `agentpipe/nodes/python_type_check.py` | Define `TypeCheckOutput`, parse stdout |
-| `agentpipe/nodes/resolve_findings.py` | Read `.findings` from typed state, fallback to regex for untyped |
-| `agentpipe/__init__.py` | Export new types |
-| `agentpipe/nodes/__init__.py` | Export all node classes |
+| `agentpipe/nodes/python_type_check.py` | Define `TypeCheckOutput`, pass `output=` |
+| `agentpipe/nodes/resolve_findings.py` | Serialize typed state via `dataclasses.asdict()`, keep regex fallback |
+| `agentpipe/__init__.py` | Clean up exports |
+| `agentpipe/nodes/__init__.py` | Export all current node classes |
 
 ## What this does NOT change
 
@@ -190,13 +219,14 @@ Nodes that share the same output shape (code review, security audit, docs review
 - Permission system (`allow`/`deny`/`on_unmatched`)
 - Budget tracking
 - Display / verbosity system
-- `_SKILL` system prompt pattern — only the `## Output` section gets auto-generated
+- Hand-written `_SKILL` content (behavior, triage, severity guide, exclusions)
 - The `_old/` compatibility layer
 
 ## Testing
 
-- Unit tests for `generate_output_instructions()` — verify it produces correct JSON examples from dataclass fields
-- Unit tests for `parse_output()` — valid JSON, malformed JSON, missing fields, nested dataclasses
-- Integration test: a node with `output=ReviewOutput` stores a `ReviewOutput` instance in state
-- Integration test: `ResolveFindings` reads `.findings` from typed upstream nodes
-- Regression: existing tests continue to pass (fallback to raw text when `output` is not set)
+- Unit tests for `generate_output_instructions()` — verify correct JSON examples from dataclass metadata
+- Unit tests for `parse_output()` — valid JSON, malformed JSON, missing fields, fenced vs raw JSON
+- Unit test: node with `output=` stores a dataclass instance in state
+- Unit test: node without `output=` stores raw text (backward compat)
+- Unit test: `ResolveFindings` serializes dataclass upstream and falls back to string upstream
+- Regression: all existing tests pass unchanged
