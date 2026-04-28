@@ -204,3 +204,27 @@ class TestDocsReviewModels:
         from agentpipe.nodes.docs_review import DocsReview
         node = DocsReview()
         assert "## Output" in node.system_prompt
+
+
+class TestPythonTestModels:
+    def test_test_output_validates(self):
+        from agentpipe.nodes.python_test import TestOutput
+        data = {
+            "findings": [{
+                "file": "tests/test_foo.py", "line": 10, "severity": "HIGH",
+                "category": "test_failure", "source": "python_test",
+                "description": "Assertion failed.", "recommendation": "Fix.",
+                "confidence": "high",
+            }],
+            "summary": {"tests_run": 50, "tests_passed": 49, "tests_failed": 1,
+                        "tests_skipped": 0, "tests_xfailed": 0,
+                        "high": 1, "medium": 0, "low": 0},
+        }
+        output = TestOutput.model_validate(data)
+        assert len(output.findings) == 1
+        assert output.summary["tests_run"] == 50
+
+    def test_test_node_has_output_instructions(self):
+        from agentpipe.nodes.python_test import PythonTest
+        node = PythonTest()
+        assert "## Output" in node.system_prompt

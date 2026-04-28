@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
 from agentpipe.models import SONNET_4_6
 from agentpipe.nodes.base import ClaudeAgentNode
 
@@ -42,46 +46,30 @@ Report findings only — do not fix issues.
 - Code quality or style issues (code review owns these)
 - Security vulnerabilities (security audit owns these)
 - Documentation drift (docs review owns these)
-- Dependency vulnerabilities (dependency audit owns these)
+- Dependency vulnerabilities (dependency audit owns these)"""
 
-## Output
 
-Final reply must be a single fenced JSON block matching
-this schema and nothing after it:
+class TestFinding(BaseModel):
+    file: str = Field(examples=["tests/test_foo.py"])
+    line: int = Field(examples=[42])
+    severity: Literal["HIGH", "MEDIUM", "LOW"] = Field(
+        description="HIGH: test failure from a bug that affects production. MEDIUM: edge case regression or minor breakage. LOW: flaky test or configuration issue."
+    )
+    category: str = Field(examples=["test_failure"])
+    source: str = Field(examples=["python_test"])
+    description: str = Field(examples=["Assertion failed."])
+    recommendation: str = Field(examples=["Fix the bug."])
+    confidence: Literal["high", "medium", "low"] = Field(
+        description="high: clearly a real failure. medium: likely real. low: possibly flaky."
+    )
 
-```json
-{
-  "findings": [
-    {
-      "file": "path/to/file.py",
-      "line": 42,
-      "severity": "HIGH" | "MEDIUM" | "LOW",
-      "category": "test_failure",
-      "source": "python_test",
-      "description": "One-sentence statement of the failure.",
-      "recommendation": "What to change to fix it.",
-      "confidence": "high"
-    }
-  ],
-  "summary": {
-    "tests_run": 50,
-    "tests_passed": 48,
-    "tests_failed": 2,
-    "tests_skipped": 0,
-    "tests_xfailed": 0,
-    "high": 1,
-    "medium": 1,
-    "low": 0
-  }
-}
-```
 
-Severity guide:
-- **HIGH**: test failure from a bug that affects production
-- **MEDIUM**: edge case regression or minor breakage
-- **LOW**: flaky test or configuration issue
-
-If all tests pass, return an empty `findings` array."""
+class TestOutput(BaseModel):
+    findings: list[TestFinding] = Field(default_factory=list)
+    summary: dict[str, int] = Field(
+        default_factory=dict,
+        examples=[{"tests_run": 50, "tests_passed": 48, "tests_failed": 2, "tests_skipped": 0, "tests_xfailed": 0, "high": 1, "medium": 1, "low": 0}],
+    )
 
 
 class PythonTest(ClaudeAgentNode):
@@ -90,6 +78,7 @@ class PythonTest(ClaudeAgentNode):
         super().__init__(
             name="python_test",
             system_prompt=_SKILL,
+            output=TestOutput,
             prompt_template="Run the test suite and analyze any failures.",
             allow=[
                 "Read",
