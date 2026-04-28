@@ -249,3 +249,23 @@ class TestDependencyAuditModels:
         from agentpipe.nodes.python_dependency_audit import PythonDependencyAudit
         node = PythonDependencyAudit()
         assert "## Output" in node.system_prompt
+
+
+class TestTypeCheckModels:
+    def test_type_check_output_validates(self):
+        from agentpipe.nodes.python_type_check import TypeCheckOutput
+        data = {
+            "findings": [{
+                "file": "foo.py", "line": 10, "severity": "HIGH",
+                "category": "type_error", "source": "python_type_check",
+                "description": "Incompatible types.", "confidence": "high",
+            }],
+            "summary": {"high": 1, "medium": 0, "low": 0},
+        }
+        output = TypeCheckOutput.model_validate(data)
+        assert len(output.findings) == 1
+
+    def test_type_check_node_has_output_cls(self):
+        from agentpipe.nodes.python_type_check import PythonTypeCheck, TypeCheckOutput
+        node = PythonTypeCheck()
+        assert node.output_cls is TypeCheckOutput

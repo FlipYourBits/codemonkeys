@@ -4,7 +4,26 @@ from __future__ import annotations
 
 import sys
 
+from pydantic import BaseModel, Field
+
 from agentpipe.nodes.base import ShellNode, Verbosity
+
+
+class TypeCheckFinding(BaseModel):
+    file: str = Field(examples=["foo.py"])
+    line: int = Field(examples=[10])
+    severity: str = Field(examples=["HIGH"])
+    category: str = Field(examples=["type_error"])
+    source: str = Field(examples=["python_type_check"])
+    description: str = Field(examples=["Incompatible types in assignment."])
+    confidence: str = Field(examples=["high"])
+
+
+class TypeCheckOutput(BaseModel):
+    findings: list[TypeCheckFinding] = Field(default_factory=list)
+    summary: dict[str, int] = Field(
+        default_factory=dict, examples=[{"high": 0, "medium": 0, "low": 0}]
+    )
 
 _MYPY_SCRIPT = """\
 import json, subprocess, sys
@@ -52,6 +71,7 @@ class PythonTypeCheck(ShellNode):
         super().__init__(
             name="python_type_check",
             command=[sys.executable, "-c", _MYPY_SCRIPT],
+            output=TypeCheckOutput,
             check=False,
             timeout=timeout,
             verbosity=verbosity,
