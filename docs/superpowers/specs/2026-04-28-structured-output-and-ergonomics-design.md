@@ -18,91 +18,65 @@ Each node defines an output dataclass in its own file and passes it to the base 
 
 There are no shared types. Each node owns its dataclass. Nodes are fully independent.
 
-#### Example output dataclass
+#### Example output dataclasses
+
+Each node defines whatever shape makes sense. The output is just a dataclass — downstream nodes get it from state as a dict via `dataclasses.asdict()`.
 
 ```python
 from dataclasses import dataclass, field
 
+# Review node — reports issues with severity
 @dataclass
-class ReviewOutput:
+class CodeReviewOutput:
     findings: list[dict] = field(
         default_factory=list,
-        metadata={"example": [{
-            "file": "path/to/file.py",
-            "line": 42,
-            "severity": "HIGH",
-            "category": "logic_error",
-            "source": "python_code_review",
-            "description": "Off-by-one in loop bound.",
-            "recommendation": "Use < instead of <=.",
-            "confidence": "high",
-        }]},
+        metadata={
+            "example": [{
+                "file": "path/to/file.py",
+                "line": 42,
+                "severity": "HIGH",
+                "category": "logic_error",
+                "description": "Off-by-one in loop bound.",
+                "recommendation": "Use < instead of <=.",
+            }],
+            "severity_guide": {
+                "HIGH": "Bug that will cause incorrect behavior in production",
+                "MEDIUM": "Latent bug under specific conditions",
+                "LOW": "Minor concern worth surfacing but not blocking",
+            },
+        },
     )
     summary: dict[str, int] = field(
         default_factory=dict,
         metadata={"example": {"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}},
     )
-```
 
-Fields that need constrained values use `enum` and `descriptions` in metadata:
-
-```python
+# Lint node — pass/fail with counts, no findings
 @dataclass
-class ReviewOutput:
-    findings: list[dict] = field(
+class LintOutput:
+    passed: bool = field(metadata={"example": True})
+    files_checked: int = field(metadata={"example": 42})
+    fixes_applied: int = field(metadata={"example": 3})
+
+# Test node — different summary shape
+@dataclass
+class TestOutput:
+    failures: list[dict] = field(
         default_factory=list,
-        metadata={"example": [{
-            "file": "path/to/file.py",
-            "line": 42,
-            "severity": "HIGH",
-            "category": "logic_error",
-            "source": "python_code_review",
-            "description": "Off-by-one in loop bound.",
-            "recommendation": "Use < instead of <=.",
-            "confidence": "high",
-        }]},
-    )
-    summary: dict[str, int] = field(
-        default_factory=dict,
         metadata={
-            "example": {"files_reviewed": 12, "high": 1, "medium": 0, "low": 0},
+            "example": [{
+                "test": "tests/test_foo.py::test_bar",
+                "error": "AssertionError: expected 3, got 4",
+                "root_cause": "Off-by-one in foo().",
+            }],
         },
     )
+    tests_run: int = field(metadata={"example": 50})
+    tests_passed: int = field(metadata={"example": 48})
+    tests_failed: int = field(metadata={"example": 2})
 ```
 
-And each node customizes field semantics through metadata on the example dict's nested fields. For the severity guide specifically, nodes pass a `severity_guide` key in the findings field metadata:
-
-```python
-findings: list[dict] = field(
-    default_factory=list,
-    metadata={
-        "example": [{ ... }],
-        "severity_guide": {
-            "HIGH": "Bug that will cause incorrect behavior in production",
-            "MEDIUM": "Latent bug under specific conditions",
-            "LOW": "Minor concern worth surfacing but not blocking",
-        },
-    },
-)
-```
-
-A security audit node uses different descriptions:
-
-```python
-findings: list[dict] = field(
-    default_factory=list,
-    metadata={
-        "example": [{ ... }],
-        "severity_guide": {
-            "HIGH": "Directly exploitable — RCE, auth bypass, data breach",
-            "MEDIUM": "Exploitable under specific but realistic conditions",
-            "LOW": "Defense-in-depth or limited-impact issue",
-        },
-    },
-)
-```
-
-The `severity_guide` is prompt-generation config only — `dataclasses.asdict()` ignores all metadata, so it never appears in output.
+Fields with constrained values use `severity_guide` in metadata. `generate_output_instructions` renders these into the prompt. `dataclasses.asdict()` ignores all metadata — it never appears in output.
 
 #### Schema generation (`agentpipe/schema.py`)
 
@@ -209,10 +183,10 @@ from agentpipe.nodes import PythonLint, PythonTest, PythonCodeReview, ResolveFin
 
 Each node currently has a hand-written `## Output` section and severity guide in its `_SKILL` string. Migration per node:
 
-1. Define an output dataclass in the node's file with `metadata["example"]` and `metadata["severity_guide"]`
-2. Remove `## Output` and severity guide sections from `_SKILL`
-3. Pass `output=ReviewOutput` to `super().__init__()`
-4. The auto-generated schema + severity guide replaces the hand-written sections
+1. Define an output dataclass in the node's file with whatever fields make sense, using `metadata["example"]` for examples and `metadata["severity_guide"]` for severity descriptions where applicable
+2. Remove the `## Output` and severity guide sections from `_SKILL`
+3. Pass `output=MyOutput` to `super().__init__()`
+4. The auto-generated schema replaces the hand-written sections
 
 Each node's dataclass is independent — no shared types, no imports between nodes.
 
