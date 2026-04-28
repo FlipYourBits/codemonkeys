@@ -183,3 +183,24 @@ class TestSecurityAuditModels:
         from agentpipe.nodes.python_security_audit import PythonSecurityAudit
         node = PythonSecurityAudit()
         assert "## Output" in node.system_prompt
+
+
+class TestDocsReviewModels:
+    def test_docs_review_output_validates(self):
+        from agentpipe.nodes.docs_review import DocsReviewOutput
+        data = {
+            "findings": [{
+                "file": "README.md", "line": 10, "severity": "MEDIUM",
+                "category": "doc_drift", "source": "docs_review",
+                "description": "Stale ref.", "recommendation": "Update.",
+                "confidence": "high",
+            }],
+            "summary": {"files_reviewed": 5, "high": 0, "medium": 1, "low": 0},
+        }
+        output = DocsReviewOutput.model_validate(data)
+        assert len(output.findings) == 1
+
+    def test_docs_review_node_has_output_instructions(self):
+        from agentpipe.nodes.docs_review import DocsReview
+        node = DocsReview()
+        assert "## Output" in node.system_prompt

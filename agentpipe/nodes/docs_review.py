@@ -4,8 +4,34 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import BaseModel, Field
+
 from agentpipe.models import SONNET_4_6
 from agentpipe.nodes.base import ClaudeAgentNode
+
+
+class DocsReviewFinding(BaseModel):
+    file: str = Field(examples=["src/foo.py"])
+    line: int = Field(examples=[10])
+    severity: Literal["HIGH", "MEDIUM", "LOW"] = Field(
+        description="HIGH: doc actively misleads (wrong return type, wrong exceptions, broken example, broken install instructions). MEDIUM: doc out of date but unlikely to cause immediate user error. LOW: minor stale reference."
+    )
+    category: str = Field(examples=["docstring_drift"])
+    source: str = Field(examples=["docs_review"])
+    description: str = Field(examples=["Docstring says raises ValueError but function returns None."])
+    recommendation: str = Field(examples=["Update the docstring to match the current behavior."])
+    confidence: Literal["high", "medium", "low"] = Field(
+        description="high: confident this is wrong. medium: likely wrong but some ambiguity. low: speculative."
+    )
+
+
+class DocsReviewOutput(BaseModel):
+    findings: list[DocsReviewFinding] = Field(default_factory=list)
+    summary: dict[str, int] = Field(
+        default_factory=dict,
+        examples=[{"files_reviewed": 5, "high": 0, "medium": 2, "low": 0}],
+    )
+
 
 _SKILL = """\
 # Docs review
@@ -87,61 +113,7 @@ Report findings only — do not fix issues.
 - Comments in code (code review owns these)
 - Wishlist items ("this could use more examples")
 - Suggestions for documentation that doesn't exist yet{exclusion_extra}
-
-## Output
-
-Final reply must be a single fenced JSON block matching
-this schema and nothing after it:
-
-```json
-{{
-  "findings": [
-    {{
-      "file": "src/foo.py",
-      "line": 10,
-      "severity": "MEDIUM",
-      "category": "docstring_drift",
-      "source": "docs_review",
-      "description": "Docstring says raises ValueError
-        but function returns None on bad input.",
-      "recommendation": "Update the docstring to match
-        the current behavior.",
-      "confidence": "high"
-    }}
-  ],
-  "summary": {{
-    "files_reviewed": 5,
-    "high": 0,
-    "medium": 2,
-    "low": 0
-  }}
-}}
-```
-
-`confidence`: "high", "medium", or "low". Only include
-findings where confidence is "high" or "medium".
-
-Severity guide:
-- **HIGH**: doc actively misleads (wrong return type,
-  wrong exceptions, broken example, broken install
-  instructions)
-- **MEDIUM**: doc out of date but unlikely to cause
-  immediate user error
-- **LOW**: minor stale reference
-
-If there are no findings, return:
-
-```json
-{{
-  "findings": [],
-  "summary": {{
-    "files_reviewed": 0,
-    "high": 0,
-    "medium": 0,
-    "low": 0
-  }}
-}}
-```"""
+"""
 
 
 class DocsReview(ClaudeAgentNode):
@@ -202,6 +174,7 @@ class DocsReview(ClaudeAgentNode):
 
         super().__init__(
             name="docs_review",
+            output=DocsReviewOutput,
             system_prompt=_SKILL.format(
                 scope_section=scope_section,
                 method_steps=method_steps,
