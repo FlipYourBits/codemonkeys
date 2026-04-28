@@ -4,8 +4,33 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import BaseModel, Field
+
 from agentpipe.models import OPUS_4_6
 from agentpipe.nodes.base import ClaudeAgentNode
+
+
+class CodeReviewFinding(BaseModel):
+    file: str = Field(examples=["path/to/file.py"])
+    line: int = Field(examples=[42])
+    severity: Literal["HIGH", "MEDIUM", "LOW"] = Field(
+        description="HIGH: bug that will cause incorrect behavior in production. MEDIUM: latent bug under specific conditions, or a clear maintainability issue. LOW: minor concerns worth surfacing but not blocking."
+    )
+    category: str = Field(examples=["logic_error"])
+    source: str = Field(examples=["python_code_review"])
+    description: str = Field(examples=["Off-by-one in loop bound."])
+    recommendation: str = Field(examples=["Use < instead of <=."])
+    confidence: Literal["high", "medium", "low"] = Field(
+        description="high: confident this is a real issue. medium: likely real but some ambiguity. low: speculative."
+    )
+
+
+class CodeReviewOutput(BaseModel):
+    findings: list[CodeReviewFinding] = Field(default_factory=list)
+    summary: dict[str, int] = Field(
+        default_factory=dict,
+        examples=[{"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}],
+    )
 
 _SKILL = """\
 # Code review
@@ -134,61 +159,6 @@ report when you're confident a real problem exists.
 - "I would have written this differently" without a
   correctness argument
 - Performance issues with no measurable impact{exclusion_extra}
-
-## Output
-
-Final reply must be a single fenced JSON block matching
-this schema and nothing after it:
-
-```json
-{{
-  "findings": [
-    {{
-      "file": "path/to/file.py",
-      "line": 42,
-      "severity": "HIGH" | "MEDIUM" | "LOW",
-      "category": "logic_error",
-      "source": "python_code_review",
-      "description": "One-sentence statement of the issue.",
-      "recommendation": "What to change, concretely.",
-      "confidence": "high"
-    }}
-  ],
-  "summary": {{
-    "files_reviewed": 12,
-    "high": 1,
-    "medium": 2,
-    "low": 0
-  }}
-}}
-```
-
-`confidence`: "high", "medium", or "low". Only include
-findings where confidence is "high" or "medium".
-
-Severity guide:
-- **HIGH**: bug that will cause incorrect behavior in
-  production
-- **MEDIUM**: latent bug under specific conditions, or a
-  clear maintainability issue
-- **LOW**: minor concerns worth surfacing but not blocking
-
-If there are no findings, return:
-
-```json
-{{
-  "findings": [],
-  "summary": {{
-    "files_reviewed": 12,
-    "high": 0,
-    "medium": 0,
-    "low": 0
-  }}
-}}
-```
-
-(`files_reviewed` should always reflect the actual count
-of files you examined, even when there are no findings.)
 """
 
 
@@ -231,6 +201,7 @@ class PythonCodeReview(ClaudeAgentNode):
 
         super().__init__(
             name="python_code_review",
+            output=CodeReviewOutput,
             system_prompt=_SKILL.format(
                 scope_section=scope_section,
                 method_intro=method_intro,

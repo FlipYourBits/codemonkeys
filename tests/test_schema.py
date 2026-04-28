@@ -139,3 +139,26 @@ def test_handles_text_before_and_after_json():
     text = "Some preamble text.\n```json\n{\"value\": 7}\n```\nSome trailing text."
     result = parse_output(ValueModel, text)
     assert result.value == 7
+
+
+class TestCodeReviewModels:
+    def test_code_review_output_validates(self):
+        from agentpipe.nodes.python_code_review import CodeReviewOutput
+        data = {
+            "findings": [{
+                "file": "a.py", "line": 42, "severity": "HIGH",
+                "category": "logic_error", "source": "python_code_review",
+                "description": "Bug.", "recommendation": "Fix it.",
+                "confidence": "high",
+            }],
+            "summary": {"files_reviewed": 1, "high": 1, "medium": 0, "low": 0},
+        }
+        output = CodeReviewOutput.model_validate(data)
+        assert len(output.findings) == 1
+        assert output.findings[0].severity == "HIGH"
+
+    def test_code_review_node_has_output_instructions(self):
+        from agentpipe.nodes.python_code_review import PythonCodeReview
+        node = PythonCodeReview()
+        assert "## Output" in node.system_prompt
+        assert "severity" in node.system_prompt.lower()
