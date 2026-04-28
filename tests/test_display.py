@@ -127,3 +127,18 @@ class TestMakePrinterWithDisplay:
         d = Display(steps=["test_node"], title="T", live=False)
         printer = _make_printer(Verbosity.verbose, display=d)
         assert printer is not None
+
+
+class TestPrintResultsWithPydantic:
+    def test_print_results_with_resolve_output(self, capsys):
+        from agentpipe.nodes.resolve_findings import ResolveOutput, FixedItem
+        d = Display(steps=["a"], title="T", live=False)
+        resolve = ResolveOutput(
+            fixed=[FixedItem(file="a.py", line=42, category="logic_error",
+                           source="review", description="Fixed off-by-one.")],
+            skipped=[],
+        )
+        d.print_results({"a": 0.05}, node_outputs={"resolve_findings": resolve})
+        out = capsys.readouterr().out
+        assert "a.py" in out
+        assert "Fixed" in out
