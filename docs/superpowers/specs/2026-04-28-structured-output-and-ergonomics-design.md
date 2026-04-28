@@ -111,11 +111,11 @@ This replaces the hand-written `## Output` and severity guide in each node's `_S
 
 #### Response parsing (`agentpipe/schema.py`)
 
-A function `parse_output(cls: type[BaseModel], text: str) -> instance | None` that:
+A function `parse_output(cls: type[BaseModel], text: str) -> instance` that:
 
 1. Extracts JSON from the response (fenced block or raw JSON)
 2. Calls `cls.model_validate(data)` — handles nested models, type coercion, and validation automatically
-3. Returns `None` on validation failure (logs warning, pipeline continues with raw text)
+3. Raises `ValueError` on extraction/validation failure — the node failed to produce valid output
 
 Pydantic handles all nesting, type checking, and coercion. No custom recursive conversion.
 
@@ -136,12 +136,11 @@ In `__call__`, after getting the response:
 ```python
 final = result_text if result_text else "\n".join(text_chunks).strip()
 if self.output_cls is not None:
-    parsed = parse_output(self.output_cls, final)
-    if parsed is not None:
-        final = parsed
-# Stores either a typed Pydantic model or raw text as fallback
+    final = parse_output(self.output_cls, final)
 return {self.name: final, "last_cost_usd": tracker.last_cost_usd}
 ```
+
+All quality nodes (including ResolveFindings' inner fixer) use `output=` and store typed Pydantic models in state. Only plain-text ShellNodes (`PythonLint`, `PythonFormat`, `PythonEnsureTools`) store raw strings.
 
 #### Integration with `ShellNode`
 
@@ -150,19 +149,41 @@ Same optional `output` parameter. If set, parse stdout as JSON into the model af
 ```python
 stdout = result.stdout.strip()
 if self.output_cls is not None:
-    parsed = parse_output(self.output_cls, stdout)
-    if parsed is not None:
-        return {self.name: parsed}
+    return {self.name: parse_output(self.output_cls, stdout)}
 return {self.name: stdout}
 ```
 
-Only ShellNodes that produce JSON stdout use this. `PythonTypeCheck` is the main candidate. `PythonLint`, `PythonFormat`, and `PythonEnsureTools` produce plain text and don't need structured output.
+ShellNodes that produce JSON stdout (like `PythonTypeCheck`) use `output=` for typed results. ShellNodes that produce plain text (`PythonLint`, `PythonFormat`, `PythonEnsureTools`) don't set `output=` and store raw stdout — these are tool-output nodes, not finding-producers.
 
 Note: ShellNode `output=` only parses stdout. It does not inject schema into a prompt (there is no prompt — it's a subprocess).
 
 #### Integration with `ResolveFindings`
 
-ResolveFindings handles two upstream formats: Pydantic model instances (new) and raw strings (backward compat).
+ResolveFindings' inner fixer agent also uses `output=` with its own model:
+
+```python
+class FixedItem(BaseModel):
+    file: str = Field(examples=["path/to/file.py"])
+    line: int = Field(examples=[42])
+    category: str = Field(examples=["logic_error"])
+    source: str = Field(examples=["python_code_review"])
+    description: str = Field(examples=["What was fixed, one sentence."])
+
+class SkippedItem(BaseModel):
+    file: str = Field(examples=["path/to/file.py"])
+    line: int = Field(examples=[10])
+    category: str = Field(examples=["clarity"])
+    source: str = Field(examples=["python_code_review"])
+    reason: str = Field(examples=["False positive — the code is correct because..."])
+
+class ResolveOutput(BaseModel):
+    fixed: list[FixedItem] = Field(default_factory=list)
+    skipped: list[SkippedItem] = Field(default_factory=list)
+```
+
+The inner fixer's `_SKILL` loses its hand-written `## Output` section — `generate_output_instructions(ResolveOutput)` replaces it.
+
+Upstream state values are always Pydantic `BaseModel` instances (all nodes that feed into ResolveFindings define `output=`).
 
 **Building prior results for the inner Claude agent:**
 
@@ -170,52 +191,45 @@ ResolveFindings handles two upstream formats: Pydantic model instances (new) and
 def _build_prior_results(self, state: dict[str, Any]) -> str:
     parts = ["## Prior results\n"]
     for key in self._reads_from_keys:
-        upstream = state.get(key, "")
-        if not upstream:
+        upstream = state.get(key)
+        if upstream is None:
             continue
-        if isinstance(upstream, BaseModel):
-            serialized = upstream.model_dump_json(indent=2)
-            parts.append(f"### {key}\n```json\n{serialized}\n```\n")
-        elif isinstance(upstream, str):
-            parts.append(f"### {key}\n{upstream}\n")
+        serialized = upstream.model_dump_json(indent=2)
+        parts.append(f"### {key}\n```json\n{serialized}\n```\n")
     return "\n".join(parts) if len(parts) > 1 else ""
 ```
 
 **Extracting items for the interactive Rich table:**
 
-The interactive flow needs a flat `list[dict]` for the Rich table and user selection. Each upstream model gets dumped to a dict, and we extract any `list` field containing model instances — these are the actionable items:
+The interactive flow needs a flat `list[dict]` for the Rich table and user selection. Each upstream model gets dumped to a dict, and we extract any `list` field containing nested model dicts — these are the actionable items:
 
 ```python
 def _extract_items_from_state(reads_from_keys, state):
     items = []
     for key in reads_from_keys:
-        upstream = state.get(key, "")
-        if isinstance(upstream, BaseModel):
-            data = upstream.model_dump()
-            for value in data.values():
-                if isinstance(value, list) and value and isinstance(value[0], dict):
-                    for item in value:
-                        item.setdefault("source", key)
-                        items.append(item)
-        elif isinstance(upstream, str):
-            items.extend(_extract_findings(upstream))
+        upstream = state.get(key)
+        if upstream is None:
+            continue
+        data = upstream.model_dump()
+        for value in data.values():
+            if isinstance(value, list) and value and isinstance(value[0], dict):
+                for item in value:
+                    item.setdefault("source", key)
+                    items.append(item)
     items.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "LOW"), 99))
     return items
 ```
 
-Scans each upstream model for `list[dict]` fields regardless of field name (`findings`, `failures`, etc.). The Rich table and `_select_by_input` work on this flat list, same as today.
+Scans each upstream model for `list[dict]` fields regardless of field name (`findings`, `failures`, etc.). The Rich table and `_select_by_input` work on this flat list, same as today. The old `_extract_findings` regex parser is removed entirely.
 
 #### Integration with `display.print_results`
 
-`print_results` currently calls `json.loads()` on the resolve_findings output string. Update to handle both:
+`print_results` currently calls `json.loads()` on the resolve_findings output string. Replace with:
 
 ```python
 resolve_output = node_outputs.get("resolve_findings")
 if resolve_output is not None:
-    if isinstance(resolve_output, BaseModel):
-        data = resolve_output.model_dump()
-    elif isinstance(resolve_output, str):
-        data = json.loads(resolve_output)
+    data = resolve_output.model_dump()
     # ... render fixed/skipped from data
 ```
 
@@ -277,8 +291,8 @@ dependencies = [
 | `agentpipe/nodes/python_test.py` | Same pattern |
 | `agentpipe/nodes/python_dependency_audit.py` | Same pattern |
 | `agentpipe/nodes/python_type_check.py` | Define output model, pass `output=` to parse stdout |
-| `agentpipe/nodes/resolve_findings.py` | Use `_extract_items_from_state`, `model_dump_json()` for typed upstream, keep regex fallback |
-| `agentpipe/display.py` | Handle `BaseModel` instances in `print_results` via `model_dump()` |
+| `agentpipe/nodes/resolve_findings.py` | Use `_extract_items_from_state`, `model_dump_json()` for typed upstream, remove `_extract_findings` regex parser |
+| `agentpipe/display.py` | Use `model_dump()` in `print_results` instead of `json.loads()` |
 | `agentpipe/__init__.py` | Clean up exports |
 | `agentpipe/nodes/__init__.py` | Export all current node classes |
 | `pyproject.toml` | Add `pydantic>=2.0` to dependencies |
@@ -291,16 +305,12 @@ dependencies = [
 - Budget tracking
 - Display / verbosity system (Rich table, interactive picker — same UX, different data source)
 - Hand-written `_SKILL` content (behavior, method, triage, exclusions)
-- The `_old/` compatibility layer
 
 ## Testing
 
 - Unit tests for `generate_output_instructions()` — verify JSON example, Literal rendering, severity descriptions
-- Unit tests for `parse_output()` — valid JSON, malformed JSON, nested models, fenced vs raw JSON, validation errors
+- Unit tests for `parse_output()` — valid JSON, malformed JSON, nested models, fenced vs raw JSON, raises on validation errors
 - Unit test: `ClaudeAgentNode` with `output=` appends generated instructions to system prompt
 - Unit test: `ShellNode` with `output=` parses JSON stdout into model
-- Unit test: node without `output=` stores raw text in state (backward compat)
 - Unit test: `_extract_items_from_state` extracts list fields from Pydantic models
-- Unit test: `_extract_items_from_state` falls back to regex for string upstream
-- Unit test: `display.print_results` handles both BaseModel and string
-- Regression: all existing tests pass unchanged
+- Unit test: `display.print_results` handles `model_dump()` output
