@@ -4,23 +4,22 @@
 
 Two friction points in agentpipe's current API:
 
-1. **Every node hand-writes JSON schema instructions** in its system prompt (~30 lines of boilerplate per node). No validation that Claude actually follows the schema.
+1. **Every node hand-writes JSON schema instructions** in its system prompt (~30 lines of boilerplate per node, including severity guides). No validation that Claude actually follows the schema.
 2. **Downstream nodes regex-parse JSON out of markdown strings** to consume upstream output. `ResolveFindings` uses `re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```")` to find findings — fragile and untyped.
 
 ## Design
 
 ### 1. Dataclass-based structured output
 
-Nodes declare their output shape as a dataclass. The framework auto-generates JSON schema instructions for the prompt and parses the response into typed objects.
+Nodes declare their output shape as a dataclass with example values and optional enum descriptions in `field(metadata=...)`. The framework auto-generates the entire output section of the system prompt (JSON schema, examples, enum/severity descriptions) and parses the response into typed objects.
 
-Each node defines its own output dataclass — there are no shared types. Nodes are fully independent.
+Each node defines its own output dataclass. There are no shared types. Nodes are fully independent.
 
-#### Example output dataclasses
+#### Example output dataclass
 
 ```python
 from dataclasses import dataclass, field
 
-# In python_code_review.py
 @dataclass
 class ReviewOutput:
     findings: list[dict] = field(
@@ -40,34 +39,67 @@ class ReviewOutput:
         default_factory=dict,
         metadata={"example": {"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}},
     )
+```
 
-# In python_test.py — totally different shape
+Fields that need constrained values use `enum` and `descriptions` in metadata:
+
+```python
 @dataclass
-class TestOutput:
+class ReviewOutput:
     findings: list[dict] = field(
         default_factory=list,
         metadata={"example": [{
-            "file": "tests/test_foo.py",
-            "line": 10,
+            "file": "path/to/file.py",
+            "line": 42,
             "severity": "HIGH",
-            "category": "test_failure",
-            "source": "python_test",
-            "description": "AssertionError in test_bar.",
-            "recommendation": "Fix the off-by-one in foo().",
+            "category": "logic_error",
+            "source": "python_code_review",
+            "description": "Off-by-one in loop bound.",
+            "recommendation": "Use < instead of <=.",
             "confidence": "high",
         }]},
     )
     summary: dict[str, int] = field(
         default_factory=dict,
-        metadata={"example": {
-            "tests_run": 50, "tests_passed": 48, "tests_failed": 2,
-            "tests_skipped": 0, "tests_xfailed": 0,
-            "high": 1, "medium": 1, "low": 0,
-        }},
+        metadata={
+            "example": {"files_reviewed": 12, "high": 1, "medium": 0, "low": 0},
+        },
     )
 ```
 
-No shared base class. Each node owns its shape. This keeps nodes fully independent — adding a field to `TestOutput` can't break `PythonCodeReview`.
+And each node customizes field semantics through metadata on the example dict's nested fields. For the severity guide specifically, nodes pass a `severity_guide` key in the findings field metadata:
+
+```python
+findings: list[dict] = field(
+    default_factory=list,
+    metadata={
+        "example": [{ ... }],
+        "severity_guide": {
+            "HIGH": "Bug that will cause incorrect behavior in production",
+            "MEDIUM": "Latent bug under specific conditions",
+            "LOW": "Minor concern worth surfacing but not blocking",
+        },
+    },
+)
+```
+
+A security audit node uses different descriptions:
+
+```python
+findings: list[dict] = field(
+    default_factory=list,
+    metadata={
+        "example": [{ ... }],
+        "severity_guide": {
+            "HIGH": "Directly exploitable — RCE, auth bypass, data breach",
+            "MEDIUM": "Exploitable under specific but realistic conditions",
+            "LOW": "Defense-in-depth or limited-impact issue",
+        },
+    },
+)
+```
+
+The `severity_guide` is prompt-generation config only — `dataclasses.asdict()` ignores all metadata, so it never appears in output.
 
 #### Schema generation (`agentpipe/schema.py`)
 
@@ -75,31 +107,16 @@ A function `generate_output_instructions(cls) -> str` that:
 
 1. Walks `dataclasses.fields(cls)`
 2. Builds a JSON example from `metadata["example"]` values
-3. Returns a markdown block appended to the system prompt:
+3. If a field has `metadata["severity_guide"]`, appends a severity section:
+   ```
+   Severity:
+   - HIGH: Bug that will cause incorrect behavior in production
+   - MEDIUM: Latent bug under specific conditions
+   - LOW: Minor concern worth surfacing but not blocking
+   ```
+4. Returns a complete markdown block appended to the system prompt
 
-```
-## Output
-
-Final reply must be a single fenced JSON block matching this schema and nothing after it:
-
-```json
-{
-  "findings": [
-    {
-      "file": "path/to/file.py",
-      "line": 42,
-      "severity": "HIGH",
-      ...
-    }
-  ],
-  "summary": {"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}
-}
-```
-```
-
-This replaces the hand-written `## Output` section in each node's `_SKILL`. The rest of `_SKILL` (behavior instructions, triage rules, severity guide) stays hand-written because it's node-specific.
-
-If a field has `metadata={"enum": ["HIGH", "MEDIUM", "LOW"]}`, append "One of: HIGH, MEDIUM, LOW" to the field description in the generated output.
+This replaces both the hand-written `## Output` section and the severity guide in each node's `_SKILL`. The `_SKILL` is reduced to: behavior instructions, triage rules, exclusions.
 
 #### Response parsing (`agentpipe/schema.py`)
 
@@ -152,7 +169,7 @@ Most ShellNodes won't use this — `PythonLint`, `PythonFormat`, and `PythonEnsu
 
 #### Integration with `ResolveFindings`
 
-ResolveFindings doesn't need to know any node's output schema. It serializes whatever typed objects are in state into the prompt for its inner Claude agent:
+ResolveFindings doesn't know any node's output schema. It serializes whatever typed objects are in state into the prompt for its inner Claude agent:
 
 ```python
 for key in self._reads_from_keys:
@@ -164,7 +181,7 @@ for key in self._reads_from_keys:
         parts.append(f"### {key}\n{upstream}")
 ```
 
-Claude reads the JSON and interprets it — no duck typing, no shared contracts, no coupling. The inner agent handles whatever structure each upstream node produced.
+Claude reads the JSON and interprets it — no shared contracts, no coupling. The inner agent handles whatever structure each upstream node produced.
 
 The existing regex-based `_extract_findings` becomes the fallback for string-typed upstream output (nodes without `output=`).
 
@@ -187,12 +204,12 @@ from agentpipe.nodes import PythonLint, PythonTest, PythonCodeReview, ResolveFin
 
 ## Migration path for existing nodes
 
-Each node currently has a hand-written `## Output` section in its `_SKILL` string. Migration per node:
+Each node currently has a hand-written `## Output` section and severity guide in its `_SKILL` string. Migration per node:
 
-1. Define an output dataclass in the node's file (e.g. `ReviewOutput`, `TestOutput`)
-2. Remove the `## Output` section from `_SKILL` (keep everything above it — behavior, triage, severity guide)
+1. Define an output dataclass in the node's file with `metadata["example"]` and `metadata["severity_guide"]`
+2. Remove `## Output` and severity guide sections from `_SKILL`
 3. Pass `output=ReviewOutput` to `super().__init__()`
-4. The auto-generated schema replaces the hand-written one
+4. The auto-generated schema + severity guide replaces the hand-written sections
 
 Each node's dataclass is independent — no shared types, no imports between nodes.
 
@@ -202,7 +219,7 @@ Each node's dataclass is independent — no shared types, no imports between nod
 |---|---|
 | `agentpipe/schema.py` | **New.** `generate_output_instructions()`, `parse_output()` |
 | `agentpipe/nodes/base.py` | Add `output` param to `ClaudeAgentNode` and `ShellNode` |
-| `agentpipe/nodes/python_code_review.py` | Define `ReviewOutput`, remove `## Output` from `_SKILL`, pass `output=` |
+| `agentpipe/nodes/python_code_review.py` | Define `ReviewOutput`, remove `## Output` + severity from `_SKILL`, pass `output=` |
 | `agentpipe/nodes/python_security_audit.py` | Same pattern |
 | `agentpipe/nodes/docs_review.py` | Same pattern |
 | `agentpipe/nodes/python_test.py` | Define `TestOutput`, same pattern |
@@ -219,12 +236,12 @@ Each node's dataclass is independent — no shared types, no imports between nod
 - Permission system (`allow`/`deny`/`on_unmatched`)
 - Budget tracking
 - Display / verbosity system
-- Hand-written `_SKILL` content (behavior, triage, severity guide, exclusions)
+- Hand-written `_SKILL` content (behavior, method, triage, exclusions)
 - The `_old/` compatibility layer
 
 ## Testing
 
-- Unit tests for `generate_output_instructions()` — verify correct JSON examples from dataclass metadata
+- Unit tests for `generate_output_instructions()` — verify correct JSON examples and severity guide from dataclass metadata
 - Unit tests for `parse_output()` — valid JSON, malformed JSON, missing fields, fenced vs raw JSON
 - Unit test: node with `output=` stores a dataclass instance in state
 - Unit test: node without `output=` stores raw text (backward compat)
