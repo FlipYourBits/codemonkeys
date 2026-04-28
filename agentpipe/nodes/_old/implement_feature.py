@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from agentpipe.models import OPUS_4_6
 from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
 from agentpipe.permissions import UnmatchedPolicy
 
@@ -44,6 +45,7 @@ _ALLOW = [
 def implement_feature_node(
     *,
     name: str = "implement_feature",
+    model: str = OPUS_4_6,
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] | None = None,
@@ -60,6 +62,7 @@ def implement_feature_node(
         deny=list(deny) if deny is not None else [],
         on_unmatched=on_unmatched,
         prompt_template="Implement the following task:\n\n{task_description}",
+        model=model,
         max_turns=max_turns,
         verbosity=verbosity,
         **kwargs,

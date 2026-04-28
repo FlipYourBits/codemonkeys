@@ -29,7 +29,7 @@ from claude_agent_sdk import (
 )
 
 from agentpipe.budget import BudgetTracker, WarnCallback
-from agentpipe.models import DEFAULT as _DEFAULT_MODEL
+from agentpipe.models import SONNET_4_6, resolve_model
 from agentpipe.permissions import (
     PermissionRule,
     UnmatchedPolicy,
@@ -39,6 +39,7 @@ from agentpipe.permissions import (
 
 class Verbosity(enum.Enum):
     silent = "silent"
+    status = "status"
     normal = "normal"
     verbose = "verbose"
 
@@ -140,6 +141,27 @@ def _compose_system_prompt(base: str, skill_refs: Sequence[str | Path]) -> str:
     return "\n".join(parts).strip()
 
 
+def _build_prior_results(keys: list[str], state: dict[str, Any]) -> str:
+    if not keys:
+        return ""
+    parts = ["## Prior results\n"]
+    for key in keys:
+        output = state.get(key, "")
+        if output:
+            parts.append(f"### {key}\n{output}\n")
+    return "\n".join(parts) if len(parts) > 1 else ""
+
+
+def _node_name(node: Any) -> str:
+    if isinstance(node, str):
+        return node
+    if hasattr(node, "name"):
+        return node.name
+    if hasattr(node, "__name__"):
+        return node.__name__
+    return type(node).__name__
+
+
 class ClaudeAgentNode:
     """A pipeline node that runs a Claude Agent SDK query.
 
@@ -159,7 +181,8 @@ class ClaudeAgentNode:
         deny: Sequence[str] = (),
         on_unmatched: UnmatchedPolicy = "deny",
         prompt_template: str = "{task_description}",
-        model: str = _DEFAULT_MODEL,
+        reads_from: Sequence[Any] = (),
+        model: str = SONNET_4_6,
         max_turns: int | None = None,
         max_budget_usd: float | None = None,
         hard_cap: bool = True,
@@ -177,6 +200,7 @@ class ClaudeAgentNode:
         self._sdk_allowed_tools, self._allow_rules = _split_allow(self.allow, self.deny)
         self.on_unmatched = on_unmatched
         self.prompt_template = prompt_template
+        self._reads_from_keys = [_node_name(n) for n in reads_from]
         self.model = model
         self.max_turns = max_turns
         self.max_budget_usd = max_budget_usd
@@ -194,7 +218,11 @@ class ClaudeAgentNode:
         hard_cap: bool,
     ) -> float | list[float] | None:
         if hard_cap:
-            return warn_at_pct
+            if isinstance(warn_at_pct, (int, float)):
+                return float(warn_at_pct)
+            if warn_at_pct is not None:
+                return list(warn_at_pct)
+            return None
         if warn_at_pct is None:
             return [1.0]
         if isinstance(warn_at_pct, (int, float)):
@@ -217,13 +245,16 @@ class ClaudeAgentNode:
         }
         if cwd is not None:
             kwargs["cwd"] = cwd
-        kwargs["model"] = self.model
+        kwargs["model"] = resolve_model(self.model)
         if self.max_turns is not None:
             kwargs["max_turns"] = self.max_turns
         if self.max_budget_usd is not None and self.hard_cap:
             kwargs["max_budget_usd"] = self.max_budget_usd
         kwargs.update(self.extra_options)
         return ClaudeAgentOptions(**kwargs)
+
+    def _build_prior_results(self, state: dict[str, Any]) -> str:
+        return _build_prior_results(self._reads_from_keys, state)
 
     def _render_prompt(self, state: dict[str, Any]) -> str:
         try:
@@ -232,7 +263,7 @@ class ClaudeAgentNode:
             raise KeyError(
                 f"node {self.name!r} prompt_template references missing state key: {e.args[0]!r}"
             ) from e
-        prior = state.get("_prior_results", "")
+        prior = self._build_prior_results(state)
         if prior:
             return f"{prior}\n\n{prompt}"
         return prompt
@@ -292,6 +323,7 @@ class ShellNode:
         self.check = check
         self.timeout = timeout
         self.verbosity = verbosity
+        self.on_output: Callable[[str, str], None] | None = None
         self.declared_outputs: tuple[str, ...] = (self.name,)
 
     def _resolve(self, state: dict[str, Any]) -> list[str]:
@@ -325,7 +357,6 @@ class ShellNode:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        prefix = f"[{self.name}]"
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
 
@@ -335,7 +366,10 @@ class ShellNode:
             async for raw in stream:
                 line = raw.decode("utf-8", errors="replace")
                 sink.append(line)
-                print(f"{prefix} {line.rstrip()}", file=sys.stderr)
+                if self.on_output is not None:
+                    self.on_output(self.name, line.rstrip())
+                else:
+                    print(f"[{self.name}] {line.rstrip()}", file=sys.stderr)
 
         try:
             await asyncio.wait_for(

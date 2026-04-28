@@ -6,24 +6,16 @@ import pytest
 
 from agentpipe.pipeline import Pipeline
 from agentpipe.nodes.base import Verbosity
-
-
-@pytest.fixture(autouse=True)
-def _clean_user_registry():
-    from agentpipe import registry as reg
-
-    snapshot = dict(reg._USER_REGISTRY)
-    yield
-    reg._USER_REGISTRY.clear()
-    reg._USER_REGISTRY.update(snapshot)
+from agentpipe.nodes._old.python_lint import python_lint_node
+from agentpipe.nodes._old.python_format import python_format_node
 
 
 class TestPipelineConstruction:
-    def test_creates_with_string_steps(self):
+    def test_creates_with_node_steps(self):
         p = Pipeline(
             working_dir="/tmp/repo",
             task="add healthz",
-            steps=["python_lint", "python_format"],
+            steps=[python_lint_node(), python_format_node()],
         )
         assert p.working_dir == "/tmp/repo"
 
@@ -31,25 +23,11 @@ class TestPipelineConstruction:
         with pytest.raises(ValueError, match="steps"):
             Pipeline(working_dir="/tmp", task="x", steps=[])
 
-    def test_unknown_step_raises(self):
-        with pytest.raises(KeyError, match="nonexistent"):
-            p = Pipeline(working_dir="/tmp", task="x", steps=["nonexistent"])
-            asyncio.run(p.run())
-
     def test_parallel_steps(self):
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[["python_lint", "python_format"]],
-        )
-        assert len(p._ordered_names) > 0
-
-    def test_config_overrides(self):
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=["python_lint"],
-            config={"python_lint": {"fix": False}},
+            steps=[[python_lint_node(), python_format_node()]],
         )
         assert len(p._ordered_names) > 0
 
@@ -57,34 +35,34 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["python_lint", ("python_ruff_final", "python_lint")],
-            config={"python_ruff_final": {"name": "python_ruff_final"}},
+            steps=[python_lint_node(), ("ruff_final", python_lint_node())],
         )
-        assert len(p._ordered_names) > 0
+        assert "ruff_final" in p._ordered_names
 
     def test_duplicate_step_auto_suffixed(self):
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["python_lint", "python_format", "python_lint"],
+            steps=[python_lint_node(), python_format_node(), python_lint_node()],
         )
-        assert len(p._ordered_names) > 0
+        assert "python_lint" in p._ordered_names
+        assert "python_lint_2" in p._ordered_names
 
 
-class TestPipelineCustomNodes:
-    def test_custom_node_inline(self):
+class TestPipelineCustomCallables:
+    def test_bare_callable_runs(self):
         async def my_node(state):
             return {"out": "ok"}
 
+        my_node.__name__ = "deploy"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/deploy"],
-            custom_nodes={"custom/deploy": my_node},
+            steps=[my_node],
         )
-        assert len(p._ordered_names) > 0
+        assert "deploy" in p._ordered_names
 
-    def test_run_with_custom_nodes(self):
+    def test_run_with_callables(self):
         calls = []
 
         async def step_a(state):
@@ -95,11 +73,12 @@ class TestPipelineCustomNodes:
             calls.append("b")
             return {"b_out": "done"}
 
+        step_a.__name__ = "a"
+        step_b.__name__ = "b"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/a", "custom/b"],
-            custom_nodes={"custom/a": step_a, "custom/b": step_b},
+            steps=[step_a, step_b],
         )
         final = asyncio.run(p.run())
         assert calls == ["a", "b"]
@@ -118,11 +97,12 @@ class TestCostTracking:
             costs.append("b")
             return {"b": "done", "last_cost_usd": 0.10}
 
+        step_a.__name__ = "a"
+        step_b.__name__ = "b"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/a", "custom/b"],
-            custom_nodes={"custom/a": step_a, "custom/b": step_b},
+            steps=[step_a, step_b],
         )
         final = asyncio.run(p.run())
         assert final["node_costs"] == {"a": 0.05, "b": 0.10}
@@ -133,68 +113,15 @@ class TestCostTracking:
         async def step_a(state):
             return {"a": "done"}
 
+        step_a.__name__ = "a"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/a"],
-            custom_nodes={"custom/a": step_a},
+            steps=[step_a],
         )
         final = asyncio.run(p.run())
         assert final["node_costs"] == {"a": 0.0}
         assert final["total_cost_usd"] == 0.0
-
-
-class TestRequiresConfig:
-    def test_prior_results_injected(self):
-        async def step_a(state):
-            return {"a": '{"findings": []}', "last_cost_usd": 0.0}
-
-        async def step_b(state):
-            assert "_prior_results" in state
-            assert "### a" in state["_prior_results"]
-            assert '{"findings": []}' in state["_prior_results"]
-            return {"b": "saw context", "last_cost_usd": 0.0}
-
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=["custom/a", "custom/b"],
-            custom_nodes={"custom/a": step_a, "custom/b": step_b},
-            config={"b": {"requires": ["a"]}},
-        )
-        final = asyncio.run(p.run())
-        assert final["b"] == "saw context"
-
-    def test_no_requires_no_prior_results(self):
-        async def step_a(state):
-            return {"a": "done", "last_cost_usd": 0.0}
-
-        async def step_b(state):
-            assert "_prior_results" not in state or state["_prior_results"] == ""
-            return {"b": "no context", "last_cost_usd": 0.0}
-
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=["custom/a", "custom/b"],
-            custom_nodes={"custom/a": step_a, "custom/b": step_b},
-        )
-        final = asyncio.run(p.run())
-        assert final["b"] == "no context"
-
-    def test_requires_invalid_node_raises(self):
-        async def step_a(state):
-            return {"a": "done"}
-
-        with pytest.raises(ValueError, match="requires.*nonexistent"):
-            p = Pipeline(
-                working_dir="/tmp",
-                task="test",
-                steps=["custom/a"],
-                custom_nodes={"custom/a": step_a},
-                config={"a": {"requires": ["nonexistent"]}},
-            )
-            asyncio.run(p.run())
 
 
 class TestStatusLine:
@@ -202,11 +129,11 @@ class TestStatusLine:
         async def step_a(state):
             return {"a": "done", "last_cost_usd": 0.03}
 
+        step_a.__name__ = "a"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/a"],
-            custom_nodes={"custom/a": step_a},
+            steps=[step_a],
             verbosity=Verbosity.normal,
         )
         asyncio.run(p.run())
@@ -218,11 +145,11 @@ class TestStatusLine:
         async def step_a(state):
             return {"a": "done", "last_cost_usd": 0.03}
 
+        step_a.__name__ = "a"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/a"],
-            custom_nodes={"custom/a": step_a},
+            steps=[step_a],
             verbosity=Verbosity.normal,
         )
         asyncio.run(p.run())
@@ -232,11 +159,11 @@ class TestStatusLine:
         async def step_a(state):
             return {"a": "done", "last_cost_usd": 0.0}
 
+        step_a.__name__ = "a"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/a"],
-            custom_nodes={"custom/a": step_a},
+            steps=[step_a],
             verbosity=Verbosity.silent,
         )
         asyncio.run(p.run())
@@ -249,18 +176,7 @@ class TestPublicAPI:
         from agentpipe import (
             Display,
             Pipeline,
-            register,
-            list_builtins,
-            list_registered,
-            resolve,
         )
 
-        for obj in (
-            Display,
-            Pipeline,
-            register,
-            list_builtins,
-            list_registered,
-            resolve,
-        ):
+        for obj in (Display, Pipeline):
             assert obj is not None

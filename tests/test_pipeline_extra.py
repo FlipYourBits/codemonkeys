@@ -4,19 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 
 from agentpipe.pipeline import Pipeline
-
-
-@pytest.fixture(autouse=True)
-def _clean_user_registry():
-    from agentpipe import registry as reg
-
-    snapshot = dict(reg._USER_REGISTRY)
-    yield
-    reg._USER_REGISTRY.clear()
-    reg._USER_REGISTRY.update(snapshot)
 
 
 class TestIsAsync:
@@ -52,11 +41,11 @@ class TestRunNode:
         async def _dummy(state):
             return {}
 
+        _dummy.__name__ = "dummy"
         return Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/dummy"],
-            custom_nodes={"custom/dummy": _dummy},
+            steps=[_dummy],
         )
 
     def test_sync_node_returns_dict(self):
@@ -104,27 +93,16 @@ class TestDedupName:
         assert p._dedup_name("lint", seen) == "lint_2"
 
 
-class TestPipelineWithModel:
-    def test_model_set(self):
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=["python_test"],
-            model="opus",
-        )
-        assert p.model == "opus"
-
-
 class TestPipelineSyncCustomNode:
     def test_sync_custom_node_runs(self):
         def sync_node(state):
             return {"sync_out": "ok"}
 
+        sync_node.__name__ = "sync"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/sync"],
-            custom_nodes={"custom/sync": sync_node},
+            steps=[sync_node],
         )
         final = asyncio.run(p.run())
         assert final.get("sync_out") == "ok"
@@ -136,11 +114,11 @@ class TestPipelineSyncCustomNode:
             captures.update(state)
             return {"done": True}
 
+        capture_node.__name__ = "cap"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/cap"],
-            custom_nodes={"custom/cap": capture_node},
+            steps=[capture_node],
             extra_state={"base_ref": "develop"},
         )
         asyncio.run(p.run())
@@ -153,25 +131,11 @@ class TestPipelineSyncCustomNode:
             captures.update(state)
             return {"done": True}
 
+        capture_node.__name__ = "cap"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/cap"],
-            custom_nodes={"custom/cap": capture_node},
+            steps=[capture_node],
         )
         asyncio.run(p.run(custom_key="custom_val"))
         assert captures["custom_key"] == "custom_val"
-
-
-class TestPipelineCustomNodeNamespace:
-    def test_bare_key_uses_custom_namespace(self):
-        async def my_node(state):
-            return {"out": "ok"}
-
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=["custom/bare_node"],
-            custom_nodes={"bare_node": my_node},
-        )
-        assert len(p._ordered_names) > 0

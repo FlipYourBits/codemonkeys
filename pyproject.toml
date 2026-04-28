@@ -20,7 +20,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "claude-agent-sdk>=0.1.0,<0.2",
+    "claude-agent-sdk>=0.1.0,<1.0",
     "rich>=13.0,<14",
 ]
 
@@ -30,11 +30,15 @@ python = [
     "pytest-cov>=5.0",
     "pip-audit>=2.7",
     "ruff>=0.5,<1",
+    "mypy>=1.10",
 ]
 dev = [
     "agentpipe[python]",
     "pytest-asyncio>=0.23",
 ]
+
+[project.scripts]
+agentpipe = "agentpipe.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/FlipYourBits/agentpipe"

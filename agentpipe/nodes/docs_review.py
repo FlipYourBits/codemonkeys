@@ -1,82 +1,225 @@
-"""Docs-review node: checks documentation for drift against the code.
-
-Owns doc accuracy exclusively: stale docstrings, outdated READMEs,
-missing public-API docs, inconsistent terminology. Does NOT check
-code quality, security, tests, or formatting — other nodes own those.
-
-Report-only: returns JSON findings without making any edits.
-"""
+"""Documentation drift review."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
-from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
-from agentpipe.permissions import UnmatchedPolicy
-from agentpipe.skills.docs_review import DOCS_REVIEW
+from agentpipe.models import SONNET_4_6
+from agentpipe.nodes.base import ClaudeAgentNode
 
-_SYSTEM_PROMPT = (
-    "You are reviewing docs for drift against the code they describe. "
-    "Use Bash/Read to examine git diff, changed files, and doc files "
-    "(README, CHANGELOG, etc.). Follow the skill below exactly. "
-    "Report findings only — do not fix issues. "
-    "Do not run tests, linters, or install packages — only read code and docs. "
-    "Output JSON only as your final message."
-)
+_SKILL = """\
+# Docs review
 
-Mode = Literal["diff", "full"]
+Review documentation for drift against the code it
+describes. Focus on **accuracy**, not style or tone.
 
-_ALLOW = [
-    "Read",
-    "Glob",
-    "Grep",
-    "Bash(git diff*)",
-    "Bash(git log*)",
-    "Bash(git show*)",
-    "Bash(git blame*)",
-    "Bash(git status*)",
-    "Bash(git ls-files*)",
-]
+Report findings only — do not fix issues.
+
+## Scope
+
+{scope_section}
+
+## Method
+
+{method_steps}
+
+## Categories
+
+### `docstring_drift`
+- Docstring describes parameters, return values, or
+  exceptions that don't match the current signature
+- Examples in the docstring use removed APIs or
+  pre-rename names
+- Docstring claims behavior that the implementation no
+  longer does (e.g. "raises ValueError" but the function
+  now returns None on the same input)
+
+### `doc_drift`
+- README or docs/ reference a function, class, file, or
+  CLI command that has been renamed or deleted
+- Code blocks in docs import or call symbols that no
+  longer exist
+- Install/quick-start snippet uses a wrong package name,
+  removed dependency, or deprecated API
+- Documented CLI flags, env vars, or config options no
+  longer exist in the code
+- CLI `--help` descriptions or argparse flags don't match
+  what is documented in README or docs/
+
+### `missing_public_docstring`
+- A new public function/class/method (no leading
+  underscore, exported in `__all__` or visible at package
+  root) has no docstring or only a one-line stub
+
+### `stale_changelog`
+- CHANGELOG.md / release notes don't reflect a
+  public-API change in the diff
+- Version bumped without a corresponding changelog entry
+  (only flag if the project clearly maintains a changelog)
+- Changelog entry describes a change that doesn't match
+  what actually happened (e.g. "Added X" when X was
+  renamed, not added)
+- Changelog entries not following Keep a Changelog format
+  (https://keepachangelog.com/en/1.1.0/): sections must
+  use `## [version] - YYYY-MM-DD` headings with
+  `### Added`, `### Changed`, `### Deprecated`,
+  `### Removed`, `### Fixed`, `### Security` subsections.
+  Unreleased changes go under `## [Unreleased]`.
+
+### `inconsistent_terminology`
+- The same concept is named differently across docs and
+  code (e.g. README says "API key", code uses
+  `auth_token`) — only flag when the divergence would
+  confuse a reader
+
+## Triage
+
+- Only report findings where the doc is clearly wrong.
+  If arguably still correct, leave it out.
+- Deduplicate — if the same rename broke 5 references,
+  report it once.
+
+## Exclusions — DO NOT REPORT
+
+- Style preferences (tone, length, formatting)
+- Typos and grammar
+- Internal/private implementation details
+- Comments in code (code review owns these)
+- Wishlist items ("this could use more examples")
+- Suggestions for documentation that doesn't exist yet{exclusion_extra}
+
+## Output
+
+Final reply must be a single fenced JSON block matching
+this schema and nothing after it:
+
+```json
+{{
+  "findings": [
+    {{
+      "file": "src/foo.py",
+      "line": 10,
+      "severity": "MEDIUM",
+      "category": "docstring_drift",
+      "source": "docs_review",
+      "description": "Docstring says raises ValueError
+        but function returns None on bad input.",
+      "recommendation": "Update the docstring to match
+        the current behavior.",
+      "confidence": "high"
+    }}
+  ],
+  "summary": {{
+    "files_reviewed": 5,
+    "high": 0,
+    "medium": 2,
+    "low": 0
+  }}
+}}
+```
+
+`confidence`: "high", "medium", or "low". Only include
+findings where confidence is "high" or "medium".
+
+Severity guide:
+- **HIGH**: doc actively misleads (wrong return type,
+  wrong exceptions, broken example, broken install
+  instructions)
+- **MEDIUM**: doc out of date but unlikely to cause
+  immediate user error
+- **LOW**: minor stale reference
+
+If there are no findings, return:
+
+```json
+{{
+  "findings": [],
+  "summary": {{
+    "files_reviewed": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  }}
+}}
+```"""
 
 
-def docs_review_node(
-    *,
-    name: str = "docs_review",
-    mode: Mode = "diff",
-    extra_skills: Sequence[str | Path] = (),
-    allow: Sequence[str] | None = None,
-    deny: Sequence[str] | None = None,
-    on_unmatched: UnmatchedPolicy = "deny",
-    max_turns: int | None = None,
-    verbosity: Verbosity = Verbosity.silent,
-    **kwargs: Any,
-) -> ClaudeAgentNode:
-    if mode == "diff":
-        prompt_template = (
-            "DIFF mode — report only doc drift introduced by the diff "
-            "against {base_ref}. Start by running `git diff {base_ref}...HEAD` and "
-            "reading any doc files (README, CHANGELOG, etc.). "
-            "Then proceed with the docs-review skill."
-        )
-    else:
-        prompt_template = (
-            "FULL mode — review docs in the repository at "
-            "{working_dir}. Start by listing files and reading any doc "
-            "files (README, CHANGELOG, etc.). "
-            "Then proceed with the docs-review skill."
-        )
-
-    return ClaudeAgentNode(
-        name=name,
-        system_prompt=_SYSTEM_PROMPT + DOCS_REVIEW,
-        skills=[*extra_skills],
-        allow=list(allow) if allow is not None else _ALLOW,
-        deny=list(deny) if deny is not None else [],
-        on_unmatched=on_unmatched,
-        prompt_template=prompt_template,
-        max_turns=max_turns,
-        verbosity=verbosity,
+class DocsReview(ClaudeAgentNode):
+    def __init__(
+        self,
+        *,
+        scope: Literal["diff", "full_repo"] = "diff",
+        base_ref: str = "main",
         **kwargs,
-    )
+    ) -> None:
+        kwargs.setdefault("model", SONNET_4_6)
+
+        if scope == "diff":
+            scope_section = (
+                "Diff mode: review docs touched by the diff *and* code\n"
+                "changes that may have invalidated docs elsewhere."
+            )
+            method_steps = """\
+1. Read the diff to find changed signatures,
+   renamed/removed symbols, new public APIs.
+2. For each changed signature: locate the docstring
+   (if any) and check it still matches.
+3. For each renamed/removed symbol: grep the README and
+   `docs/` for references to the old name.
+4. For each new public API: confirm it has a real
+   docstring.
+5. Check install/setup instructions and project metadata
+   (pyproject.toml) against the current code.
+6. Triage: drop anything you're not sure is actually
+   wrong. If the doc is arguably still correct, leave it."""
+            exclusion_extra = "\n- Pre-existing drift outside the diff"
+            prompt = (
+                f"Report only doc drift introduced by the diff against {base_ref}. "
+                f"Start by running `git diff {base_ref}...HEAD` and reading any doc files "
+                "(README, CHANGELOG, etc.)."
+            )
+        else:
+            scope_section = (
+                "Full repo: review all documentation in the repository\n"
+                "against the current code."
+            )
+            method_steps = """\
+1. List all doc files (README, CHANGELOG, `docs/`) and
+   all Python source files.
+2. For each public function/class/method: check that its
+   docstring matches the current signature and behavior.
+3. For each doc file: check that referenced symbols,
+   file paths, and code examples still exist and work.
+4. Check install/setup instructions and project metadata
+   (pyproject.toml) against the current code.
+5. Triage: drop anything you're not sure is actually
+   wrong. If the doc is arguably still correct, leave it."""
+            exclusion_extra = ""
+            prompt = (
+                "Review all documentation in the repository against the current code. "
+                "Start by running `git ls-files` to find doc files and Python source files."
+            )
+
+        super().__init__(
+            name="docs_review",
+            system_prompt=_SKILL.format(
+                scope_section=scope_section,
+                method_steps=method_steps,
+                exclusion_extra=exclusion_extra,
+            ),
+            prompt_template=prompt,
+            allow=[
+                "Read",
+                "Glob",
+                "Grep",
+                "Bash(git diff*)",
+                "Bash(git log*)",
+                "Bash(git show*)",
+                "Bash(git blame*)",
+                "Bash(git status*)",
+                "Bash(git ls-files*)",
+            ],
+            deny=[],
+            on_unmatched="deny",
+            **kwargs,
+        )

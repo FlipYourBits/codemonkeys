@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agentpipe.nodes.python_format import python_format_node
-from agentpipe.nodes.python_lint import python_lint_node
+from agentpipe.nodes._old.python_format import python_format_node
+from agentpipe.nodes._old.python_lint import python_lint_node
 
 
 def _ruff_available() -> bool:

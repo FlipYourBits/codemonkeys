@@ -204,7 +204,10 @@ cython_debug/
 tempCodeRunnerFile.py
 
 # agentpipe run logs
-.agentpipe/runs/
+.agentpipe/
+
+# superpowers skill artifacts
+docs/superpowers/
 
 # Ruff stuff:
 .ruff_cache/

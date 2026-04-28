@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
+from agentpipe.models import SONNET_4_6
 from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
 from agentpipe.permissions import UnmatchedPolicy
 
@@ -56,6 +57,7 @@ def python_coverage_node(
     *,
     name: str = "python_coverage",
     mode: Mode = "diff",
+    model: str = SONNET_4_6,
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] | None = None,
@@ -83,6 +85,7 @@ def python_coverage_node(
         deny=list(deny) if deny is not None else _DENY,
         on_unmatched=on_unmatched,
         prompt_template=prompt_template,
+        model=model,
         max_turns=max_turns,
         verbosity=verbosity,
         **kwargs,

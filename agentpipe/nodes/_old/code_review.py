@@ -1,9 +1,9 @@
-"""Security-audit node: semantic security review via code analysis.
+"""Code-review node: semantic code quality review.
 
-Owns security concerns exclusively: injection, auth, secrets, crypto,
-data exposure. Reads the code and traces data flow — no external
-scanners required. Does NOT check code quality, run tests, or audit
-dependencies — other nodes own those.
+Focuses on things linters and type-checkers cannot catch: logic errors,
+excessive complexity, bad abstractions, resource leaks, concurrency bugs.
+Does NOT run linters, formatters, type-checkers, or tests — other nodes
+own those concerns.
 
 Report-only: returns JSON findings without making any edits.
 """
@@ -14,13 +14,15 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
+from agentpipe.models import OPUS_4_6
 from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
 from agentpipe.permissions import UnmatchedPolicy
-from agentpipe.skills.security_audit import SECURITY_AUDIT
+from agentpipe.skills.code_review import CODE_REVIEW
 
 _SYSTEM_PROMPT = (
-    "You are a senior security engineer auditing a code repository. "
-    "Read the code directly — trace data flow from inputs to sinks. "
+    "You are a senior engineer conducting a semantic code review. "
+    "Read the code directly — do not run linters, formatters, type-checkers, "
+    "or tests (other pipeline nodes handle those). "
     "Follow the skill below. Report findings only — do not fix issues. "
     "Output JSON only as your final message."
 )
@@ -40,10 +42,11 @@ _ALLOW = [
 ]
 
 
-def security_audit_node(
+def code_review_node(
     *,
-    name: str = "security_audit",
+    name: str = "code_review",
     mode: Mode = "diff",
+    model: str = OPUS_4_6,
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] | None = None,
@@ -54,24 +57,25 @@ def security_audit_node(
 ) -> ClaudeAgentNode:
     if mode == "diff":
         prompt_template = (
-            "DIFF mode — report only vulnerabilities introduced by the "
-            "diff against {base_ref}. Start by running `git diff {base_ref}...HEAD` "
+            "DIFF mode — review only changes introduced by the diff "
+            "against {base_ref}. Start by running `git diff {base_ref}...HEAD` "
             "and reading the changed files."
         )
     else:
         prompt_template = (
-            "FULL mode — audit the repository at {working_dir}. "
+            "FULL mode — review the entire repository at {working_dir}. "
             "Start by listing files and reading the code."
         )
 
     return ClaudeAgentNode(
         name=name,
-        system_prompt=_SYSTEM_PROMPT + SECURITY_AUDIT,
+        system_prompt=_SYSTEM_PROMPT + CODE_REVIEW,
         skills=[*extra_skills],
         allow=list(allow) if allow is not None else _ALLOW,
         deny=list(deny) if deny is not None else [],
         on_unmatched=on_unmatched,
         prompt_template=prompt_template,
+        model=model,
         max_turns=max_turns,
         verbosity=verbosity,
         **kwargs,

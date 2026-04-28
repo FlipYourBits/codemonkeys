@@ -18,6 +18,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
+from agentpipe.models import HAIKU_4_5
 from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
 from agentpipe.permissions import UnmatchedPolicy
 
@@ -144,9 +145,10 @@ def git_new_branch_node(
     *,
     name: str = "git_new_branch",
     mode: Mode = "interactive",
+    model: str = HAIKU_4_5,
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
-    deny: Sequence[str] = (),
+    deny: Sequence[str] | None = None,
     on_unmatched: UnmatchedPolicy = "deny",
     max_turns: int = 1,
     verbosity: Verbosity = Verbosity.silent,
@@ -155,15 +157,15 @@ def git_new_branch_node(
     **kwargs: Any,
 ) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
     inner_name = f"{name}_inner"
-    allow_list = list(allow) if allow is not None else []
     namer = ClaudeAgentNode(
         name=inner_name,
         system_prompt=_SYSTEM_PROMPT,
         skills=[*extra_skills],
-        allow=allow_list,
-        deny=list(deny),
+        allow=list(allow) if allow is not None else [],
+        deny=list(deny) if deny is not None else [],
         prompt_template=_PROMPT_TEMPLATE,
         on_unmatched=on_unmatched,
+        model=model,
         max_turns=max_turns,
         verbosity=verbosity,
         **kwargs,

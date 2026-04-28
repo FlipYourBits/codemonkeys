@@ -5,8 +5,8 @@ import pytest
 from agentpipe import (
     OutputKeyConflict,
     code_review_node,
-    dependency_audit_node,
     python_coverage_node,
+    python_dependency_audit_node,
     python_test_node,
     security_audit_node,
     validate_node_outputs,
@@ -16,7 +16,7 @@ from agentpipe import (
 class TestValidateNodeOutputs:
     def test_clean_pipeline_passes(self):
         validate_node_outputs(
-            dependency_audit_node(),
+            python_dependency_audit_node(),
             security_audit_node(),
             code_review_node(),
             python_coverage_node(),

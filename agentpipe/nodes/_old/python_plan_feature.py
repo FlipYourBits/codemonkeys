@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from agentpipe.display import default_prompt as _default_prompt
+from agentpipe.models import OPUS_4_6
 from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
 from agentpipe.permissions import UnmatchedPolicy
 from agentpipe.skills.python import CLEAN_CODE
@@ -67,6 +68,7 @@ async def ask_plan_feedback_via_stdin(
 def python_plan_feature_node(
     *,
     name: str = "python_plan_feature",
+    model: str = OPUS_4_6,
     extra_skills: Sequence[str | Path] = (),
     allow: Sequence[str] | None = None,
     deny: Sequence[str] | None = None,
@@ -91,6 +93,7 @@ def python_plan_feature_node(
         deny=list(deny) if deny is not None else [],
         on_unmatched=on_unmatched,
         prompt_template="{_plan_prompt}",
+        model=model,
         max_turns=max_turns,
         verbosity=verbosity,
         **kwargs,

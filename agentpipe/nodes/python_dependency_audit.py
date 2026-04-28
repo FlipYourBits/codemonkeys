@@ -1,76 +1,122 @@
-"""Python dependency-audit node: runs pip-audit and fixes vulnerable packages.
-
-The agent always attempts to audit and upgrade. Permissions control what
-actually happens: deny Edit/Write for report-only, allow for auto-fix,
-or use ask_via_stdin for interactive approval per edit.
-"""
+"""Audit Python dependencies for known CVEs via pip-audit."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from pathlib import Path
-from typing import Any
+from agentpipe.models import HAIKU_4_5
+from agentpipe.nodes.base import ClaudeAgentNode
 
-from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
-from agentpipe.permissions import UnmatchedPolicy
+_SKILL = """\
+# Dependency audit
 
-_SYSTEM_PROMPT = (
-    "You are auditing Python dependencies for known vulnerabilities. "
-    "Use pip-audit to scan for CVEs. If pip-audit is not installed, "
-    "check requirements.txt / pyproject.toml manually against known "
-    "vulnerability databases. Upgrade affected packages to patched "
-    "versions. Do not install packages. Do not run tests. Do not push. "
-    "Output JSON only as your final message — a list of findings with "
-    "file, line, severity, category (vulnerable_dependency), "
-    "source, description, recommendation, confidence, and whether you fixed it."
-)
+Audit Python dependencies for known vulnerabilities
+using pip-audit. Report findings only — never fix,
+upgrade, or modify any packages.
 
-_ALLOW = [
-    "Read",
-    "Glob",
-    "Grep",
-    "Edit",
-    "Write",
-    "Bash(git diff*)",
-    "Bash(git log*)",
-    "Bash(git show*)",
-    "Bash(git blame*)",
-    "Bash(git status*)",
-    "Bash(git ls-files*)",
-    "Bash(pip-audit*)",
-    "Bash(pip list*)",
-    "Bash(pip show*)",
-]
+## Scope
 
-_DENY = [
-    "Bash(pip install*)",
-    "Bash(pip uninstall*)",
-    "Bash(python -m pip*)",
-    "Bash(python -m pytest*)",
-    "Bash(pytest*)",
-]
+Scan all installed packages in the project virtualenv
+for known CVEs.
+
+## Method
+
+1. Run `pip-audit --format json --strict --desc` to scan
+   for known vulnerabilities with machine-readable output.
+   Never pass `--fix` or any flag that modifies packages.
+2. If pip-audit is not available, report a single finding
+   with category `missing_tooling` and severity `MEDIUM`.
+   Do not attempt to check dependencies manually.
+3. Parse the JSON output. For each vulnerability: identify
+   the affected package, installed version, CVE ID, CVSS
+   score (if available), and the fixed version.
+4. Cross-reference the package against pyproject.toml or
+   requirements files to identify the pinned line number.
+
+## Categories
+
+### `vulnerable_dependency`
+- Package with a known CVE
+- Package pinned to an affected version range
+
+### `missing_tooling`
+- pip-audit is not installed (cannot complete audit)
+
+### `scan_error`
+- pip-audit failed due to network error, broken virtualenv,
+  or other infrastructure issue (not a found CVE)
+
+## Triage
+
+- Only report confirmed CVEs from pip-audit output.
+- Do not speculate about vulnerabilities from memory.
+- Deduplicate — one finding per CVE per package.
+
+## Exclusions — DO NOT REPORT
+
+- Code quality or style issues (code review owns these)
+- Security issues in application code (security audit
+  owns these)
+- Test failures (test node owns these)
+- Documentation drift (docs review owns these)
+
+## Output
+
+Final reply must be a single fenced JSON block matching
+this schema and nothing after it:
+
+```json
+{
+  "findings": [
+    {
+      "file": "pyproject.toml",
+      "line": 1,
+      "severity": "HIGH" | "MEDIUM" | "LOW",
+      "category": "vulnerable_dependency",
+      "source": "python_dependency_audit",
+      "description": "package 1.2.3 has CVE-2024-XXXXX (CVSS 9.1).",
+      "recommendation": "Upgrade to package>=1.2.4.",
+      "confidence": "high"
+    }
+  ],
+  "summary": {
+    "packages_scanned": 45,
+    "high": 1,
+    "medium": 0,
+    "low": 0
+  }
+}
+```
+
+Severity mapping (use CVSS base score when available):
+- **HIGH**: CVSS >= 7.0, or known active exploitation
+- **MEDIUM**: CVSS 4.0–6.9, or limited exploitability
+- **LOW**: CVSS < 4.0, disputed, or withdrawn advisory
+
+If there are no findings, return an empty `findings`
+array."""
 
 
-def python_dependency_audit_node(
-    *,
-    name: str = "python_dependency_audit",
-    extra_skills: Sequence[str | Path] = (),
-    allow: Sequence[str] | None = None,
-    deny: Sequence[str] | None = None,
-    on_unmatched: UnmatchedPolicy = "deny",
-    max_turns: int | None = None,
-    verbosity: Verbosity = Verbosity.silent,
-    **kwargs: Any,
-) -> ClaudeAgentNode:
-    return ClaudeAgentNode(
-        name=name,
-        system_prompt=_SYSTEM_PROMPT,
-        skills=[*extra_skills],
-        allow=list(allow) if allow is not None else _ALLOW,
-        deny=list(deny) if deny is not None else _DENY,
-        on_unmatched=on_unmatched,
-        prompt_template="Audit Python dependencies in {working_dir} for known vulnerabilities.",
-        max_turns=max_turns,
-        verbosity=verbosity,
-        **kwargs,
-    )
+class PythonDependencyAudit(ClaudeAgentNode):
+    def __init__(self, **kwargs) -> None:
+        kwargs.setdefault("model", HAIKU_4_5)
+        super().__init__(
+            name="python_dependency_audit",
+            system_prompt=_SKILL,
+            prompt_template="Audit Python dependencies for known vulnerabilities.",
+            allow=[
+                "Read",
+                "Glob",
+                "Grep",
+                "Bash(pip-audit*)",
+                "Bash(pip list*)",
+                "Bash(pip show*)",
+            ],
+            deny=[
+                "Bash(pip install*)",
+                "Bash(pip uninstall*)",
+                "Bash(pip-audit*--fix*)",
+                "Bash(python*)",
+                "Bash(pytest*)",
+            ],
+            on_unmatched="deny",
+            **kwargs,
+        )

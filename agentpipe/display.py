@@ -156,15 +156,19 @@ class Display:
             self._live.stop()
         try:
             if content is not None:
-                self._console.rule()
+                self._console.print()
                 self._console.print(content, highlight=False)
-                self._console.rule()
+                self._console.print()
             return self._console.input(f"  {text} ")
         finally:
             if self._live is not None:
                 self._live.start()
 
-    def print_results(self, node_costs: dict[str, float]) -> None:
+    def print_results(
+        self,
+        node_costs: dict[str, float],
+        node_outputs: dict[str, str] | None = None,
+    ) -> None:
         """Stop live display and print a per-node cost summary table."""
         self.stop()
         table = Table(title=self.title, show_header=True, expand=False)
@@ -180,6 +184,48 @@ class Display:
         )
         self._stdout_console.print(table)
 
+        if node_outputs:
+            resolve_output = node_outputs.get("resolve_findings", "")
+            if resolve_output:
+                self._stdout_console.print()
+                self._stdout_console.print(
+                    Text("Resolve findings", style="bold underline")
+                )
+                try:
+                    import json
+
+                    data = json.loads(resolve_output)
+                    fixed = data.get("fixed", [])
+                    skipped = data.get("skipped", [])
+                    if fixed:
+                        self._stdout_console.print(
+                            Text(f"\n  Fixed ({len(fixed)}):", style="bold green")
+                        )
+                        for f in fixed:
+                            file = f.get("file", "?")
+                            line = f.get("line", "?")
+                            desc = f.get("description", "")
+                            self._stdout_console.print(
+                                f"    {file}:{line} — {desc}", highlight=False
+                            )
+                    if skipped:
+                        self._stdout_console.print(
+                            Text(f"\n  Skipped ({len(skipped)}):", style="bold yellow")
+                        )
+                        for s in skipped:
+                            file = s.get("file", "?")
+                            line = s.get("line", "?")
+                            reason = s.get("reason", "")
+                            self._stdout_console.print(
+                                f"    {file}:{line} — {reason}", highlight=False
+                            )
+                    if not fixed and not skipped:
+                        self._stdout_console.print(
+                            "  No findings to resolve.", highlight=False
+                        )
+                except (json.JSONDecodeError, TypeError):
+                    self._stdout_console.print(resolve_output, highlight=False)
+
     def stop(self) -> None:
         """Stop and discard the live widget (idempotent)."""
         if self._live is not None:
@@ -189,7 +235,7 @@ class Display:
 
 def default_prompt(text: str, content: str | None = None) -> str:
     if content is not None:
-        print(f"\n{'=' * 60}", file=sys.stderr)
+        print(file=sys.stderr)
         print(content, file=sys.stderr)
-        print(f"{'=' * 60}", file=sys.stderr)
+        print(file=sys.stderr)
     return input(f"\n{text} ")

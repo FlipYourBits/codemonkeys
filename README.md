@@ -2,6 +2,12 @@
 
 Deterministic AI pipelines with per-node model selection, least-privilege permissions, and guaranteed execution. Built on the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
 
+![Pipeline status output](assets/pipeline-status.png)
+*Python quality gate mid-run — shell nodes complete in seconds, Claude agents run in parallel with per-node cost tracking.*
+
+![Interactive findings](assets/interactive-findings.png)
+*Interactive findings triage — color-coded severity, source attribution, and selective fix prompting.*
+
 ## Why not just use Claude Code?
 
 Claude Code (with plugins like superpowers) is excellent for interactive work — brainstorming, implementing features with human-in-the-loop review, debugging. A skilled developer steering Claude through a conversation will outperform any automated pipeline for novel, judgment-heavy tasks.
@@ -37,31 +43,48 @@ agentpipe solves a different problem: **repeatable, unattended, cost-controlled 
 ## Install
 
 ```bash
-pip install -e .              # core only
-pip install -e ".[python]"    # + pytest, pytest-cov, pip-audit, ruff
-pip install -e ".[dev]"       # + pytest-asyncio
+.venv/bin/python3 -m pip install -e .              # core only
+.venv/bin/python3 -m pip install -e ".[python]"    # + pytest, pytest-cov, pip-audit, ruff, mypy
+.venv/bin/python3 -m pip install -e ".[dev]"       # + pytest-asyncio
 ```
 
 ```bash
 export ANTHROPIC_API_KEY=...
 ```
 
+## Run
+
+```bash
+.venv/bin/python3 -m agentpipe.cli python check .
+.venv/bin/python3 -m agentpipe.cli python check /path/to/repo --base-ref develop
+.venv/bin/python3 -m agentpipe.cli python check . --no-interactive --verbosity verbose
+```
+
 ## Quick start
 
 ```python
 import asyncio
-from agentpipe import Pipeline
+from agentpipe import (
+    Pipeline,
+    git_new_branch_node,
+    implement_feature_node,
+    python_lint_node,
+    python_format_node,
+    code_review_node,
+    security_audit_node,
+    python_test_node,
+)
 
 async def main():
     pipeline = Pipeline(
         working_dir="/path/to/repo",
         task="Add a /healthz endpoint that returns 200 OK",
         steps=[
-            "git_new_branch",
-            "implement_feature",
-            "python_lint",
-            "python_format",
-            ["code_review", "security_audit", "python_test"],
+            git_new_branch_node(),
+            implement_feature_node(),
+            python_lint_node(),
+            python_format_node(),
+            [code_review_node(), security_audit_node(), python_test_node()],
         ],
     )
     result = await pipeline.run()
@@ -70,11 +93,11 @@ async def main():
 asyncio.run(main())
 ```
 
-Steps are strings resolved from the built-in registry. Lists create parallel fan-out via `asyncio.gather`.
+Steps are node instances. Lists create parallel fan-out via `asyncio.gather`. Each node's `.name` attribute is used as its output key in state.
 
 ## Built-in nodes
 
-Every node does one thing. The registry name doubles as the output key in state.
+Every node does one thing. Call the factory to get a configured instance.
 
 ### Workflow
 
@@ -97,16 +120,18 @@ Each owns a single concern. They do not overlap — code review doesn't run lint
 | `docs_review` | Doc drift detection. Checks docstrings, README, CHANGELOG against actual code for accuracy. |
 | `python_test` | Runs pytest, reads failing tests and the code under test to identify root causes. |
 | `python_coverage` | Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` or `mode="full"`. |
-| `dependency_audit` | Runs whichever SCA tools are installed (pip-audit, npm audit, govulncheck, cargo audit, bundler-audit). |
+| `python_dependency_audit` | Runs `pip-audit` to scan for CVEs, upgrades affected packages to patched versions. |
 
-### Python tooling
+### Python tooling (ShellNodes)
 
 | Node | What it does |
 |---|---|
 | `python_lint` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
 | `python_format` | Runs `ruff format`. |
 
-All quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing.
+These are `ShellNode` instances — they run subprocesses directly, no LLM call. They don't accept `model`, `allow`/`deny`, or `extra_skills`.
+
+All `ClaudeAgentNode` quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing.
 
 ## Permissions
 
@@ -152,73 +177,51 @@ Deny always wins over allow.
 
 ## Pipeline
 
-`Pipeline` resolves step names from the registry, injects config, and runs the workflow with `asyncio`.
+`Pipeline` takes node instances directly and runs them with `asyncio`.
 
 ```python
-from agentpipe import Pipeline
+from agentpipe import (
+    Pipeline, python_lint_node, python_test_node,
+    code_review_node, security_audit_node, resolve_findings_node,
+)
 from agentpipe.nodes.base import Verbosity
+
+test = python_test_node()
+review = code_review_node(mode="diff")
+security = security_audit_node()
 
 Pipeline(
     working_dir="/path/to/repo",
     task="description of what to do",
     steps=[
-        "git_new_branch",
-        "implement_feature",
-        "python_lint",
-        ["code_review", "security_audit", "python_test"],  # parallel
-        ("lint_final", "python_lint"),  # tuple: (alias, registry_key)
-        "custom/commit",
+        python_lint_node(),
+        [test, review, security],  # parallel
+        resolve_findings_node(reads_from=[test, review, security]),
+        ("lint_final", python_lint_node()),  # tuple: (alias, node) for name override
     ],
-    config={
-        "code_review": {"mode": "diff"},
-        "python_test": {"requires": ["code_review"]},
-    },
-    custom_nodes={"custom/commit": my_commit_factory},
-    model="claude-sonnet-4-6",
     verbosity=Verbosity.normal,
     extra_state={"base_ref": "main"},
 )
 ```
 
+Nodes that consume upstream output declare `reads_from` — a list of node instances (or names) whose output gets injected into the prompt. This keeps token costs down by only passing relevant results, not the entire state.
+
 | Parameter | What it does |
 |---|---|
-| **steps** | Registry names, `(alias, registry_key)` tuples for duplicates, or nested lists for parallel fan-out. |
-| **config** | Per-step overrides passed as kwargs to the node factory. Supports `requires` to inject prior node output. |
-| **custom_nodes** | Registered before resolution. Keys should be namespaced (`"custom/name"`). |
-| **model** | Default model for all nodes. Per-node config overrides. |
-| **verbosity** | `Verbosity.silent` (default), `.normal`, or `.verbose`. Per-node config overrides. |
+| **steps** | Node instances, `(alias, node)` tuples for name overrides, or nested lists for parallel fan-out. |
+| **verbosity** | `Verbosity.silent` (default), `.normal`, or `.verbose`. |
 | **extra_state** | Additional key-value pairs merged into the initial state dict. |
 
-## Registry
-
-Every built-in node has a string name. User nodes are registered under a namespace:
-
-```python
-from agentpipe import register, resolve, list_builtins
-
-list_builtins()
-# ['code_review', 'dependency_audit', 'docs_review',
-#  'git_commit', 'git_new_branch', 'implement_feature',
-#  'python_coverage', 'python_format', 'python_implement_feature',
-#  'python_lint', 'python_plan_feature', 'python_test',
-#  'security_audit']
-
-register("deploy", my_deploy_factory, namespace="acme")
-resolve("acme/deploy")  # returns my_deploy_factory
-```
+Duplicate node names are auto-suffixed (e.g. two `python_lint_node()` steps become `python_lint` and `python_lint_2`). Any `(state) -> dict` callable works as a step — the name is taken from `.name` or `__name__`.
 
 ## Pre-built pipelines
 
-**`python_new_feature`** — end-to-end: branch → plan → implement → lint → format → test → coverage → code review → security audit → docs review → dependency audit → final lint → commit.
+**`python check`** — lint → format → parallel (test + code review + security audit + docs review + dependency audit + type check) → resolve findings → final lint. No branch, no commit.
 
 ```bash
-python -m agentpipe.graphs.python_new_feature /path/to/repo "Add a /healthz endpoint"
-```
-
-**`python_quality_gate`** — lint → format → parallel (test + code review + security audit + docs review + dependency audit) → resolve findings → final lint. No branch, no commit.
-
-```bash
-python -m agentpipe.graphs.python_quality_gate /path/to/repo
+agentpipe python check /path/to/repo
+# or as a module:
+python -m agentpipe.graphs.python.check /path/to/repo
 ```
 
 ## Building blocks
@@ -294,9 +297,13 @@ export CLOUD_ML_REGION=us-east5
 export ANTHROPIC_VERTEX_PROJECT_ID=my-project
 ```
 
-Pass the provider-specific model ID directly:
+Model IDs are resolved automatically via `resolve_model()` — standard Anthropic IDs (e.g. `SONNET_4_6`) are translated to the correct Bedrock/Vertex ID when the env var is set. You can still pass a provider-specific ID to override:
 
 ```python
+# Automatic — uses resolve_model() internally:
+implement_feature_node(model="claude-sonnet-4-20250514")
+
+# Manual override:
 implement_feature_node(model="us.anthropic.claude-opus-4-7-20251201-v1:0")
 ```
 

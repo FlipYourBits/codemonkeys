@@ -4,7 +4,6 @@ Focuses on business logic and error paths that were uncovered:
 - budget.default_on_warn with display
 - display.node_skip/warn in live mode, default_prompt with content
 - resolve_findings.ask_findings_via_stdin interactive branches
-- pipeline._apply_overrides verbosity/model/prompt_fn injection
 - pipeline._node_exit parallel path, non-dict with display
 - pipeline._node_enter on_message/on_warn setup
 - pipeline.print_results no-display path
@@ -25,28 +24,18 @@ import pytest
 from agentpipe.budget import default_on_warn
 from agentpipe.display import Display, default_prompt
 from agentpipe.nodes.base import ClaudeAgentNode, Verbosity, _make_printer
-from agentpipe.nodes.git_commit import git_commit_node
-from agentpipe.nodes.python_implement_feature import python_implement_feature_node
-from agentpipe.nodes.python_plan_feature import python_plan_feature_node
+from agentpipe.nodes._old.git_commit import git_commit_node
+from agentpipe.nodes._old.python_implement_feature import python_implement_feature_node
+from agentpipe.nodes._old.python_plan_feature import python_plan_feature_node
 from agentpipe.nodes.resolve_findings import (
+    ResolveFindings,
     ask_findings_via_stdin,
-    resolve_findings_node,
 )
 from agentpipe.permissions import ask_via_stdin
 from agentpipe.pipeline import Pipeline
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
-
-
-@pytest.fixture(autouse=True)
-def _clean_user_registry():
-    from agentpipe import registry as reg
-
-    snapshot = dict(reg._USER_REGISTRY)
-    yield
-    reg._USER_REGISTRY.clear()
-    reg._USER_REGISTRY.update(snapshot)
 
 
 # ── budget ────────────────────────────────────────────────────────────────────
@@ -101,11 +90,11 @@ class TestDefaultPrompt:
         err = capsys.readouterr().err
         assert "the plan text" in err
 
-    def test_with_content_includes_separator(self, capsys, monkeypatch):
+    def test_with_content_includes_content(self, capsys, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda _: "y")
         default_prompt("OK?", content="some content")
         err = capsys.readouterr().err
-        assert "=" * 10 in err  # separator lines
+        assert "some content" in err
 
     def test_without_content_no_separator(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda _: "ok")
@@ -173,14 +162,14 @@ class TestAskFindingsViaStndin:
 
 class TestResolveFindingsInteractive:
     def test_interactive_returns_callable(self):
-        node = resolve_findings_node(interactive=True)
+        node = ResolveFindings(interactive=True)
         assert callable(node)
-        assert node.__name__ == "resolve_findings"
+        assert node.name == "resolve_findings"
 
     def test_non_interactive_returns_callable(self):
-        node = resolve_findings_node(interactive=False)
+        node = ResolveFindings(interactive=False)
         assert callable(node)
-        assert node.__name__ == "resolve_findings"
+        assert node.name == "resolve_findings"
 
 
 # ── permissions ───────────────────────────────────────────────────────────────
@@ -219,9 +208,9 @@ class TestMakePrinterEmitToDisplay:
 
         msg = MagicMock(spec=AssistantMessage)
         block = MagicMock(spec=TextBlock)
-        block.__class__ = TextBlock
+        block.__class__ = TextBlock  # type: ignore[assignment]
         block.text = text
-        msg.__class__ = AssistantMessage
+        msg.__class__ = AssistantMessage  # type: ignore[assignment]
         msg.content = [block]
         return msg
 
@@ -259,17 +248,18 @@ class TestClaudeAgentNodeRenderPromptWithPrior:
         node = ClaudeAgentNode(
             name="test_node",
             prompt_template="Task: {task_description}",
+            reads_from=["step_a"],
         )
         state = {
             "task_description": "do something",
-            "_prior_results": "## Prior results\n### step_a\noutput here\n",
+            "step_a": "output here",
         }
         rendered = node._render_prompt(state)
         assert rendered.startswith("## Prior results")
         assert "do something" in rendered
         assert "step_a" in rendered
 
-    def test_no_prior_returns_plain_prompt(self):
+    def test_no_reads_from_returns_plain_prompt(self):
         node = ClaudeAgentNode(
             name="test_node",
             prompt_template="Task: {task_description}",
@@ -278,12 +268,13 @@ class TestClaudeAgentNodeRenderPromptWithPrior:
         rendered = node._render_prompt(state)
         assert rendered == "Task: do something"
 
-    def test_empty_prior_returns_plain_prompt(self):
+    def test_empty_upstream_returns_plain_prompt(self):
         node = ClaudeAgentNode(
             name="test_node",
             prompt_template="Task: {task_description}",
+            reads_from=["step_a"],
         )
-        state = {"task_description": "do something", "_prior_results": ""}
+        state = {"task_description": "do something", "step_a": ""}
         rendered = node._render_prompt(state)
         assert rendered == "Task: do something"
 
@@ -323,65 +314,25 @@ class TestPromptFnOverride:
         assert node_no_override is not None
 
 
+# ── pipeline._node_enter prompt_fn ────────────────────────────────────────────
 
-# ── pipeline._apply_overrides ─────────────────────────────────────────────────
 
-
-class TestApplyOverridesVerbosity:
-    def _make_pipeline(self, verbosity=Verbosity.silent, **kw):
+class TestNodeEnterPromptFn:
+    def _make_pipeline(self):
         async def dummy(state):
             return {}
 
+        dummy.__name__ = "d"
         return Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/d"],
-            custom_nodes={"custom/d": dummy},
-            verbosity=verbosity,
-            **kw,
+            steps=[dummy],
         )
 
-    def test_verbosity_normal_forces_silent_on_node(self):
-        def factory(verbosity=Verbosity.silent):
-            return lambda state: {}
-
-        p = self._make_pipeline(Verbosity.normal)
-        overrides: dict = {}
-        p._apply_overrides(factory, overrides)
-        assert overrides["verbosity"] == Verbosity.silent
-
-    def test_verbosity_verbose_passes_through(self):
-        def factory(verbosity=Verbosity.silent):
-            return lambda state: {}
-
-        p = self._make_pipeline(Verbosity.verbose)
-        overrides: dict = {}
-        p._apply_overrides(factory, overrides)
-        assert overrides["verbosity"] == Verbosity.verbose
-
-    def test_model_injected_when_set(self):
-        def factory(model="default"):
-            return lambda state: {}
-
-        p = self._make_pipeline(model="claude-haiku-4-5")
-        overrides: dict = {}
-        p._apply_overrides(factory, overrides)
-        assert overrides["model"] == "claude-haiku-4-5"
-
-    def test_model_not_injected_when_unset(self):
-        def factory(model="default"):
-            return lambda state: {}
-
-        p = self._make_pipeline()  # no model
-        overrides: dict = {}
-        p._apply_overrides(factory, overrides)
-        assert "model" not in overrides
-
     def test_prompt_fn_injected_at_node_enter(self):
-        """prompt_fn is wired in _node_enter, not _apply_overrides."""
-
         class _Node:
             prompt_fn = None
+
             def __call__(self, state):
                 return {}
 
@@ -394,10 +345,9 @@ class TestApplyOverridesVerbosity:
         assert node.prompt_fn is mock_display.prompt
 
     def test_prompt_fn_not_injected_when_no_display(self):
-        """prompt_fn left alone when Display is None."""
-
         class _Node:
             prompt_fn = None
+
             def __call__(self, state):
                 return {}
 
@@ -406,29 +356,6 @@ class TestApplyOverridesVerbosity:
         p._display = None
         p._node_enter("test_node", node, {})
         assert node.prompt_fn is None
-
-    def test_overrides_non_empty_calls_factory_with_kwargs(self):
-        received = {}
-
-        def factory(verbosity=Verbosity.silent):
-            received["verbosity"] = verbosity
-            return lambda state: {}
-
-        p = self._make_pipeline(Verbosity.verbose)
-        p._apply_overrides(factory, {})
-        assert received["verbosity"] == Verbosity.verbose
-
-    def test_overrides_already_set_not_overwritten(self):
-        """Explicit override in config should not be replaced."""
-
-        def factory(verbosity=Verbosity.silent):
-            return lambda state: {}
-
-        p = self._make_pipeline(Verbosity.normal)
-        overrides = {"verbosity": Verbosity.verbose}
-        p._apply_overrides(factory, overrides)
-        # verbosity already in overrides — should stay as set
-        assert overrides["verbosity"] == Verbosity.verbose
 
 
 # ── pipeline._node_exit parallel path ────────────────────────────────────────
@@ -442,11 +369,12 @@ class TestNodeExitParallelPath:
         async def node_b(state):
             return {"b": "done_b", "last_cost_usd": 0.02}
 
+        node_a.__name__ = "a"
+        node_b.__name__ = "b"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[["custom/a", "custom/b"]],
-            custom_nodes={"custom/a": node_a, "custom/b": node_b},
+            steps=[[node_a, node_b]],
         )
         final = asyncio.run(p.run())
         assert final.get("a") == "done_a"
@@ -459,11 +387,12 @@ class TestNodeExitParallelPath:
         async def node_b(state):
             return {"b": "y", "last_cost_usd": 0.07}
 
+        node_a.__name__ = "a"
+        node_b.__name__ = "b"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[["custom/a", "custom/b"]],
-            custom_nodes={"custom/a": node_a, "custom/b": node_b},
+            steps=[[node_a, node_b]],
         )
         final = asyncio.run(p.run())
         assert final["total_cost_usd"] == pytest.approx(0.10)
@@ -474,11 +403,12 @@ class TestNodeExitParallelPath:
 
 class TestNodeExitNonDictWithDisplay:
     def test_display_node_done_called_for_non_dict(self):
+        nd = lambda s: "not a dict"
+        nd.__name__ = "node"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/node"],
-            custom_nodes={"custom/node": lambda s: "not a dict"},
+            steps=[nd],
         )
         mock_display = MagicMock()
         p._display = mock_display
@@ -493,7 +423,6 @@ class TestNodeExitNonDictWithDisplay:
 class TestNodeEnterCallbacks:
     def _minimal_pipeline(self):
         p = Pipeline.__new__(Pipeline)
-        p._requires_map = {}
         p._node_outputs = {}
         return p
 
@@ -549,29 +478,19 @@ class TestNodeEnterCallbacks:
         mock_display.warn.assert_called_once()
 
 
-
 # ── pipeline dedup name override ─────────────────────────────────────────────
 
 
 class TestDedupNameSetsOverride:
     def test_duplicate_step_sets_name_in_ordered_names(self):
+        from agentpipe.nodes._old.python_lint import python_lint_node
+
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["python_lint", "python_lint"],
+            steps=[python_lint_node(), python_lint_node()],
         )
         assert "python_lint_2" in p._ordered_names
-
-    def test_duplicate_step_build_sets_name_override(self):
-        """line 220: graph_name != base_name triggers overrides.setdefault('name')."""
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=["python_lint", "python_lint"],
-        )
-        # _build() will call _instantiate twice; second call hits line 220
-        app = p._build()
-        assert app is not None
 
 
 # ── pipeline.print_results with no prior display ──────────────────────────────
@@ -582,11 +501,11 @@ class TestPipelinePrintResultsNoDisplay:
         async def node(state):
             return {"x": "done", "last_cost_usd": 0.05}
 
+        node.__name__ = "x"
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["custom/x"],
-            custom_nodes={"custom/x": node},
+            steps=[node],
         )
         asyncio.run(p.run())
         # After run(), _display is None (stopped in finally block)
@@ -601,44 +520,22 @@ class TestPipelinePrintResultsNoDisplay:
 
 class TestTupleStepResolution:
     def test_tuple_step_resolves_and_runs(self):
+        from agentpipe.nodes._old.python_lint import python_lint_node
+
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=["python_lint", ("ruff_final", "python_lint")],
-            config={"ruff_final": {"name": "ruff_final"}},
+            steps=[python_lint_node(), ("ruff_final", python_lint_node())],
         )
         assert "ruff_final" in p._ordered_names
 
-    def test_tuple_step_config_applied(self):
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=[("my_lint", "python_lint")],
-            config={"my_lint": {"name": "my_lint"}},
-        )
-        assert "my_lint" in p._ordered_names
-
     def test_tuple_step_build_exercises_tuple_branch(self):
-        """lines 228-235: _resolve_step tuple branch is exercised by _build()."""
-        p = Pipeline(
-            working_dir="/tmp",
-            task="test",
-            steps=[("ruff_final", "python_lint")],
-            config={"ruff_final": {"name": "ruff_final"}},
-        )
-        app = p._build()
-        assert app is not None
+        from agentpipe.nodes._old.python_lint import python_lint_node
 
-    def test_tuple_step_with_config_overrides(self):
-        """Tuple step config overrides from both registry_key and graph_name."""
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[("aliased_lint", "python_lint")],
-            config={
-                "python_lint": {"fix": True},
-                "aliased_lint": {"name": "aliased_lint"},
-            },
+            steps=[("ruff_final", python_lint_node())],
         )
         app = p._build()
         assert app is not None
@@ -647,57 +544,9 @@ class TestTupleStepResolution:
 # ── graph main() functions ────────────────────────────────────────────────────
 
 
-class TestNewFeatureMain:
-    def test_main_calls_run_and_print_results(self):
-        from agentpipe.graphs.python_new_feature import main
-
-        mock_pipeline = MagicMock()
-        mock_pipeline.run = AsyncMock(
-            return_value={
-                "node_costs": {},
-                "total_cost_usd": 0.0,
-                "node_outputs": {},
-            }
-        )
-        mock_pipeline.print_results = MagicMock()
-        mock_pipeline._ordered_names = []
-        mock_pipeline._node_costs = {}
-
-        with patch(
-            "agentpipe.graphs.python_new_feature.build_pipeline",
-            return_value=mock_pipeline,
-        ):
-            asyncio.run(
-                main(
-                    "/tmp/repo",
-                    "add feature",
-                    base_ref="main",
-                    verbosity=Verbosity.normal,
-                )
-            )
-        mock_pipeline.run.assert_called_once()
-        mock_pipeline.print_results.assert_called_once()
-
-    def test_main_default_args(self):
-        from agentpipe.graphs.python_new_feature import main
-
-        mock_pipeline = MagicMock()
-        mock_pipeline.run = AsyncMock(
-            return_value={"node_costs": {}, "total_cost_usd": 0.0, "node_outputs": {}}
-        )
-        mock_pipeline.print_results = MagicMock()
-
-        with patch(
-            "agentpipe.graphs.python_new_feature.build_pipeline",
-            return_value=mock_pipeline,
-        ):
-            asyncio.run(main("/tmp/repo", "task"))
-        mock_pipeline.run.assert_called_once()
-
-
 class TestQualityGateMain:
     def test_main_calls_run_and_print_results(self):
-        from agentpipe.graphs.python_quality_gate import main
+        from agentpipe.graphs.python.check import main
 
         mock_pipeline = MagicMock()
         mock_pipeline.run = AsyncMock(
@@ -710,13 +559,12 @@ class TestQualityGateMain:
         mock_pipeline.print_results = MagicMock()
 
         with patch(
-            "agentpipe.graphs.python_quality_gate.build_pipeline",
+            "agentpipe.graphs.python.check.build_pipeline",
             return_value=mock_pipeline,
         ):
             asyncio.run(
                 main(
                     "/tmp/repo",
-                    mode="diff",
                     base_ref="main",
                     interactive=True,
                     verbosity=Verbosity.normal,
@@ -726,7 +574,7 @@ class TestQualityGateMain:
         mock_pipeline.print_results.assert_called_once()
 
     def test_main_non_interactive_mode(self):
-        from agentpipe.graphs.python_quality_gate import main
+        from agentpipe.graphs.python.check import main
 
         mock_pipeline = MagicMock()
         mock_pipeline.run = AsyncMock(
@@ -735,8 +583,8 @@ class TestQualityGateMain:
         mock_pipeline.print_results = MagicMock()
 
         with patch(
-            "agentpipe.graphs.python_quality_gate.build_pipeline",
+            "agentpipe.graphs.python.check.build_pipeline",
             return_value=mock_pipeline,
         ):
-            asyncio.run(main("/tmp/repo", mode="full", interactive=False))
+            asyncio.run(main("/tmp/repo", interactive=False))
         mock_pipeline.run.assert_called_once()

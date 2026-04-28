@@ -72,22 +72,22 @@ class TestAskViaStdin:
 # ---------------------------------------------------------------------------
 # nodes/python_plan_feature.ask_plan_feedback_via_stdin  (lines 50-62)
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.python_plan_feature import ask_plan_feedback_via_stdin
+from agentpipe.nodes._old.python_plan_feature import ask_plan_feedback_via_stdin
 
 
 class TestAskPlanFeedback:
     @pytest.mark.asyncio
     async def test_non_tty_returns_none(self):
-        with patch("agentpipe.nodes.python_plan_feature.sys") as mock_sys:
+        with patch("agentpipe.nodes._old.python_plan_feature.sys") as mock_sys:
             mock_sys.stdin.isatty.return_value = False
             assert await ask_plan_feedback_via_stdin("plan text") is None
 
     @pytest.mark.asyncio
     async def test_tty_approve_empty(self):
         with (
-            patch("agentpipe.nodes.python_plan_feature.sys") as mock_sys,
+            patch("agentpipe.nodes._old.python_plan_feature.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.python_plan_feature.asyncio.to_thread",
+                "agentpipe.nodes._old.python_plan_feature.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="",
             ),
@@ -99,9 +99,9 @@ class TestAskPlanFeedback:
     @pytest.mark.asyncio
     async def test_tty_feedback(self):
         with (
-            patch("agentpipe.nodes.python_plan_feature.sys") as mock_sys,
+            patch("agentpipe.nodes._old.python_plan_feature.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.python_plan_feature.asyncio.to_thread",
+                "agentpipe.nodes._old.python_plan_feature.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="add error handling",
             ),
@@ -116,22 +116,22 @@ class TestAskPlanFeedback:
 # ---------------------------------------------------------------------------
 # nodes/python_implement_feature.ask_impl_feedback_via_stdin  (lines 51-63)
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.python_implement_feature import ask_impl_feedback_via_stdin
+from agentpipe.nodes._old.python_implement_feature import ask_impl_feedback_via_stdin
 
 
 class TestAskImplFeedback:
     @pytest.mark.asyncio
     async def test_non_tty_returns_none(self):
-        with patch("agentpipe.nodes.python_implement_feature.sys") as mock_sys:
+        with patch("agentpipe.nodes._old.python_implement_feature.sys") as mock_sys:
             mock_sys.stdin.isatty.return_value = False
             assert await ask_impl_feedback_via_stdin("summary") is None
 
     @pytest.mark.asyncio
     async def test_tty_approve(self):
         with (
-            patch("agentpipe.nodes.python_implement_feature.sys") as mock_sys,
+            patch("agentpipe.nodes._old.python_implement_feature.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.python_implement_feature.asyncio.to_thread",
+                "agentpipe.nodes._old.python_implement_feature.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="y",
             ),
@@ -143,9 +143,9 @@ class TestAskImplFeedback:
     @pytest.mark.asyncio
     async def test_tty_feedback(self):
         with (
-            patch("agentpipe.nodes.python_implement_feature.sys") as mock_sys,
+            patch("agentpipe.nodes._old.python_implement_feature.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.python_implement_feature.asyncio.to_thread",
+                "agentpipe.nodes._old.python_implement_feature.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="rename the var",
             ),
@@ -158,22 +158,22 @@ class TestAskImplFeedback:
 # ---------------------------------------------------------------------------
 # nodes/git_commit: ask_push_via_stdin (lines 53-67) and _push (lines 71-80)
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.git_commit import _push, ask_push_via_stdin
+from agentpipe.nodes._old.git_commit import _push, ask_push_via_stdin
 
 
 class TestAskPushViaStdin:
     @pytest.mark.asyncio
     async def test_non_tty_returns_push(self):
-        with patch("agentpipe.nodes.git_commit.sys") as mock_sys:
+        with patch("agentpipe.nodes._old.git_commit.sys") as mock_sys:
             mock_sys.stdin.isatty.return_value = False
             assert await ask_push_via_stdin("summary") == "push"
 
     @pytest.mark.asyncio
     async def test_tty_push(self):
         with (
-            patch("agentpipe.nodes.git_commit.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_commit.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_commit.asyncio.to_thread",
+                "agentpipe.nodes._old.git_commit.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="p",
             ),
@@ -185,9 +185,9 @@ class TestAskPushViaStdin:
     @pytest.mark.asyncio
     async def test_tty_skip(self):
         with (
-            patch("agentpipe.nodes.git_commit.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_commit.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_commit.asyncio.to_thread",
+                "agentpipe.nodes._old.git_commit.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="s",
             ),
@@ -199,9 +199,9 @@ class TestAskPushViaStdin:
     @pytest.mark.asyncio
     async def test_tty_feedback(self):
         with (
-            patch("agentpipe.nodes.git_commit.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_commit.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_commit.asyncio.to_thread",
+                "agentpipe.nodes._old.git_commit.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="amend the message",
             ),
@@ -213,7 +213,7 @@ class TestAskPushViaStdin:
 
 class TestPush:
     def test_push_success(self):
-        with patch("agentpipe.nodes.git_commit.subprocess.run") as mock_run:
+        with patch("agentpipe.nodes._old.git_commit.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stderr="To origin\n  main -> main", stdout=""
             )
@@ -221,7 +221,7 @@ class TestPush:
             assert "origin" in result
 
     def test_push_failure(self):
-        with patch("agentpipe.nodes.git_commit.subprocess.run") as mock_run:
+        with patch("agentpipe.nodes._old.git_commit.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=1, stderr="fatal: no upstream", stdout=""
             )
@@ -229,7 +229,7 @@ class TestPush:
             assert "push failed" in result
 
     def test_push_success_stderr_empty_falls_to_stdout(self):
-        with patch("agentpipe.nodes.git_commit.subprocess.run") as mock_run:
+        with patch("agentpipe.nodes._old.git_commit.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stderr="", stdout="Everything up-to-date"
             )
@@ -241,7 +241,7 @@ class TestPush:
 # nodes/git_new_branch: helper functions (lines 86, 90-91, 95-96)
 # and ask_* functions (lines 104-116, 124-140)
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.git_new_branch import (
+from agentpipe.nodes._old.git_new_branch import (
     _is_dirty,
     _git_status_summary,
     _run,
@@ -257,17 +257,17 @@ class TestGitNewBranchHelpers:
         assert result.stdout.strip() == "hi"
 
     def test_is_dirty_clean(self):
-        with patch("agentpipe.nodes.git_new_branch._run") as mock:
+        with patch("agentpipe.nodes._old.git_new_branch._run") as mock:
             mock.return_value = MagicMock(stdout="")
             assert _is_dirty(".") is False
 
     def test_is_dirty_dirty(self):
-        with patch("agentpipe.nodes.git_new_branch._run") as mock:
+        with patch("agentpipe.nodes._old.git_new_branch._run") as mock:
             mock.return_value = MagicMock(stdout=" M file.py\n")
             assert _is_dirty(".") is True
 
     def test_git_status_summary(self):
-        with patch("agentpipe.nodes.git_new_branch._run") as mock:
+        with patch("agentpipe.nodes._old.git_new_branch._run") as mock:
             mock.return_value = MagicMock(stdout=" M file.py\n")
             assert _git_status_summary(".") == "M file.py"
 
@@ -275,7 +275,7 @@ class TestGitNewBranchHelpers:
 class TestAskBranchNameViaStdin:
     @pytest.mark.asyncio
     async def test_non_tty_auto_accept(self):
-        with patch("agentpipe.nodes.git_new_branch.sys") as mock_sys:
+        with patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys:
             mock_sys.stdin.isatty.return_value = False
             action, name = await ask_branch_name_via_stdin("feat/test")
             assert action == "accept"
@@ -284,9 +284,9 @@ class TestAskBranchNameViaStdin:
     @pytest.mark.asyncio
     async def test_tty_accept(self):
         with (
-            patch("agentpipe.nodes.git_new_branch.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_new_branch.asyncio.to_thread",
+                "agentpipe.nodes._old.git_new_branch.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="y",
             ),
@@ -299,9 +299,9 @@ class TestAskBranchNameViaStdin:
     @pytest.mark.asyncio
     async def test_tty_rename(self):
         with (
-            patch("agentpipe.nodes.git_new_branch.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_new_branch.asyncio.to_thread",
+                "agentpipe.nodes._old.git_new_branch.asyncio.to_thread",
                 new_callable=AsyncMock,
             ) as mock_to_thread,
         ):
@@ -314,9 +314,9 @@ class TestAskBranchNameViaStdin:
     @pytest.mark.asyncio
     async def test_tty_abort(self):
         with (
-            patch("agentpipe.nodes.git_new_branch.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_new_branch.asyncio.to_thread",
+                "agentpipe.nodes._old.git_new_branch.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="a",
             ),
@@ -329,16 +329,16 @@ class TestAskBranchNameViaStdin:
 class TestAskDirtyTreeViaStdin:
     @pytest.mark.asyncio
     async def test_non_tty_returns_carry(self):
-        with patch("agentpipe.nodes.git_new_branch.sys") as mock_sys:
+        with patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys:
             mock_sys.stdin.isatty.return_value = False
             assert await ask_dirty_tree_via_stdin("M file.py") == "carry"
 
     @pytest.mark.asyncio
     async def test_tty_stash(self):
         with (
-            patch("agentpipe.nodes.git_new_branch.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_new_branch.asyncio.to_thread",
+                "agentpipe.nodes._old.git_new_branch.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="s",
             ),
@@ -349,9 +349,9 @@ class TestAskDirtyTreeViaStdin:
     @pytest.mark.asyncio
     async def test_tty_commit(self):
         with (
-            patch("agentpipe.nodes.git_new_branch.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_new_branch.asyncio.to_thread",
+                "agentpipe.nodes._old.git_new_branch.asyncio.to_thread",
                 new_callable=AsyncMock,
             ) as mock_to_thread,
         ):
@@ -363,9 +363,9 @@ class TestAskDirtyTreeViaStdin:
     @pytest.mark.asyncio
     async def test_tty_abort(self):
         with (
-            patch("agentpipe.nodes.git_new_branch.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_new_branch.asyncio.to_thread",
+                "agentpipe.nodes._old.git_new_branch.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="a",
             ),
@@ -376,9 +376,9 @@ class TestAskDirtyTreeViaStdin:
     @pytest.mark.asyncio
     async def test_tty_carry_default(self):
         with (
-            patch("agentpipe.nodes.git_new_branch.sys") as mock_sys,
+            patch("agentpipe.nodes._old.git_new_branch.sys") as mock_sys,
             patch(
-                "agentpipe.nodes.git_new_branch.asyncio.to_thread",
+                "agentpipe.nodes._old.git_new_branch.asyncio.to_thread",
                 new_callable=AsyncMock,
                 return_value="b",
             ),
@@ -390,7 +390,7 @@ class TestAskDirtyTreeViaStdin:
 # ---------------------------------------------------------------------------
 # nodes/python_coverage: full mode  (line 73)
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.python_coverage import python_coverage_node
+from agentpipe.nodes._old.python_coverage import python_coverage_node
 
 
 class TestPythonCoverageNode:
@@ -409,7 +409,7 @@ class TestPythonCoverageNode:
 # ---------------------------------------------------------------------------
 # nodes/implement_feature: constructor  (line 55)
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.implement_feature import implement_feature_node
+from agentpipe.nodes._old.implement_feature import implement_feature_node
 from agentpipe.nodes.base import ClaudeAgentNode
 
 
@@ -425,42 +425,9 @@ class TestImplementFeatureNode:
 
 
 # ---------------------------------------------------------------------------
-# graphs/python_new_feature.build_pipeline  (partial coverage)
-# ---------------------------------------------------------------------------
-from agentpipe.graphs.python_new_feature import build_pipeline as build_new_feature
-
-
-class TestPythonNewFeaturePipeline:
-    def test_builds_with_defaults(self):
-        p = build_new_feature("/tmp/repo", "add retry")
-        assert p.working_dir == "/tmp/repo"
-        assert len(p._ordered_names) > 0
-
-    def test_steps_include_branch_and_commit(self):
-        p = build_new_feature("/tmp/repo", "add retry")
-        assert p.steps[0] == "git_new_branch"
-        assert p.steps[-1] == "git_commit"
-
-    def test_config_sets_diff_mode(self):
-        p = build_new_feature("/tmp/repo", "task")
-        assert p.config.get("code_review") == {"mode": "diff"}
-        assert p.config.get("security_audit") == {"mode": "diff"}
-
-    def test_custom_base_ref(self):
-        p = build_new_feature("/tmp/repo", "task", base_ref="develop")
-        assert p.extra_state.get("base_ref") == "develop"
-
-    def test_verbosity_passthrough(self):
-        from agentpipe.nodes.base import Verbosity
-
-        p = build_new_feature("/tmp/repo", "t", verbosity=Verbosity.verbose)
-        assert p.verbosity == Verbosity.verbose
-
-
-# ---------------------------------------------------------------------------
 # nodes/git_commit: git_commit_node constructor
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.git_commit import git_commit_node
+from agentpipe.nodes._old.git_commit import git_commit_node
 
 
 class TestGitCommitNodeConstruction:
@@ -479,7 +446,7 @@ class TestGitCommitNodeConstruction:
 # ---------------------------------------------------------------------------
 # nodes/git_new_branch: git_new_branch_node constructor
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.git_new_branch import git_new_branch_node
+from agentpipe.nodes._old.git_new_branch import git_new_branch_node
 
 
 class TestGitNewBranchNodeConstruction:
@@ -498,7 +465,7 @@ class TestGitNewBranchNodeConstruction:
 # ---------------------------------------------------------------------------
 # nodes/security_audit: security_audit_node constructor
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.security_audit import security_audit_node
+from agentpipe.nodes._old.security_audit import security_audit_node
 
 
 class TestSecurityAuditNodeConstruction:
@@ -519,7 +486,7 @@ class TestSecurityAuditNodeConstruction:
 # ---------------------------------------------------------------------------
 # nodes/python_plan_feature: constructor
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.python_plan_feature import python_plan_feature_node
+from agentpipe.nodes._old.python_plan_feature import python_plan_feature_node
 
 
 class TestPythonPlanFeatureNodeConstruction:
@@ -537,7 +504,7 @@ class TestPythonPlanFeatureNodeConstruction:
 # ---------------------------------------------------------------------------
 # nodes/python_implement_feature: constructor
 # ---------------------------------------------------------------------------
-from agentpipe.nodes.python_implement_feature import python_implement_feature_node
+from agentpipe.nodes._old.python_implement_feature import python_implement_feature_node
 
 
 class TestPythonImplFeatureNodeConstruction:

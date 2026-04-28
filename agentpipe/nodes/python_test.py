@@ -1,68 +1,111 @@
-"""Pytest node: runs the test suite, analyzes failures, and fixes them.
-
-The agent always attempts to run tests, diagnose, and fix. Permissions
-control what actually happens: deny Edit/Write for report-only, allow
-for auto-fix, or use ask_via_stdin for interactive approval per edit.
-"""
+"""Run pytest and analyze failures."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from pathlib import Path
-from typing import Any
+from agentpipe.models import SONNET_4_6
+from agentpipe.nodes.base import ClaudeAgentNode
 
-from agentpipe.nodes.base import ClaudeAgentNode, Verbosity
-from agentpipe.permissions import UnmatchedPolicy
+_SKILL = """\
+# Test analysis
 
-_SYSTEM_PROMPT = (
-    "You are a senior engineer running the project's test suite. "
-    "Use Bash to run pytest (or the project's test runner). "
-    "Analyze any failures: read the failing test and the code under test "
-    "to identify the root cause. Fix the underlying bug — do not weaken "
-    "assertions or delete tests. Make the smallest correct change. "
-    "Re-run the tests to verify your fix. Do not push. "
-    "Output JSON only as your final message — a list of findings with "
-    "file, line, severity, category, description, recommendation, and "
-    "whether you fixed it."
-)
+You run the project's test suite and analyze failures.
+Report findings only — do not fix issues.
 
-_ALLOW = [
-    "Read",
-    "Glob",
-    "Grep",
-    "Edit",
-    "Write",
-    "Bash(git diff*)",
-    "Bash(git log*)",
-    "Bash(git show*)",
-    "Bash(git blame*)",
-    "Bash(git status*)",
-    "Bash(git ls-files*)",
-    "Bash(python -m pytest*)",
-    "Bash(python -m unittest*)",
-]
+## Method
+
+1. Run `python -m pytest -x -q --tb=short --no-header` to
+   execute the test suite. If the project has pytest config
+   in pyproject.toml, those settings apply automatically.
+2. For each failure: read the failing test and the code
+   under test to identify the root cause.
+3. Report each failure as a finding with the root cause
+   and a concrete recommended fix.
+
+## Categories
+
+### `test_failure`
+- Assertion failure caused by a bug in the code under test
+- Regression — previously passing test now fails
+
+### `test_error`
+- Test infrastructure issues (missing fixtures, import
+  errors, configuration problems)
+
+## Triage
+
+- Skip expected failures (xfail) and skipped tests.
+- If the same root cause produces multiple test failures,
+  report it once with the most informative test.
+
+## Exclusions — DO NOT REPORT
+
+- Code quality or style issues (code review owns these)
+- Security vulnerabilities (security audit owns these)
+- Documentation drift (docs review owns these)
+- Dependency vulnerabilities (dependency audit owns these)
+
+## Output
+
+Final reply must be a single fenced JSON block matching
+this schema and nothing after it:
+
+```json
+{
+  "findings": [
+    {
+      "file": "path/to/file.py",
+      "line": 42,
+      "severity": "HIGH" | "MEDIUM" | "LOW",
+      "category": "test_failure",
+      "source": "python_test",
+      "description": "One-sentence statement of the failure.",
+      "recommendation": "What to change to fix it.",
+      "confidence": "high"
+    }
+  ],
+  "summary": {
+    "tests_run": 50,
+    "tests_passed": 48,
+    "tests_failed": 2,
+    "tests_skipped": 0,
+    "tests_xfailed": 0,
+    "high": 1,
+    "medium": 1,
+    "low": 0
+  }
+}
+```
+
+Severity guide:
+- **HIGH**: test failure from a bug that affects production
+- **MEDIUM**: edge case regression or minor breakage
+- **LOW**: flaky test or configuration issue
+
+If all tests pass, return an empty `findings` array."""
 
 
-def python_test_node(
-    *,
-    name: str = "python_test",
-    extra_skills: Sequence[str | Path] = (),
-    allow: Sequence[str] | None = None,
-    deny: Sequence[str] | None = None,
-    on_unmatched: UnmatchedPolicy = "deny",
-    max_turns: int | None = None,
-    verbosity: Verbosity = Verbosity.silent,
-    **kwargs: Any,
-) -> ClaudeAgentNode:
-    return ClaudeAgentNode(
-        name=name,
-        system_prompt=_SYSTEM_PROMPT,
-        skills=[*extra_skills],
-        allow=list(allow) if allow is not None else _ALLOW,
-        deny=list(deny) if deny is not None else [],
-        on_unmatched=on_unmatched,
-        prompt_template="Run the test suite in {working_dir} and analyze any failures.",
-        max_turns=max_turns,
-        verbosity=verbosity,
-        **kwargs,
-    )
+class PythonTest(ClaudeAgentNode):
+    def __init__(self, **kwargs) -> None:
+        kwargs.setdefault("model", SONNET_4_6)
+        super().__init__(
+            name="python_test",
+            system_prompt=_SKILL,
+            prompt_template="Run the test suite and analyze any failures.",
+            allow=[
+                "Read",
+                "Glob",
+                "Grep",
+                "Bash(git diff*)",
+                "Bash(git log*)",
+                "Bash(git show*)",
+                "Bash(git blame*)",
+                "Bash(git status*)",
+                "Bash(git ls-files*)",
+                "Bash(pytest*)",
+                "Bash(python -m pytest*)",
+                "Bash(python -m unittest*)",
+            ],
+            deny=[],
+            on_unmatched="deny",
+            **kwargs,
+        )

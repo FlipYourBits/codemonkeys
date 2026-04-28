@@ -1,22 +1,23 @@
+"""Format Python code with ruff."""
+
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+import sys
 
 from agentpipe.nodes.base import ShellNode, Verbosity
-from agentpipe.nodes.python_lint import _build_argv
 
 
-def python_format_node(
-    *,
-    name: str = "python_format",
-    target: str | Callable[[dict[str, Any]], str] = ".",
-    extra_args: list[str] | None = None,
-    verbosity: Verbosity = Verbosity.silent,
-) -> ShellNode:
-    return ShellNode(
-        name=name,
-        command=_build_argv("format", False, list(extra_args or []), target),
-        check=False,
-        verbosity=verbosity,
-    )
+class PythonFormat(ShellNode):
+    def __init__(
+        self,
+        *,
+        timeout: float | None = None,
+        verbosity: Verbosity = Verbosity.silent,
+    ) -> None:
+        super().__init__(
+            name="python_format",
+            command=[sys.executable, "-m", "ruff", "format", "."],
+            check=False,
+            timeout=timeout,
+            verbosity=verbosity,
+        )

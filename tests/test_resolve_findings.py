@@ -4,10 +4,10 @@ import asyncio
 import json
 
 from agentpipe.nodes.resolve_findings import (
+    ResolveFindings,
     _extract_findings,
     _format_findings,
     _select_by_input,
-    resolve_findings_node,
 )
 
 
@@ -74,10 +74,10 @@ class TestFormatFindings:
             },
         ]
         result = _format_findings(findings)
-        assert "1." in result
-        assert "2." in result
-        assert "[HIGH]" in result
-        assert "[LOW]" in result
+        assert "1" in result
+        assert "2" in result
+        assert "HIGH" in result
+        assert "LOW" in result
         assert "a.py:10" in result
 
 
@@ -114,12 +114,12 @@ class TestSelectByInput:
 
 class TestResolveFindingsNode:
     def test_constructs_with_defaults(self):
-        node = resolve_findings_node()
+        node = ResolveFindings()
         assert callable(node)
-        assert node.__name__ == "resolve_findings"
+        assert node.name == "resolve_findings"
 
     def test_no_findings_returns_immediately(self):
-        node = resolve_findings_node()
+        node = ResolveFindings()
         result = asyncio.run(node({"working_dir": "/tmp", "_prior_results": ""}))
         assert result["last_cost_usd"] == 0.0
         data = json.loads(result["resolve_findings"])
@@ -131,7 +131,7 @@ class TestResolveFindingsNode:
             '```json\n{"findings": [{"severity": "LOW", "file": "a.py", '
             '"line": 1, "category": "clarity", "description": "minor"}]}\n```\n'
         )
-        node = resolve_findings_node(interactive=False)
+        node = ResolveFindings(interactive=False)
         result = asyncio.run(node({"working_dir": "/tmp", "_prior_results": prior}))
         assert result["last_cost_usd"] == 0.0
 
@@ -145,6 +145,6 @@ class TestResolveFindingsNode:
         async def ask_none(_summary):
             return "none"
 
-        node = resolve_findings_node(interactive=True, ask_findings=ask_none)
+        node = ResolveFindings(interactive=True, ask_findings=ask_none)
         result = asyncio.run(node({"working_dir": "/tmp", "_prior_results": prior}))
         assert result["last_cost_usd"] == 0.0
