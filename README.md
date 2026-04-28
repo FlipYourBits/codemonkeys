@@ -3,6 +3,7 @@
 Deterministic AI pipelines with per-node model selection, least-privilege permissions, and guaranteed execution. Built on the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
 
 ![Pipeline status output](assets/pipeline-status.png)
+
 *Python quality gate mid-run — shell nodes complete in seconds, Claude agents run in parallel with per-node cost tracking.*
 
 ![Interactive findings](assets/interactive-findings.png)
@@ -64,30 +65,31 @@ export ANTHROPIC_API_KEY=...
 
 ```python
 import asyncio
-from agentpipe import (
-    Pipeline,
-    git_new_branch_node,
-    implement_feature_node,
-    python_lint_node,
-    python_format_node,
-    code_review_node,
-    security_audit_node,
-    python_test_node,
-)
+from agentpipe import Pipeline, Verbosity
+from agentpipe.nodes.python_lint import PythonLint
+from agentpipe.nodes.python_format import PythonFormat
+from agentpipe.nodes.python_code_review import PythonCodeReview
+from agentpipe.nodes.python_security_audit import PythonSecurityAudit
+from agentpipe.nodes.python_test import PythonTest
+from agentpipe.nodes.resolve_findings import ResolveFindings
 
 async def main():
+    test = PythonTest()
+    review = PythonCodeReview()
+    security = PythonSecurityAudit()
+
     pipeline = Pipeline(
         working_dir="/path/to/repo",
-        task="Add a /healthz endpoint that returns 200 OK",
+        task="Check code quality",
         steps=[
-            git_new_branch_node(),
-            implement_feature_node(),
-            python_lint_node(),
-            python_format_node(),
-            [code_review_node(), security_audit_node(), python_test_node()],
+            PythonLint(),
+            PythonFormat(),
+            [test, review, security],  # parallel
+            ResolveFindings(reads_from=[test, review, security]),
         ],
+        verbosity=Verbosity.normal,
     )
-    result = await pipeline.run()
+    await pipeline.run()
     pipeline.print_results()
 
 asyncio.run(main())
@@ -97,41 +99,33 @@ Steps are node instances. Lists create parallel fan-out via `asyncio.gather`. Ea
 
 ## Built-in nodes
 
-Every node does one thing. Call the factory to get a configured instance.
+Every node does one thing. Instantiate the class to get a configured node.
 
-### Workflow
-
-| Node | What it does |
-|---|---|
-| `git_new_branch` | Generates a branch name from the task description. Interactive mode prompts for approval and handles dirty-tree safety. |
-| `git_commit` | Reviews uncommitted changes, writes a conventional commit message, stages and commits. |
-| `implement_feature` | Implements a feature described in `task_description`. Reads the repo, proposes the smallest change, makes edits. |
-| `python_plan_feature` | Interactive planning: explores the codebase and produces a step-by-step implementation plan. |
-| `python_implement_feature` | Python-specific implementation with interactive review. Follows clean-code and security guidelines. |
-
-### Quality
+### Quality (ClaudeAgentNodes)
 
 Each owns a single concern. They do not overlap — code review doesn't run linters, security audit doesn't check code quality, etc.
 
-| Node | What it does |
+| Class | What it does |
 |---|---|
-| `code_review` | Semantic code review. Logic errors, deep nesting, error handling gaps, resource leaks, concurrency bugs, dead code. Does NOT run linters or tests. |
-| `security_audit` | Traces data flow from inputs to sinks. Injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. No external scanners. |
-| `docs_review` | Doc drift detection. Checks docstrings, README, CHANGELOG against actual code for accuracy. |
-| `python_test` | Runs pytest, reads failing tests and the code under test to identify root causes. |
-| `python_coverage` | Runs `pytest --cov`, identifies uncovered lines and branches. Supports `mode="diff"` or `mode="full"`. |
-| `python_dependency_audit` | Runs `pip-audit` to scan for CVEs, upgrades affected packages to patched versions. |
+| `PythonCodeReview` | Semantic code review. Logic errors, deep nesting, error handling gaps, resource leaks, concurrency bugs, dead code. Does NOT run linters or tests. |
+| `PythonSecurityAudit` | Traces data flow from inputs to sinks. Injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. No external scanners. |
+| `DocsReview` | Doc drift detection. Checks docstrings, README, CHANGELOG against actual code for accuracy. |
+| `PythonTest` | Runs pytest, reads failing tests and the code under test to identify root causes. |
+| `PythonDependencyAudit` | Runs `pip-audit` to scan for CVEs, upgrades affected packages to patched versions. |
+| `ResolveFindings` | Extracts findings from upstream nodes, optionally prompts the user for selection, delegates to an inner agent to apply fixes. |
+
+All `ClaudeAgentNode` quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing.
 
 ### Python tooling (ShellNodes)
 
-| Node | What it does |
+| Class | What it does |
 |---|---|
-| `python_lint` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
-| `python_format` | Runs `ruff format`. |
+| `PythonLint` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
+| `PythonFormat` | Runs `ruff format`. |
+| `PythonTypeCheck` | Runs `mypy --output json` and returns findings in standard JSON format. |
+| `PythonEnsureTools` | Preflight check — installs `agentpipe[python]` tools if missing. |
 
 These are `ShellNode` instances — they run subprocesses directly, no LLM call. They don't accept `model`, `allow`/`deny`, or `extra_skills`.
-
-All `ClaudeAgentNode` quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing.
 
 ## Permissions
 
@@ -144,18 +138,20 @@ Every node always tries to find and fix issues. Permissions decide what actually
    - `ask_via_stdin`: prompt the user per call
 
 ```python
+from agentpipe.nodes.python_code_review import PythonCodeReview
+from agentpipe.permissions import ask_via_stdin
+
 # Report only (default):
-code_review_node()
+PythonCodeReview()
 
 # Auto-fix everything:
-code_review_node(
+PythonCodeReview(
     allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
     deny=["Bash(git push*)"],
 )
 
 # Prompt user per edit:
-from agentpipe import ask_via_stdin
-code_review_node(
+PythonCodeReview(
     allow=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
     deny=["Bash(git push*)"],
     on_unmatched=ask_via_stdin,
@@ -180,24 +176,25 @@ Deny always wins over allow.
 `Pipeline` takes node instances directly and runs them with `asyncio`.
 
 ```python
-from agentpipe import (
-    Pipeline, python_lint_node, python_test_node,
-    code_review_node, security_audit_node, resolve_findings_node,
-)
-from agentpipe.nodes.base import Verbosity
+from agentpipe import Pipeline, Verbosity
+from agentpipe.nodes.python_lint import PythonLint
+from agentpipe.nodes.python_test import PythonTest
+from agentpipe.nodes.python_code_review import PythonCodeReview
+from agentpipe.nodes.python_security_audit import PythonSecurityAudit
+from agentpipe.nodes.resolve_findings import ResolveFindings
 
-test = python_test_node()
-review = code_review_node(mode="diff")
-security = security_audit_node()
+test = PythonTest()
+review = PythonCodeReview(scope="diff")
+security = PythonSecurityAudit()
 
 Pipeline(
     working_dir="/path/to/repo",
     task="description of what to do",
     steps=[
-        python_lint_node(),
+        PythonLint(),
         [test, review, security],  # parallel
-        resolve_findings_node(reads_from=[test, review, security]),
-        ("lint_final", python_lint_node()),  # tuple: (alias, node) for name override
+        ResolveFindings(reads_from=[test, review, security]),
+        ("lint_final", PythonLint()),  # tuple: (alias, node) for name override
     ],
     verbosity=Verbosity.normal,
     extra_state={"base_ref": "main"},
@@ -209,10 +206,10 @@ Nodes that consume upstream output declare `reads_from` — a list of node insta
 | Parameter | What it does |
 |---|---|
 | **steps** | Node instances, `(alias, node)` tuples for name overrides, or nested lists for parallel fan-out. |
-| **verbosity** | `Verbosity.silent` (default), `.normal`, or `.verbose`. |
+| **verbosity** | `Verbosity.silent` (default), `.status` (table only), `.normal`, or `.verbose`. |
 | **extra_state** | Additional key-value pairs merged into the initial state dict. |
 
-Duplicate node names are auto-suffixed (e.g. two `python_lint_node()` steps become `python_lint` and `python_lint_2`). Any `(state) -> dict` callable works as a step — the name is taken from `.name` or `__name__`.
+Duplicate node names are auto-suffixed (e.g. two `PythonLint()` steps become `python_lint` and `python_lint_2`). Any `(state) -> dict` callable works as a step — the name is taken from `.name` or `__name__`.
 
 ## Pre-built pipelines
 
@@ -271,7 +268,7 @@ Language-specific clean code and security guidance are constants under `agentpip
 ```python
 from agentpipe.skills import PYTHON_CLEAN_CODE, PYTHON_SECURITY
 
-implement_feature_node(extra_skills=[PYTHON_CLEAN_CODE])
+PythonCodeReview(extra_skills=[PYTHON_CLEAN_CODE])
 ```
 
 | Constant | Language |
@@ -280,7 +277,7 @@ implement_feature_node(extra_skills=[PYTHON_CLEAN_CODE])
 | `JAVASCRIPT_CLEAN_CODE`, `JAVASCRIPT_SECURITY` | JavaScript |
 | `RUST_CLEAN_CODE`, `RUST_SECURITY` | Rust |
 
-Pass via `extra_skills` on any node factory, or `skills` on a raw `ClaudeAgentNode`.
+Pass via `extra_skills` on any node class, or `skills` on a raw `ClaudeAgentNode`.
 
 ## Bedrock and Vertex AI
 
@@ -301,15 +298,15 @@ Model IDs are resolved automatically via `resolve_model()` — standard Anthropi
 
 ```python
 # Automatic — uses resolve_model() internally:
-implement_feature_node(model="claude-sonnet-4-20250514")
+PythonCodeReview(model="claude-sonnet-4-20250514")
 
 # Manual override:
-implement_feature_node(model="us.anthropic.claude-opus-4-7-20251201-v1:0")
+PythonCodeReview(model="us.anthropic.claude-opus-4-7-20251201-v1:0")
 ```
 
 ## Tests
 
 ```bash
-pip install -e ".[dev]"
-pytest
+.venv/bin/python3 -m pip install -e ".[dev]"
+.venv/bin/python3 -m pytest tests/ -x -q --no-header
 ```
