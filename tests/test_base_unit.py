@@ -7,6 +7,7 @@ import subprocess
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import BaseModel, Field
 
 from agentpipe.nodes.base import (
     ClaudeAgentNode,
@@ -330,3 +331,32 @@ class TestShellNode:
         )
         with pytest.raises(subprocess.TimeoutExpired):
             asyncio.run(node({"working_dir": None}))
+
+
+# ---------- ClaudeAgentNode output= ----------
+
+
+class TestClaudeAgentNodeOutput:
+    def test_output_appends_instructions_to_system_prompt(self):
+        class MyOutput(BaseModel):
+            value: int = Field(examples=[42])
+
+        node = ClaudeAgentNode(name="t", output=MyOutput)
+        assert "## Output" in node.system_prompt
+        assert "42" in node.system_prompt
+
+    def test_no_output_leaves_system_prompt_unchanged(self):
+        node = ClaudeAgentNode(name="t", system_prompt="base")
+        assert "## Output" not in node.system_prompt
+        assert node.system_prompt == "base"
+
+    def test_output_cls_stored(self):
+        class MyOutput(BaseModel):
+            x: int
+
+        node = ClaudeAgentNode(name="t", output=MyOutput)
+        assert node.output_cls is MyOutput
+
+    def test_no_output_cls_is_none(self):
+        node = ClaudeAgentNode(name="t")
+        assert node.output_cls is None

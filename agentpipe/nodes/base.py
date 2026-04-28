@@ -28,6 +28,8 @@ from claude_agent_sdk import (
     query,
 )
 
+from pydantic import BaseModel as _BaseModel
+
 from agentpipe.budget import BudgetTracker, WarnCallback
 from agentpipe.models import SONNET_4_6, resolve_model
 from agentpipe.permissions import (
@@ -176,6 +178,7 @@ class ClaudeAgentNode:
         name: str,
         display_name: str | None = None,
         system_prompt: str = "",
+        output: type[_BaseModel] | None = None,
         skills: Sequence[str | Path] = (),
         allow: Sequence[str] = (),
         deny: Sequence[str] = (),
@@ -211,6 +214,10 @@ class ClaudeAgentNode:
         self.on_message: MessageCallback | None = on_message or _make_printer(verbosity)
         self.extra_options = extra_options or {}
         self.declared_outputs: tuple[str, ...] = (self.name, "last_cost_usd")
+        self.output_cls: type[_BaseModel] | None = output
+        if output is not None:
+            from agentpipe.schema import generate_output_instructions
+            self.system_prompt += "\n\n" + generate_output_instructions(output)
 
     @staticmethod
     def _resolve_warn_pcts(
@@ -296,6 +303,9 @@ class ClaudeAgentNode:
                 result_text = getattr(message, "result", None)
 
         final = result_text if result_text else "\n".join(text_chunks).strip()
+        if self.output_cls is not None:
+            from agentpipe.schema import parse_output
+            final = parse_output(self.output_cls, final)
         return {
             self.name: final,
             "last_cost_usd": tracker.last_cost_usd,
