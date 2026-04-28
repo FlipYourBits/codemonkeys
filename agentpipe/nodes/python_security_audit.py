@@ -4,8 +4,35 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import BaseModel, Field
+
 from agentpipe.models import OPUS_4_6
 from agentpipe.nodes.base import ClaudeAgentNode
+
+
+class SecurityAuditFinding(BaseModel):
+    file: str = Field(examples=["path/to/file.py"])
+    line: int = Field(examples=[42])
+    severity: Literal["HIGH", "MEDIUM", "LOW"] = Field(
+        description="HIGH: directly exploitable — RCE, auth bypass, data breach, account takeover. MEDIUM: exploitable under specific but realistic conditions. LOW: defense-in-depth or limited-impact issues."
+    )
+    category: str = Field(examples=["command_injection"])
+    source: str = Field(examples=["python_security_audit"])
+    description: str = Field(examples=["User input passed to subprocess with shell=True."])
+    exploit_scenario: str = Field(examples=["Attacker injects shell commands via the name parameter."])
+    recommendation: str = Field(examples=["Use subprocess.run() with a list argument instead of shell=True."])
+    confidence: Literal["high", "medium", "low"] = Field(
+        description="high: confident this is exploitable. medium: likely exploitable but some ambiguity. low: speculative."
+    )
+
+
+class SecurityAuditOutput(BaseModel):
+    findings: list[SecurityAuditFinding] = Field(default_factory=list)
+    summary: dict[str, int] = Field(
+        default_factory=dict,
+        examples=[{"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}],
+    )
+
 
 _SKILL = """\
 # Security audit
@@ -100,51 +127,7 @@ ingest) to sinks.
 - Lack of input validation on fields with no security
   impact
 - Performance issues{exclusion_extra}
-
-## Output
-
-Final reply must be a single fenced JSON block matching
-this schema and nothing after it:
-
-```json
-{{
-  "findings": [
-    {{
-      "file": "path/to/file.py",
-      "line": 42,
-      "severity": "HIGH" | "MEDIUM" | "LOW",
-      "category": "command_injection",
-      "source": "python_security_audit",
-      "description": "User input passed to subprocess
-        with shell=True.",
-      "exploit_scenario": "Attacker injects shell commands
-        via the name parameter.",
-      "recommendation": "Use subprocess.run() with a list
-        argument instead of shell=True.",
-      "confidence": "high"
-    }}
-  ],
-  "summary": {{
-    "files_reviewed": 12,
-    "high": 1,
-    "medium": 0,
-    "low": 0
-  }}
-}}
-```
-
-`confidence`: "high", "medium", or "low". Only include
-findings where confidence is "high" or "medium".
-
-Severity guide:
-- **HIGH**: directly exploitable — RCE, auth bypass,
-  data breach, account takeover
-- **MEDIUM**: exploitable under specific but realistic
-  conditions
-- **LOW**: defense-in-depth or limited-impact issues
-
-If there are no findings, return an empty `findings`
-array."""
+"""
 
 
 class PythonSecurityAudit(ClaudeAgentNode):
@@ -186,6 +169,7 @@ class PythonSecurityAudit(ClaudeAgentNode):
 
         super().__init__(
             name="python_security_audit",
+            output=SecurityAuditOutput,
             system_prompt=_SKILL.format(
                 scope_section=scope_section,
                 method_intro=method_intro,

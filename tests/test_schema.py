@@ -162,3 +162,24 @@ class TestCodeReviewModels:
         node = PythonCodeReview()
         assert "## Output" in node.system_prompt
         assert "severity" in node.system_prompt.lower()
+
+
+class TestSecurityAuditModels:
+    def test_security_audit_output_validates(self):
+        from agentpipe.nodes.python_security_audit import SecurityAuditOutput
+        data = {
+            "findings": [{
+                "file": "a.py", "line": 10, "severity": "HIGH",
+                "category": "command_injection", "source": "python_security_audit",
+                "description": "Vuln.", "exploit_scenario": "Attack.",
+                "recommendation": "Fix.", "confidence": "high",
+            }],
+            "summary": {"files_reviewed": 5, "high": 1, "medium": 0, "low": 0},
+        }
+        output = SecurityAuditOutput.model_validate(data)
+        assert len(output.findings) == 1
+
+    def test_security_audit_node_has_output_instructions(self):
+        from agentpipe.nodes.python_security_audit import PythonSecurityAudit
+        node = PythonSecurityAudit()
+        assert "## Output" in node.system_prompt
