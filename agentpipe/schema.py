@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Literal, get_args, get_origin
 
 from pydantic import BaseModel
@@ -96,3 +97,24 @@ def generate_output_instructions(cls: type[BaseModel]) -> str:
             extras.append(desc)
 
     return header + "".join(extras) + "\n"
+
+
+def parse_output(cls: type[BaseModel], text: str) -> BaseModel:
+    """Extract and validate a JSON object from model output text."""
+    match = re.search(r"```json?\s*\n([\s\S]*?)\n\s*```", text)
+    if match:
+        json_str = match.group(1)
+    elif text.strip().startswith("{"):
+        json_str = text.strip()
+    else:
+        raise ValueError(f"No JSON found in response for {cls.__name__}")
+
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON for {cls.__name__}: {e}")
+
+    try:
+        return cls.model_validate(data)
+    except Exception as e:
+        raise ValueError(f"Validation failed for {cls.__name__}: {e}")

@@ -1,6 +1,7 @@
 from typing import Literal
 from pydantic import BaseModel, Field
-from agentpipe.schema import generate_output_instructions
+import pytest
+from agentpipe.schema import generate_output_instructions, parse_output
 
 
 class SimpleModel(BaseModel):
@@ -91,3 +92,50 @@ def test_multiple_literal_fields_each_rendered():
     assert "one or more checks failed" in result
     assert "urgent attention needed" in result
     assert "can be addressed later" in result
+
+
+# --- parse_output tests ---
+
+class ValueModel(BaseModel):
+    value: int
+
+
+def test_parses_fenced_json():
+    text = '```json\n{"value": 42}\n```'
+    result = parse_output(ValueModel, text)
+    assert isinstance(result, ValueModel)
+    assert result.value == 42
+
+
+def test_parses_raw_json():
+    result = parse_output(ValueModel, '{"value": 42}')
+    assert result.value == 42
+
+
+def test_parses_nested_model():
+    text = '```json\n{"findings": [{"file": "foo.py", "line": 10}]}\n```'
+    result = parse_output(NestedModel, text)
+    assert isinstance(result, NestedModel)
+    assert result.findings[0].file == "foo.py"
+    assert result.findings[0].line == 10
+
+
+def test_raises_on_no_json():
+    with pytest.raises(ValueError, match="No JSON"):
+        parse_output(ValueModel, "plain text with no json here")
+
+
+def test_raises_on_invalid_json():
+    with pytest.raises(ValueError):
+        parse_output(ValueModel, "```json\n{invalid}\n```")
+
+
+def test_raises_on_validation_error():
+    with pytest.raises(ValueError):
+        parse_output(ValueModel, '{"value": "not_an_int"}')
+
+
+def test_handles_text_before_and_after_json():
+    text = "Some preamble text.\n```json\n{\"value\": 7}\n```\nSome trailing text."
+    result = parse_output(ValueModel, text)
+    assert result.value == 7
