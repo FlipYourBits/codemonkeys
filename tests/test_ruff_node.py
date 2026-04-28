@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agentpipe.nodes._old.python_format import python_format_node
-from agentpipe.nodes._old.python_lint import python_lint_node
+from agentpipe.nodes.python_format import PythonFormat
+from agentpipe.nodes.python_lint import PythonLint
 
 
 def _ruff_available() -> bool:
@@ -21,27 +21,27 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_ruff_fix_builds_check_command():
-    node = python_lint_node(target="src")
-    argv = node.command({"working_dir": "/tmp"})
+def test_lint_node_command():
+    node = PythonLint()
+    argv = node._resolve({})
     assert argv[:5] == [sys.executable, "-m", "ruff", "check", "--fix"]
-    assert argv[-1] == "src"
+    assert argv[-1] == "."
 
 
-def test_ruff_fmt_builds_format_command():
-    node = python_format_node(target="src")
-    argv = node.command({"working_dir": "/tmp"})
+def test_format_node_command():
+    node = PythonFormat()
+    argv = node._resolve({})
     assert argv[:4] == [sys.executable, "-m", "ruff", "format"]
     assert "--fix" not in argv
+    assert argv[-1] == "."
 
 
-def test_ruff_fix_target_callable():
-    node = python_lint_node(target=lambda s: s["custom"])
-    argv = node.command({"custom": "pkg/"})
-    assert argv[-1] == "pkg/"
+def test_lint_node_names():
+    assert PythonLint().name == "python_lint"
+    assert PythonFormat().name == "python_format"
 
 
-def test_ruff_fix_fixes_unsorted_imports(tmp_path: Path):
+def test_lint_fixes_unsorted_imports(tmp_path: Path):
     f = tmp_path / "messy.py"
     f.write_text(
         textwrap.dedent("""
@@ -53,7 +53,14 @@ def test_ruff_fix_fixes_unsorted_imports(tmp_path: Path):
     """).lstrip()
     )
 
-    node = python_lint_node(target="messy.py", extra_args=["--select", "I"])
+    # Use the underlying ShellNode with a custom command to test ruff with specific args
+    from agentpipe.nodes.base import ShellNode
+
+    node = ShellNode(
+        name="lint_test",
+        command=[sys.executable, "-m", "ruff", "check", "--fix", "--select", "I", "messy.py"],
+        check=False,
+    )
     asyncio.run(node({"working_dir": str(tmp_path)}))
 
     cleaned = f.read_text()

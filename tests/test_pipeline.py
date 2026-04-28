@@ -6,8 +6,8 @@ import pytest
 
 from agentpipe.pipeline import Pipeline
 from agentpipe.nodes.base import Verbosity
-from agentpipe.nodes._old.python_lint import python_lint_node
-from agentpipe.nodes._old.python_format import python_format_node
+from agentpipe.nodes.python_lint import PythonLint
+from agentpipe.nodes.python_format import PythonFormat
 
 
 class TestPipelineConstruction:
@@ -15,7 +15,7 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp/repo",
             task="add healthz",
-            steps=[python_lint_node(), python_format_node()],
+            steps=[PythonLint(), PythonFormat()],
         )
         assert p.working_dir == "/tmp/repo"
 
@@ -27,7 +27,7 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[[python_lint_node(), python_format_node()]],
+            steps=[[PythonLint(), PythonFormat()]],
         )
         assert len(p._ordered_names) > 0
 
@@ -35,7 +35,7 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[python_lint_node(), ("ruff_final", python_lint_node())],
+            steps=[PythonLint(), ("ruff_final", PythonLint())],
         )
         assert "ruff_final" in p._ordered_names
 
@@ -43,7 +43,7 @@ class TestPipelineConstruction:
         p = Pipeline(
             working_dir="/tmp",
             task="test",
-            steps=[python_lint_node(), python_format_node(), python_lint_node()],
+            steps=[PythonLint(), PythonFormat(), PythonLint()],
         )
         assert "python_lint" in p._ordered_names
         assert "python_lint_2" in p._ordered_names
