@@ -11,9 +11,12 @@ Two friction points in agentpipe's current API:
 
 ### 1. Dataclass-based structured output
 
-Nodes declare their output shape as a dataclass with example values and optional enum descriptions in `field(metadata=...)`. The framework auto-generates the entire output section of the system prompt (JSON schema, examples, enum/severity descriptions) and parses the response into typed objects.
+Each node defines an output dataclass in its own file and passes it to the base class via `output=`. The base class (`ClaudeAgentNode` / `ShellNode`) handles two things automatically:
 
-Each node defines its own output dataclass. There are no shared types. Nodes are fully independent.
+1. **Prompt generation** — appends a `## Output` section to the system prompt with JSON schema, examples, and severity descriptions, all derived from the dataclass's `field(metadata=...)`.
+2. **Response parsing** — after the agent responds (or the shell command runs), parses the output into a typed dataclass instance and stores it in state.
+
+There are no shared types. Each node owns its dataclass. Nodes are fully independent.
 
 #### Example output dataclass
 
