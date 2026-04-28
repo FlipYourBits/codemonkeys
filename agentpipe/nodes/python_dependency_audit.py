@@ -2,8 +2,36 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
 from agentpipe.models import HAIKU_4_5
 from agentpipe.nodes.base import ClaudeAgentNode
+
+
+class DependencyAuditFinding(BaseModel):
+    file: str = Field(examples=["pyproject.toml"])
+    line: int = Field(examples=[1])
+    severity: Literal["HIGH", "MEDIUM", "LOW"] = Field(
+        description="HIGH: CVSS >= 7.0, or known active exploitation. MEDIUM: CVSS 4.0-6.9, or limited exploitability. LOW: CVSS < 4.0, disputed, or withdrawn advisory."
+    )
+    category: str = Field(examples=["vulnerable_dependency"])
+    source: str = Field(examples=["python_dependency_audit"])
+    description: str = Field(examples=["requests 2.28.0 has CVE-2023-XXXXX (CVSS 9.1)."])
+    recommendation: str = Field(examples=["Upgrade to requests>=2.31.0."])
+    confidence: Literal["high", "medium", "low"] = Field(
+        description="high: confirmed CVE from pip-audit. medium: advisory with caveats. low: disputed or withdrawn."
+    )
+
+
+class DependencyAuditOutput(BaseModel):
+    findings: list[DependencyAuditFinding] = Field(default_factory=list)
+    summary: dict[str, int] = Field(
+        default_factory=dict,
+        examples=[{"packages_scanned": 45, "high": 1, "medium": 0, "low": 0}],
+    )
+
 
 _SKILL = """\
 # Dependency audit
@@ -56,43 +84,7 @@ for known CVEs.
 - Security issues in application code (security audit
   owns these)
 - Test failures (test node owns these)
-- Documentation drift (docs review owns these)
-
-## Output
-
-Final reply must be a single fenced JSON block matching
-this schema and nothing after it:
-
-```json
-{
-  "findings": [
-    {
-      "file": "pyproject.toml",
-      "line": 1,
-      "severity": "HIGH" | "MEDIUM" | "LOW",
-      "category": "vulnerable_dependency",
-      "source": "python_dependency_audit",
-      "description": "package 1.2.3 has CVE-2024-XXXXX (CVSS 9.1).",
-      "recommendation": "Upgrade to package>=1.2.4.",
-      "confidence": "high"
-    }
-  ],
-  "summary": {
-    "packages_scanned": 45,
-    "high": 1,
-    "medium": 0,
-    "low": 0
-  }
-}
-```
-
-Severity mapping (use CVSS base score when available):
-- **HIGH**: CVSS >= 7.0, or known active exploitation
-- **MEDIUM**: CVSS 4.0–6.9, or limited exploitability
-- **LOW**: CVSS < 4.0, disputed, or withdrawn advisory
-
-If there are no findings, return an empty `findings`
-array."""
+- Documentation drift (docs review owns these)"""
 
 
 class PythonDependencyAudit(ClaudeAgentNode):
@@ -100,6 +92,7 @@ class PythonDependencyAudit(ClaudeAgentNode):
         kwargs.setdefault("model", HAIKU_4_5)
         super().__init__(
             name="python_dependency_audit",
+            output=DependencyAuditOutput,
             system_prompt=_SKILL,
             prompt_template="Audit Python dependencies for known vulnerabilities.",
             allow=[

@@ -228,3 +228,24 @@ class TestPythonTestModels:
         from agentpipe.nodes.python_test import PythonTest
         node = PythonTest()
         assert "## Output" in node.system_prompt
+
+
+class TestDependencyAuditModels:
+    def test_dependency_audit_output_validates(self):
+        from agentpipe.nodes.python_dependency_audit import DependencyAuditOutput
+        data = {
+            "findings": [{
+                "file": "pyproject.toml", "line": 1, "severity": "HIGH",
+                "category": "vulnerable_dependency", "source": "python_dependency_audit",
+                "description": "CVE.", "recommendation": "Upgrade.",
+                "confidence": "high",
+            }],
+            "summary": {"packages_scanned": 45, "high": 1, "medium": 0, "low": 0},
+        }
+        output = DependencyAuditOutput.model_validate(data)
+        assert len(output.findings) == 1
+
+    def test_dependency_audit_node_has_output_instructions(self):
+        from agentpipe.nodes.python_dependency_audit import PythonDependencyAudit
+        node = PythonDependencyAudit()
+        assert "## Output" in node.system_prompt
