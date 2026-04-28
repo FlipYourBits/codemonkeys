@@ -15,6 +15,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from agentpipe.display import default_prompt as _default_prompt
 from agentpipe.models import OPUS_4_6
 from agentpipe.nodes.base import (
@@ -29,6 +31,53 @@ AskFindings = Callable[[str], Awaitable[str | None]]
 PromptFn = Callable[[str, str | None], str]
 
 _SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
+
+# ── Pydantic models ──────────────────────────────────────────────
+
+
+class FixedItem(BaseModel):
+    file: str = Field(examples=["path/to/file.py"])
+    line: int = Field(examples=[42])
+    category: str = Field(examples=["logic_error"])
+    source: str = Field(examples=["python_code_review"])
+    description: str = Field(examples=["What was fixed, one sentence."])
+
+
+class SkippedItem(BaseModel):
+    file: str = Field(examples=["path/to/file.py"])
+    line: int = Field(examples=[10])
+    category: str = Field(examples=["clarity"])
+    source: str = Field(examples=["python_code_review"])
+    reason: str = Field(examples=["False positive — the code is correct because..."])
+
+
+class ResolveOutput(BaseModel):
+    fixed: list[FixedItem] = Field(default_factory=list)
+    skipped: list[SkippedItem] = Field(default_factory=list)
+
+
+# ── Helpers ───────────────────────────────────────────────────────
+
+
+def _extract_items_from_state(
+    reads_from_keys: list[str], state: dict[str, Any]
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for key in reads_from_keys:
+        upstream = state.get(key)
+        if upstream is None:
+            continue
+        data = upstream.model_dump()
+        for value in data.values():
+            if isinstance(value, list) and value and isinstance(value[0], dict):
+                for item in value:
+                    if not item.get("source"):
+                        item["source"] = key
+                    items.append(item)
+    items.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "LOW"), 99))
+    return items
+
 
 _SKILL = """\
 # Resolve findings
@@ -55,37 +104,7 @@ Fix only what is listed — nothing else.
 - Do not introduce new imports, abstractions, or helpers
   unless the fix requires it.
 - Do not push, commit, or modify git state.
-- Do not fix issues that are not in the findings list.
-
-## Output
-
-Final reply must be a single fenced JSON block matching
-this schema and nothing after it:
-
-```json
-{
-  "fixed": [
-    {
-      "file": "path/to/file.py",
-      "line": 42,
-      "category": "logic_error",
-      "source": "python_code_review",
-      "description": "What was fixed, one sentence."
-    }
-  ],
-  "skipped": [
-    {
-      "file": "path/to/file.py",
-      "line": 10,
-      "category": "clarity",
-      "source": "python_code_review",
-      "reason": "False positive — the code is correct because..."
-    }
-  ]
-}
-```
-
-If nothing was fixed, return empty arrays for both fields."""
+- Do not fix issues that are not in the findings list."""
 
 _ALLOW = [
     "Read",
@@ -111,28 +130,6 @@ _DENY = [
     "Bash(git push*)",
     "Bash(git commit*)",
 ]
-
-
-def _extract_findings(prior_results: str) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    sections = re.split(r"^### (.+)$", prior_results, flags=re.MULTILINE)
-    for i in range(1, len(sections), 2):
-        source = sections[i].strip()
-        content = sections[i + 1] if i + 1 < len(sections) else ""
-        json_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content)
-        if not json_match:
-            json_match = re.search(r"(\{[\s\S]*\"findings\"[\s\S]*\})", content)
-        if not json_match:
-            continue
-        try:
-            data = json.loads(json_match.group(1))
-        except json.JSONDecodeError:
-            continue
-        for f in data.get("findings", []):
-            f.setdefault("source", source)
-            findings.append(f)
-    findings.sort(key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "LOW"), 99))
-    return findings
 
 
 _SEVERITY_STYLES = {
@@ -254,6 +251,7 @@ class ResolveFindings:
         self._fixer = ClaudeAgentNode(
             name=f"{name}_inner",
             system_prompt=_SKILL,
+            output=ResolveOutput,
             skills=[*extra_skills],
             allow=list(allow) if allow is not None else _ALLOW,
             deny=list(deny) if deny is not None else _DENY,
@@ -266,17 +264,23 @@ class ResolveFindings:
         )
 
     def _build_prior_results(self, state: dict[str, Any]) -> str:
-        return _build_prior(self._reads_from_keys, state)
+        parts = ["## Prior results\n"]
+        for key in self._reads_from_keys:
+            upstream = state.get(key)
+            if upstream is None:
+                continue
+            serialized = upstream.model_dump_json(indent=2)
+            parts.append(f"### {key}\n```json\n{serialized}\n```\n")
+        return "\n".join(parts) if len(parts) > 1 else ""
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         if self.on_message is not None:
             self._fixer.on_message = self.on_message
 
-        prior = self._build_prior_results(state)
-        all_findings = _extract_findings(prior)
+        all_findings = _extract_items_from_state(self._reads_from_keys, state)
 
         if not all_findings:
-            return {self.name: '{"fixed": [], "skipped": []}', "last_cost_usd": 0.0}
+            return {self.name: ResolveOutput(), "last_cost_usd": 0.0}
 
         summary = _format_findings(all_findings)
 
@@ -286,12 +290,19 @@ class ResolveFindings:
             else:
                 choice = await self._ask_findings(summary)
             if choice is None or choice == "none":
-                skipped_list = [
-                    {"file": f.get("file", "?"), "reason": "user skipped"}
-                    for f in all_findings
-                ]
                 return {
-                    self.name: json.dumps({"fixed": [], "skipped": skipped_list}),
+                    self.name: ResolveOutput(
+                        skipped=[
+                            SkippedItem(
+                                file=f.get("file", "?"),
+                                line=f.get("line", 0),
+                                category=f.get("category", ""),
+                                source=f.get("source", ""),
+                                reason="user skipped",
+                            )
+                            for f in all_findings
+                        ]
+                    ),
                     "last_cost_usd": 0.0,
                 }
             to_fix = _select_by_input(all_findings, choice)
@@ -301,12 +312,19 @@ class ResolveFindings:
             ]
 
         if not to_fix:
-            skipped_list = [
-                {"file": f.get("file", "?"), "reason": "no HIGH+ severity"}
-                for f in all_findings
-            ]
             return {
-                self.name: json.dumps({"fixed": [], "skipped": skipped_list}),
+                self.name: ResolveOutput(
+                    skipped=[
+                        SkippedItem(
+                            file=f.get("file", "?"),
+                            line=f.get("line", 0),
+                            category=f.get("category", ""),
+                            source=f.get("source", ""),
+                            reason="no HIGH+ severity",
+                        )
+                        for f in all_findings
+                    ]
+                ),
                 "last_cost_usd": 0.0,
             }
 
