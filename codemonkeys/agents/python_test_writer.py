@@ -57,6 +57,8 @@ tests that verify real behavior.
     disallowedTools=[
         "Bash(git push*)",
         "Bash(git commit*)",
+        "Bash(pip install*)",
+        "Bash(pip uninstall*)",
     ],
     permissionMode="dontAsk",
 )

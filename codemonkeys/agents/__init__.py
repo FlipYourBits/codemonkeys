@@ -13,9 +13,10 @@ if TYPE_CHECKING:
 __all__ = [
     "CODE_REVIEWER",
     "DEFINITION_REVIEWER",
-    "DEPENDENCY_AUDITOR",
+    "DEP_AUDITOR",
     "DOCS_REVIEWER",
     "FIXER",
+    "IMPLEMENTER",
     "LINTER",
     "SECURITY_AUDITOR",
     "TEST_RUNNER",
@@ -35,28 +36,31 @@ def __getattr__(name: str) -> object:
     if name in ("DEFINITION_REVIEWER", "make_definition_reviewer"):
         from codemonkeys.agents.review_agent_definition import DEFINITION_REVIEWER, make_definition_reviewer
         return DEFINITION_REVIEWER if name == "DEFINITION_REVIEWER" else make_definition_reviewer
-    if name == "DEPENDENCY_AUDITOR":
-        from codemonkeys.agents.python_dependency_audit import DEPENDENCY_AUDITOR
-        return DEPENDENCY_AUDITOR
     if name in ("DOCS_REVIEWER", "make_docs_reviewer"):
         from codemonkeys.agents.python_docs_review import DOCS_REVIEWER, make_docs_reviewer
         return DOCS_REVIEWER if name == "DOCS_REVIEWER" else make_docs_reviewer
+    if name == "DEP_AUDITOR":
+        from codemonkeys.agents.python_dep_auditor import DEP_AUDITOR
+        return DEP_AUDITOR
     if name == "FIXER":
         from codemonkeys.agents.python_fixer import FIXER
         return FIXER
+    if name == "IMPLEMENTER":
+        from codemonkeys.agents.python_implementer import IMPLEMENTER
+        return IMPLEMENTER
     if name == "LINTER":
-        from codemonkeys.agents.python_lint import LINTER
+        from codemonkeys.agents.python_linter import LINTER
         return LINTER
     if name in ("SECURITY_AUDITOR", "make_security_auditor"):
         from codemonkeys.agents.python_security_audit import SECURITY_AUDITOR, make_security_auditor
         return SECURITY_AUDITOR if name == "SECURITY_AUDITOR" else make_security_auditor
     if name == "TEST_RUNNER":
-        from codemonkeys.agents.python_test import TEST_RUNNER
+        from codemonkeys.agents.python_test_runner import TEST_RUNNER
         return TEST_RUNNER
     if name == "TEST_WRITER":
         from codemonkeys.agents.python_test_writer import TEST_WRITER
         return TEST_WRITER
     if name == "TYPE_CHECKER":
-        from codemonkeys.agents.python_type_check import TYPE_CHECKER
+        from codemonkeys.agents.python_type_checker import TYPE_CHECKER
         return TYPE_CHECKER
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

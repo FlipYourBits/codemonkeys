@@ -148,7 +148,12 @@ Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
         model="opus",
         tools=["Read", "Glob", "Grep", "Bash"],
-        disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+        disallowedTools=[
+            "Bash(git push*)",
+            "Bash(git commit*)",
+            "Bash(pip install*)",
+            "Bash(pip uninstall*)",
+        ],
         permissionMode="dontAsk",
     )
 

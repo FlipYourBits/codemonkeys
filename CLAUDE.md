@@ -9,12 +9,13 @@
 
 - Live by occam's razor — the simplest solution is usually the best. A junior dev should look at this code and immediately understand how it works and how to extend it.
 - Each agent has a single responsibility and never depends on another agent.
-- Agents are `AgentDefinition` instances in `codemonkeys/agents/`. Parameterized agents use a factory function + default constant. Mechanical agents (lint, test, type check) are plain constants.
-- Workflows in `codemonkeys/workflows/` orchestrate agents and CLI tools. They can dispatch agents via `ClaudeAgentOptions` or run deterministic tools via `subprocess`.
-- `codemonkeys/runner.py` provides `AgentRunner` for running agents or workflows with a Rich live display.
-- Structured output uses Pydantic models + `output_format` on `ClaudeAgentOptions`. This only works at the top-level `query()` call, not on subagents dispatched by a workflow.
+- Agents are `AgentDefinition` instances in `codemonkeys/agents/`. Parameterized agents use a factory function + default constant. Mechanical agents (lint, test, type check, dep audit) are plain constants.
+- Coordinators in `codemonkeys/coordinators/` are interactive sessions that dispatch agents. A coordinator is a factory function returning `ClaudeAgentOptions` with agents registered. The coordinator's system prompt encodes workflows (e.g., "implement feature" → plan → approve → implement → verify). Uses `ClaudeSDKClient` for multi-turn conversation.
+- Coordinators are composable: a FastAPI coordinator extends the Python coordinator with additional prompt and agents.
+- `codemonkeys/runner.py` provides `AgentRunner` for running individual agents with a Rich live display.
+- Structured output uses Pydantic models + `output_format` on `ClaudeAgentOptions`. This only works at the top-level `query()` call, not on subagents dispatched by a coordinator.
 - `codemonkeys/prompts/` holds reusable prompt fragments as string constants (e.g., `PYTHON_GUIDELINES`, `PYTHON_SOURCE_FILTER`, `PYTHON_CMD`). Generic instructions that apply across multiple agents belong here — agent-specific logic stays in the agent's own prompt. Agents import and interpolate them via f-string.
-- Use `PYTHON_CMD` (`sys.executable`) for all subprocess calls and agent prompts that reference the Python interpreter. Never hardcode `python` or `.venv/bin/python`.
+- Use `PYTHON_CMD` (`sys.executable`) for agent prompts that reference the Python interpreter. Never hardcode `python` or `.venv/bin/python`.
 
 ## Code guidelines
 

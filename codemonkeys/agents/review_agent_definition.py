@@ -287,7 +287,7 @@ if __name__ == "__main__":
         if not instructions or instructions.lower() in ("no", "none", "exit", "quit", "q"):
             return
 
-        if instructions.lower() == "all":
+        if "all" in instructions.lower():
             to_fix = list(numbered.values())
         else:
             import re
