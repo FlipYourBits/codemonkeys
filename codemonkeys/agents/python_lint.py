@@ -50,8 +50,8 @@ If no violations found, report that clearly.
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category (the ruff code), description, recommendation.""",
-    model="claude-haiku-4-5-20251001",
+    model="haiku",
     tools=["Read", "Glob", "Grep", "Bash"],
-    disallowedTools=["Edit", "Write", "Bash(git push*)", "Bash(git commit*)"],
-    permissionMode="bypassPermissions",
+    disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+    permissionMode="dontAsk",
 )

@@ -2,9 +2,6 @@
 
 from claude_agent_sdk import AgentDefinition
 
-_READ_ONLY_TOOLS = ["Read", "Glob", "Grep", "Bash"]
-_READ_ONLY_DENY = ["Edit", "Write", "Bash(git push*)", "Bash(git commit*)"]
-
 CODE_REVIEWER = AgentDefinition(
     description=(
         "Use this agent to review Python code for logic errors, resource leaks, "
@@ -117,8 +114,8 @@ report when you're confident a real problem exists.
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
-    model="claude-haiku-4-5-20251001",
-    tools=_READ_ONLY_TOOLS,
-    disallowedTools=_READ_ONLY_DENY,
-    permissionMode="bypassPermissions",
+    model="haiku",
+    tools=["Read", "Glob", "Grep", "Bash"],
+    disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+    permissionMode="dontAsk",
 )

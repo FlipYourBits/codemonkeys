@@ -2,9 +2,6 @@
 
 from claude_agent_sdk import AgentDefinition
 
-_READ_ONLY_TOOLS = ["Read", "Glob", "Grep", "Bash"]
-_READ_ONLY_DENY = ["Edit", "Write", "Bash(git push*)", "Bash(git commit*)"]
-
 SECURITY_AUDITOR = AgentDefinition(
     description=(
         "Use this agent to find security vulnerabilities in Python code: "
@@ -91,8 +88,8 @@ handlers, CLI args, env vars, queue consumers, file ingest) to sinks.
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
-    model="claude-haiku-4-5-20251001",
-    tools=_READ_ONLY_TOOLS,
-    disallowedTools=_READ_ONLY_DENY,
-    permissionMode="bypassPermissions",
+    model="haiku",
+    tools=["Read", "Glob", "Grep", "Bash"],
+    disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+    permissionMode="dontAsk",
 )

@@ -58,16 +58,14 @@ Report findings only — never fix, upgrade, or modify any packages.
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
-    model="claude-haiku-4-5-20251001",
+    model="haiku",
     tools=["Read", "Glob", "Grep", "Bash"],
     disallowedTools=[
-        "Edit",
-        "Write",
         "Bash(git push*)",
         "Bash(git commit*)",
         "Bash(pip install*)",
         "Bash(pip uninstall*)",
         "Bash(pip-audit*--fix*)",
     ],
-    permissionMode="bypassPermissions",
+    permissionMode="dontAsk",
 )
