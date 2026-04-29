@@ -1,18 +1,26 @@
-"""Test runner agent — runs pytest and analyzes failures."""
+"""Test runner agent — runs pytest and analyzes failures.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_test
+"""
+
+from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
+
+from codemonkeys.prompts import PYTHON_CMD
 
 TEST_RUNNER = AgentDefinition(
     description=(
         "Use this agent to run the pytest suite and analyze any test failures."
     ),
-    prompt="""\
+    prompt=f"""\
 You run the project's test suite and analyze failures.
 Report findings only — do not fix issues.
 
 ## Method
 
-1. Run `python -m pytest -x -q --tb=short --no-header` to execute the
+1. Run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header` to execute the
    test suite. If the project has pytest config in pyproject.toml, those
    settings apply automatically.
 2. For each failure: read the failing test and the code under test to
@@ -52,3 +60,16 @@ If all tests pass, report that clearly.""",
     disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
     permissionMode="dontAsk",
 )
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    from codemonkeys.runner import AgentRunner
+
+    async def _main() -> None:
+        runner = AgentRunner()
+        result = await runner.run_agent(TEST_RUNNER, "Run the test suite and report failures.")
+        print(result)
+
+    asyncio.run(_main())

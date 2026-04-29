@@ -1,13 +1,51 @@
-"""Security audit agent — injection, secrets, unsafe deserialization, auth bypass."""
+"""Security audit agent — injection, secrets, unsafe deserialization, auth bypass.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_security_audit
+    .venv/bin/python -m codemonkeys.agents.python_security_audit --scope repo
+    .venv/bin/python -m codemonkeys.agents.python_security_audit --scope diff --path src/
+"""
+
+from __future__ import annotations
+
+from typing import Literal
 
 from claude_agent_sdk import AgentDefinition
 
-SECURITY_AUDITOR = AgentDefinition(
-    description=(
-        "Use this agent to find security vulnerabilities in Python code: "
-        "injection, hardcoded secrets, unsafe deserialization, auth bypass, path traversal."
-    ),
-    prompt="""\
+
+def make_security_auditor(
+    scope: Literal["diff", "repo"] = "diff",
+    path: str | None = None,
+) -> AgentDefinition:
+    if scope == "diff":
+        if path:
+            method_intro = (
+                f"Start by running `git diff main...HEAD -- '{path}'` and reading "
+                "the changed files."
+            )
+        else:
+            method_intro = (
+                "Start by running `git diff main...HEAD -- '*.py'` and reading the "
+                "changed files. If no diff is available, run `git ls-files '*.py'` "
+                "and review the most recently changed files."
+            )
+        scope_exclusion = "\n- Pre-existing issues outside the diff"
+    else:
+        if path:
+            method_intro = f"Review all Python source files under `{path}`."
+        else:
+            method_intro = (
+                "Run `git ls-files '*.py'` to find all Python source files and "
+                "review them."
+            )
+        scope_exclusion = ""
+
+    return AgentDefinition(
+        description=(
+            "Use this agent to find security vulnerabilities in Python code: "
+            "injection, hardcoded secrets, unsafe deserialization, auth bypass, path traversal."
+        ),
+        prompt=f"""\
 Security audit focused on high-confidence, exploitable Python
 vulnerabilities — not theoretical or stylistic issues. Better to miss
 speculative findings than flood the report with false positives.
@@ -16,9 +54,7 @@ Report findings only — do not fix issues.
 
 ## Method
 
-Start by running `git diff main...HEAD -- '*.py'` and reading the changed
-files. If no diff is available, run `git ls-files '*.py'` and review the
-most recently changed files. Trace data flow from untrusted inputs (HTTP
+{method_intro} Trace data flow from untrusted inputs (HTTP
 handlers, CLI args, env vars, queue consumers, file ingest) to sinks.
 
 ### Injection
@@ -83,13 +119,36 @@ handlers, CLI args, env vars, queue consumers, file ingest) to sinks.
 - Documentation drift (docs review owns these)
 - Denial of service or resource exhaustion
 - Lack of input validation on fields with no security impact
-- Performance issues
-- Pre-existing issues outside the diff
+- Performance issues{scope_exclusion}
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
-    model="haiku",
-    tools=["Read", "Glob", "Grep", "Bash"],
-    disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
-    permissionMode="dontAsk",
-)
+        model="opus",
+        tools=["Read", "Glob", "Grep", "Bash"],
+        disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+        permissionMode="dontAsk",
+    )
+
+
+SECURITY_AUDITOR = make_security_auditor()
+
+
+if __name__ == "__main__":
+    import argparse
+    import asyncio
+
+    from codemonkeys.runner import AgentRunner
+
+    parser = argparse.ArgumentParser(description="Security audit — injection, secrets, auth bypass")
+    parser.add_argument("--scope", choices=["diff", "repo"], default="diff")
+    parser.add_argument("--path", help="Narrow scope to this file or folder")
+    args = parser.parse_args()
+
+    async def _main() -> None:
+        agent = make_security_auditor(scope=args.scope, path=args.path)
+        runner = AgentRunner()
+        prompt = f"Audit Python source files under {args.path}." if args.path else "Audit the code for security vulnerabilities."
+        result = await runner.run_agent(agent, prompt)
+        print(result)
+
+    asyncio.run(_main())

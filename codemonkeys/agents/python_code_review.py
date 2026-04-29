@@ -1,31 +1,64 @@
-"""Code review agent — logic errors, resource leaks, dead code, complexity."""
+"""Code review agent — logic errors, resource leaks, dead code, complexity.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_code_review
+    .venv/bin/python -m codemonkeys.agents.python_code_review --scope repo
+    .venv/bin/python -m codemonkeys.agents.python_code_review --scope diff --path src/
+"""
+
+from __future__ import annotations
+
+from typing import Literal
 
 from claude_agent_sdk import AgentDefinition
 
-CODE_REVIEWER = AgentDefinition(
-    description=(
-        "Use this agent to review Python code for logic errors, resource leaks, "
-        "error handling gaps, dead code, and complexity issues."
-    ),
-    prompt="""\
+from codemonkeys.prompts import PYTHON_SOURCE_FILTER
+
+
+def make_code_reviewer(
+    scope: Literal["diff", "repo"] = "diff",
+    path: str | None = None,
+) -> AgentDefinition:
+    if scope == "diff":
+        if path:
+            method_intro = (
+                f"Start by running `git diff main...HEAD -- '{path}'` and reading "
+                "the changed files."
+            )
+        else:
+            method_intro = (
+                "Start by running `git diff main...HEAD -- '*.py'` and reading the "
+                "changed files. If no diff is available, run `git ls-files '*.py'` "
+                "and review the most recently changed files."
+            )
+        scope_exclusion = "\n- Pre-existing issues outside the diff"
+    else:
+        if path:
+            method_intro = f"Review all Python source files under `{path}`."
+        else:
+            method_intro = (
+                "Run `git ls-files '*.py'` to find all Python source files and "
+                "review them."
+            )
+        scope_exclusion = ""
+
+    return AgentDefinition(
+        description=(
+            "Use this agent to review Python code for logic errors, resource leaks, "
+            "error handling gaps, dead code, and complexity issues."
+        ),
+        prompt=f"""\
 Semantic code review focused on correctness, maintainability, and design
 quality. You review things that linters, formatters, type-checkers, and
 test runners cannot catch. Do not run those tools.
 
 Report findings only — do not fix issues.
 
-## Source Code Only
-
-Only analyze Python source files. Skip configuration, generated files,
-lock files, documentation, and vendored dependencies. Files to SKIP:
-`poetry.lock`, `*.pyc`, `*.egg-info/`, `__pycache__/`, `.venv/`,
-`dist/`, `*.generated.*`, `*.md`, `*.rst`.
+{PYTHON_SOURCE_FILTER}
 
 ## Method
 
-Start by running `git diff main...HEAD -- '*.py'` and reading the changed
-files. If no diff is available, run `git ls-files '*.py'` and review the
-most recently changed files. Look for issues in these categories. Only
+{method_intro} Look for issues in these categories. Only
 report when you're confident a real problem exists.
 
 ### `logic_error`
@@ -109,13 +142,36 @@ report when you're confident a real problem exists.
 - Docstring accuracy (docs review owns these)
 - Naming preferences without a misleading-name argument
 - "I would have written this differently" without a correctness argument
-- Performance issues with no measurable impact
-- Pre-existing issues outside the diff
+- Performance issues with no measurable impact{scope_exclusion}
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
-    model="haiku",
-    tools=["Read", "Glob", "Grep", "Bash"],
-    disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
-    permissionMode="dontAsk",
-)
+        model="opus",
+        tools=["Read", "Glob", "Grep", "Bash"],
+        disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+        permissionMode="dontAsk",
+    )
+
+
+CODE_REVIEWER = make_code_reviewer()
+
+
+if __name__ == "__main__":
+    import argparse
+    import asyncio
+
+    from codemonkeys.runner import AgentRunner
+
+    parser = argparse.ArgumentParser(description="Code review — logic errors, leaks, dead code")
+    parser.add_argument("--scope", choices=["diff", "repo"], default="diff")
+    parser.add_argument("--path", help="Narrow scope to this file or folder")
+    args = parser.parse_args()
+
+    async def _main() -> None:
+        agent = make_code_reviewer(scope=args.scope, path=args.path)
+        runner = AgentRunner()
+        prompt = f"Review Python source files under {args.path}." if args.path else "Review the code."
+        result = await runner.run_agent(agent, prompt)
+        print(result)
+
+    asyncio.run(_main())

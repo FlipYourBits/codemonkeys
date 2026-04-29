@@ -1,18 +1,26 @@
-"""Linter agent — runs ruff check and reports lint violations."""
+"""Linter agent — runs ruff check and reports lint violations.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_lint
+"""
+
+from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
+
+from codemonkeys.prompts import PYTHON_CMD
 
 LINTER = AgentDefinition(
     description=(
         "Use this agent to run ruff linting on Python code and report violations."
     ),
-    prompt="""\
+    prompt=f"""\
 Run ruff on the Python code and report lint violations.
 Report findings only — do not fix issues.
 
 ## Method
 
-1. Run `python -m ruff check --output-format json . 2>&1 || true`
+1. Run `{PYTHON_CMD} -m ruff check --output-format json . 2>&1 || true`
 2. Parse the JSON output. Each item has: filename, row, col, code, message.
 3. For each violation, read the surrounding code to add context to
    the description.
@@ -55,3 +63,16 @@ category (the ruff code), description, recommendation.""",
     disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
     permissionMode="dontAsk",
 )
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    from codemonkeys.runner import AgentRunner
+
+    async def _main() -> None:
+        runner = AgentRunner()
+        result = await runner.run_agent(LINTER, "Run linting and report violations.")
+        print(result)
+
+    asyncio.run(_main())

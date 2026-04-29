@@ -1,13 +1,21 @@
-"""Fixer agent — applies targeted fixes for findings from review agents."""
+"""Fixer agent — applies targeted fixes for findings from review agents.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_fixer findings.json
+"""
+
+from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
+
+from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
 
 FIXER = AgentDefinition(
     description=(
         "Use this agent to fix specific code issues identified by review agents. "
         "Give it a list of findings with file, line, and description."
     ),
-    prompt="""\
+    prompt=f"""\
 You fix specific findings reported by upstream review agents. Each
 finding includes a file, line, severity, category, and description.
 Fix only what is listed — nothing else.
@@ -18,7 +26,7 @@ Fix only what is listed — nothing else.
 2. Understand the root cause described in the finding.
 3. Make the smallest correct change that resolves the issue.
 4. Re-read the changed file to verify correctness.
-5. After all fixes, run `python -m pytest -x -q --tb=short --no-header`
+5. After all fixes, run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header`
    to check for regressions.
 
 ## Rules
@@ -32,34 +40,8 @@ Fix only what is listed — nothing else.
 - Do not push, commit, or modify git state.
 - Do not fix issues that are not in the findings list.
 
-## Code guidelines
-
-- Type-hint every public function and method. Prefer
-  `from __future__ import annotations` so annotations
-  don't evaluate at runtime.
-- Keep functions short and single-purpose. If a function
-  exceeds ~40 lines or three nesting levels, extract a helper.
-- Name things for what they mean, not what they are.
-  `parsed_records` over `data`, `is_authenticated` over `flag`.
-- Prefer pure functions and explicit dependencies. Side
-  effects belong at the edges of the program.
-- Use dataclasses (`@dataclass(frozen=True)` when immutable)
-  for structured records over ad-hoc dicts.
-- Don't catch `Exception` broadly. Catch the narrowest type
-  you can name and let the rest crash with a useful traceback.
-- Don't write defensive code for situations that cannot occur
-  given the call graph. Trust internal invariants.
-- Don't add comments that restate the code. Comments explain
-  *why* — a non-obvious constraint, a workaround, a subtle invariant.
-- Match the surrounding codebase's style (formatter, import order,
-  naming) over your own preferences.
-- Use `pathlib.Path` over `os.path` string juggling.
-- Use f-strings, not `.format()` or `%` formatting.
-- Use `with` for any resource that has a `close()`.
-
-When refactoring, change behavior in the smallest diff that works.
-Avoid drive-by reformatting in the same change as a logic edit.""",
-    model="haiku",
+{PYTHON_GUIDELINES}""",
+    model="opus",
     tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
     disallowedTools=[
         "Bash(git push*)",
@@ -69,3 +51,23 @@ Avoid drive-by reformatting in the same change as a logic edit.""",
     ],
     permissionMode="dontAsk",
 )
+
+
+if __name__ == "__main__":
+    import argparse
+    import asyncio
+    from pathlib import Path
+
+    from codemonkeys.runner import AgentRunner
+
+    parser = argparse.ArgumentParser(description="Fix findings from review agents")
+    parser.add_argument("findings", help="Path to JSON file containing findings")
+    args = parser.parse_args()
+
+    async def _main() -> None:
+        findings = Path(args.findings).read_text(encoding="utf-8")
+        runner = AgentRunner()
+        result = await runner.run_agent(FIXER, f"Fix these findings:\n\n{findings}")
+        print(result)
+
+    asyncio.run(_main())

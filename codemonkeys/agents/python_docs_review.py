@@ -1,13 +1,70 @@
-"""Docs review agent — finds documentation drift against code."""
+"""Docs review agent — finds documentation drift against code.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_docs_review
+    .venv/bin/python -m codemonkeys.agents.python_docs_review --scope repo
+    .venv/bin/python -m codemonkeys.agents.python_docs_review --scope diff --path src/
+"""
+
+from __future__ import annotations
+
+from typing import Literal
 
 from claude_agent_sdk import AgentDefinition
 
-DOCS_REVIEWER = AgentDefinition(
-    description=(
-        "Use this agent to review documentation for drift against the code it "
-        "describes: stale docstrings, broken README examples, missing public API docs."
-    ),
-    prompt="""\
+
+def make_docs_reviewer(
+    scope: Literal["diff", "repo"] = "diff",
+    path: str | None = None,
+) -> AgentDefinition:
+    if scope == "diff":
+        if path:
+            step_one = (
+                f"Read the diff (`git diff main...HEAD -- '{path}'`) to find "
+                "changed signatures, renamed/removed symbols, new public APIs."
+            )
+            start_by = (
+                f"Start by running `git diff main...HEAD -- '{path}'` and reading "
+                "any doc files (README, CHANGELOG, etc.)."
+            )
+        else:
+            step_one = (
+                "Read the diff to find changed signatures, renamed/removed symbols, "
+                "new public APIs."
+            )
+            start_by = (
+                "Start by running `git diff main...HEAD` and reading any doc files "
+                "(README, CHANGELOG, etc.). If no diff, run `git ls-files` to find "
+                "doc files and Python source files."
+            )
+        scope_exclusion = "\n- Pre-existing drift outside the diff"
+    else:
+        if path:
+            step_one = (
+                f"Read all Python source files under `{path}` to identify public "
+                "signatures, symbols, and APIs."
+            )
+            start_by = (
+                f"Find all Python and doc files under `{path}` using "
+                f"`git ls-files '{path}'`."
+            )
+        else:
+            step_one = (
+                "Read all Python source files to identify public signatures, "
+                "symbols, and APIs."
+            )
+            start_by = (
+                "Run `git ls-files` to find all Python source files and doc files "
+                "(README, CHANGELOG, etc.)."
+            )
+        scope_exclusion = ""
+
+    return AgentDefinition(
+        description=(
+            "Use this agent to review documentation for drift against the code it "
+            "describes: stale docstrings, broken README examples, missing public API docs."
+        ),
+        prompt=f"""\
 Review documentation for drift against the code it describes. Focus on
 accuracy, not style or tone.
 
@@ -15,8 +72,7 @@ Report findings only — do not fix issues.
 
 ## Method
 
-1. Read the diff to find changed signatures, renamed/removed symbols,
-   new public APIs.
+1. {step_one}
 2. For each changed signature: locate the docstring (if any) and check
    it still matches.
 3. For each renamed/removed symbol: grep the README and `docs/` for
@@ -27,9 +83,7 @@ Report findings only — do not fix issues.
 6. Triage: drop anything you're not sure is actually wrong. If the doc
    is arguably still correct, leave it.
 
-Start by running `git diff main...HEAD` and reading any doc files
-(README, CHANGELOG, etc.). If no diff, run `git ls-files` to find doc
-files and Python source files.
+{start_by}
 
 ## Categories
 
@@ -77,13 +131,36 @@ files and Python source files.
 - Internal/private implementation details
 - Comments in code (code review owns these)
 - Wishlist items ("this could use more examples")
-- Suggestions for documentation that doesn't exist yet
-- Pre-existing drift outside the diff
+- Suggestions for documentation that doesn't exist yet{scope_exclusion}
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
-    model="haiku",
-    tools=["Read", "Glob", "Grep", "Bash"],
-    disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
-    permissionMode="dontAsk",
-)
+        model="sonnet",
+        tools=["Read", "Glob", "Grep", "Bash"],
+        disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+        permissionMode="dontAsk",
+    )
+
+
+DOCS_REVIEWER = make_docs_reviewer()
+
+
+if __name__ == "__main__":
+    import argparse
+    import asyncio
+
+    from codemonkeys.runner import AgentRunner
+
+    parser = argparse.ArgumentParser(description="Docs review — documentation drift against code")
+    parser.add_argument("--scope", choices=["diff", "repo"], default="diff")
+    parser.add_argument("--path", help="Narrow scope to this file or folder")
+    args = parser.parse_args()
+
+    async def _main() -> None:
+        agent = make_docs_reviewer(scope=args.scope, path=args.path)
+        runner = AgentRunner()
+        prompt = f"Review documentation for {args.path}." if args.path else "Review documentation for drift against the code."
+        result = await runner.run_agent(agent, prompt)
+        print(result)
+
+    asyncio.run(_main())

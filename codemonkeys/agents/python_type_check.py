@@ -1,18 +1,26 @@
-"""Type checker agent — runs mypy and reports type errors."""
+"""Type checker agent — runs mypy and reports type errors.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_type_check
+"""
+
+from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
+
+from codemonkeys.prompts import PYTHON_CMD
 
 TYPE_CHECKER = AgentDefinition(
     description=(
         "Use this agent to run mypy type checking on Python code and report type errors."
     ),
-    prompt="""\
+    prompt=f"""\
 Run mypy on the Python code and report type errors.
 Report findings only — do not fix issues.
 
 ## Method
 
-1. Run `python -m mypy --no-error-summary . 2>&1 || true`
+1. Run `{PYTHON_CMD} -m mypy --no-error-summary . 2>&1 || true`
 2. Parse each error line (file:line: severity: message [code])
 3. For each error, read the surrounding code to understand the root cause
 4. Classify: errors are HIGH, warnings/notes are MEDIUM
@@ -46,3 +54,16 @@ category (mypy error code), description, recommendation.""",
     disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
     permissionMode="dontAsk",
 )
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    from codemonkeys.runner import AgentRunner
+
+    async def _main() -> None:
+        runner = AgentRunner()
+        result = await runner.run_agent(TYPE_CHECKER, "Run type checking and report errors.")
+        print(result)
+
+    asyncio.run(_main())

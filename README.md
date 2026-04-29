@@ -2,7 +2,18 @@
 
 AI agent workflows powered by the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python).
 
-Agents do one thing. Coordinators orchestrate them.
+Agents do one thing. Workflows orchestrate them.
+
+## Why not just use Claude Code?
+
+Claude Code is a general-purpose coding assistant. codemonkeys builds specialized, composable agents with controls that CC doesn't offer:
+
+- **Per-agent permission control.** CC is one permission mode for the whole session. Here, the reviewer runs `dontAsk` with read-only tools (zero prompts), your code presents findings and asks what to fix, then the fixer runs `dontAsk` with write tools. You control exactly where the human decision point is.
+- **Right-sized models.** CC uses one model for everything. codemonkeys assigns haiku to mechanical tasks (run ruff, parse output), sonnet to judgment calls (docs review), and opus to deep analysis (security audit, code review). Same quality, fraction of the cost.
+- **Deterministic tools run in Python, not via LLM.** The quality workflow runs ruff, mypy, and pytest as subprocess calls — zero tokens, milliseconds, deterministic. The LLM only gets involved when a fix is needed.
+- **Structured output.** Agents return Pydantic models, not free text. Findings have typed fields (file, line, severity, category) that downstream code can filter, sort, and act on programmatically.
+- **Composable workflows.** Chain agents and CLI tools in Python with explicit control flow: run coverage → write tests → type check → fix → test → review → fix → re-check. CC can't express "run this loop 5 times then move on."
+- **Unattended execution.** Run the full pipeline in CI, on a cron, or in a pre-commit hook. No human in the loop until you want one.
 
 ## Install
 
@@ -17,8 +28,8 @@ Requires Python 3.10+ and a Claude API key (`ANTHROPIC_API_KEY`).
 ```
 codemonkeys/
   agents/           # Individual agent definitions (AgentDefinition instances)
-  coordinators/     # Orchestrate agents into workflows
-  skills/           # Shared prompt text constants used by agents
+  workflows/        # Orchestrate agents and CLI tools into pipelines
+  prompts/          # Shared prompt fragments used across agents
 ```
 
 ### Agents
@@ -35,40 +46,56 @@ Each file in `agents/` exports a single `AgentDefinition` — a self-contained a
 | `DEPENDENCY_AUDITOR` | Scans for known CVEs via pip-audit |
 | `DOCS_REVIEWER` | Finds documentation drift against code |
 | `FIXER` | Applies targeted fixes for findings from review agents |
-| `PROMPT_REVIEWER` | Evaluates agent prompts for comprehensiveness |
+| `DEFINITION_REVIEWER` | Reviews AgentDefinition files for correctness — description, prompt, permissions, model |
 
-### Coordinators
+### Workflows
 
-Coordinators dispatch agents and combine their results. Each coordinator is a workflow.
+Workflows orchestrate agents and CLI tools into pipelines.
 
-**Review Coordinator** — Dispatches all review agents in parallel, collects findings, and optionally dispatches the fixer.
+**Review Workflow** — Dispatches all review agents in parallel, collects findings, and optionally dispatches the fixer.
 
 ```bash
 # Run a full code review
-.venv/bin/python -m codemonkeys.coordinators.review /path/to/repo
+.venv/bin/python -m codemonkeys.workflows.review /path/to/repo
 
 # Review without fix prompt
-.venv/bin/python -m codemonkeys.coordinators.review . --no-fix
+.venv/bin/python -m codemonkeys.workflows.review . --no-fix
 
 # Review a single file
-.venv/bin/python -m codemonkeys.coordinators.review . --file src/main.py
+.venv/bin/python -m codemonkeys.workflows.review . --file src/main.py
 
 # Save results to JSON
-.venv/bin/python -m codemonkeys.coordinators.review . -o results.json
+.venv/bin/python -m codemonkeys.workflows.review . -o results.json
 ```
 
-**Prompt Review Coordinator** — Reviews an agent prompt file for gaps and optionally rewrites it.
+**Quality Workflow** — End-to-end Python quality pipeline: lint, format, coverage, type check, test, code review, security audit, docs review, dependency audit.
 
 ```bash
-.venv/bin/python -m codemonkeys.coordinators.prompt_review codemonkeys/agents/python_code_review.py
+# Run the full pipeline
+.venv/bin/python -m codemonkeys.workflows.python_quality
+
+# Skip coverage phase
+.venv/bin/python -m codemonkeys.workflows.python_quality --skip-coverage
+
+# Save results to JSON
+.venv/bin/python -m codemonkeys.workflows.python_quality -o results.json
+```
+
+**Definition Review** — Reviews an AgentDefinition file for correctness and optionally fixes issues.
+
+```bash
+.venv/bin/python -m codemonkeys.agents.review_agent_definition codemonkeys/agents/python_code_review.py
 ```
 
 ### Using Agents in Your Own Code
+
+Each agent exports a default constant (built from a factory) and — for review agents — a factory function for customization:
 
 ```python
 from claude_agent_sdk import ClaudeAgentOptions, query
 from codemonkeys.agents import CODE_REVIEWER, TEST_RUNNER, FIXER
 
+# Use the default constant (reviews diff against main)
 options = ClaudeAgentOptions(
     system_prompt="You are a coordinator. Dispatch review agents and combine findings.",
     model="sonnet",
@@ -81,6 +108,21 @@ options = ClaudeAgentOptions(
         "fixer": FIXER,
     },
 )
+```
+
+Use factories to customize scope:
+
+```python
+from codemonkeys.agents import make_code_reviewer, make_security_auditor
+
+# Review the entire repo instead of just the diff
+full_reviewer = make_code_reviewer(scope="repo")
+
+# Review only a specific path
+src_auditor = make_security_auditor(scope="repo", path="src/")
+
+# Review changes to a specific file
+file_reviewer = make_code_reviewer(scope="diff", path="codemonkeys/agents/python_fixer.py")
 ```
 
 ## Model Configuration
@@ -97,26 +139,42 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL='us.anthropic.claude-haiku-4-5'
 
 ## Writing New Agents
 
-Create a file in `codemonkeys/agents/` that exports an `AgentDefinition`:
+Create a file in `codemonkeys/agents/` with a factory function and a default constant:
 
 ```python
+from __future__ import annotations
+from typing import Literal
 from claude_agent_sdk import AgentDefinition
 
-MY_AGENT = AgentDefinition(
-    description="Use this agent to ...",  # coordinator sees this to decide dispatch
-    prompt="...",                          # the agent's full instructions
-    model="haiku",                         # model alias
-    tools=["Read", "Glob", "Grep", "Bash"],
-    disallowedTools=["Edit", "Write"],
-    permissionMode="bypassPermissions",
-)
+def make_my_agent(
+    scope: Literal["diff", "repo"] = "diff",
+    path: str | None = None,
+) -> AgentDefinition:
+    # Build scope-dependent prompt sections
+    if scope == "diff":
+        method_intro = "Start by running `git diff main...HEAD -- '*.py'` ..."
+    else:
+        method_intro = "Run `git ls-files '*.py'` ..."
+
+    return AgentDefinition(
+        description="Use this agent to ...",  # workflow sees this
+        prompt=f"...",                         # agent's full instructions
+        model="haiku",                         # model alias
+        tools=["Read", "Glob", "Grep", "Bash"],
+        disallowedTools=["Bash(git push*)", "Bash(git commit*)"],
+        permissionMode="dontAsk",
+    )
+
+MY_AGENT = make_my_agent()
 ```
+
+If the agent doesn't need parameterization (mechanical agents like linters, test runners), use a plain constant instead.
 
 See [docs/agent-definition.md](docs/agent-definition.md) for a full reference of all parameters.
 
-## Writing New Coordinators
+## Writing New Workflows
 
-Create a file in `codemonkeys/coordinators/` that uses `ClaudeAgentOptions` with your agents:
+Create a file in `codemonkeys/workflows/` that uses `ClaudeAgentOptions` with your agents:
 
 ```python
 from claude_agent_sdk import ClaudeAgentOptions, query

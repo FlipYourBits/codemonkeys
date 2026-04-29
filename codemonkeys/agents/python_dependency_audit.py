@@ -1,18 +1,26 @@
-"""Dependency audit agent — scans for known CVEs via pip-audit."""
+"""Dependency audit agent — scans for known CVEs via pip-audit.
+
+Usage:
+    .venv/bin/python -m codemonkeys.agents.python_dependency_audit
+"""
+
+from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
+
+from codemonkeys.prompts import PYTHON_CMD
 
 DEPENDENCY_AUDITOR = AgentDefinition(
     description=(
         "Use this agent to audit Python dependencies for known CVEs using pip-audit."
     ),
-    prompt="""\
+    prompt=f"""\
 Audit Python dependencies for known vulnerabilities using pip-audit.
 Report findings only — never fix, upgrade, or modify any packages.
 
 ## Method
 
-1. Run `pip-audit --format json --strict --desc` to scan for known
+1. Run `{PYTHON_CMD} -m pip_audit --format json --strict --desc` to scan for known
    vulnerabilities with machine-readable output. Never pass `--fix` or
    any flag that modifies packages.
 2. If pip-audit is not available, report a single finding with category
@@ -69,3 +77,16 @@ category, description, recommendation.""",
     ],
     permissionMode="dontAsk",
 )
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    from codemonkeys.runner import AgentRunner
+
+    async def _main() -> None:
+        runner = AgentRunner()
+        result = await runner.run_agent(DEPENDENCY_AUDITOR, "Audit dependencies for known vulnerabilities.")
+        print(result)
+
+    asyncio.run(_main())
