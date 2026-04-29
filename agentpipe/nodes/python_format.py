@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from agentpipe.nodes.base import ShellNode, Verbosity
+from agentpipe.nodes.base import ShellNode
 
 
 class PythonFormat(ShellNode):
@@ -12,12 +12,10 @@ class PythonFormat(ShellNode):
         self,
         *,
         timeout: float | None = None,
-        verbosity: Verbosity = Verbosity.silent,
     ) -> None:
         super().__init__(
             name="python_format",
             command=[sys.executable, "-m", "ruff", "format", "."],
             check=False,
             timeout=timeout,
-            verbosity=verbosity,
         )

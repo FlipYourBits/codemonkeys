@@ -171,6 +171,57 @@ class TestStatusLine:
         assert err == ""
 
 
+class TestLogDir:
+    def test_log_dir_creates_per_node_files(self, tmp_path):
+        async def step_a(state):
+            return {"a": "hello from a", "last_cost_usd": 0.0}
+
+        async def step_b(state):
+            return {"b": "hello from b", "last_cost_usd": 0.0}
+
+        step_a.__name__ = "a"
+        step_b.__name__ = "b"
+        log_dir = tmp_path / "logs"
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=[step_a, step_b],
+            log_dir=log_dir,
+        )
+        asyncio.run(p.run())
+        assert (log_dir / "a.log").exists()
+        assert (log_dir / "b.log").exists()
+
+    def test_log_dir_with_verbosity_writes_files(self, tmp_path):
+        from agentpipe.nodes.base import ShellNode
+
+        log_dir = tmp_path / "logs"
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=[ShellNode(name="echo_node", command="echo hello")],
+            verbosity=Verbosity.normal,
+            log_dir=log_dir,
+        )
+        asyncio.run(p.run())
+        log_file = log_dir / "echo_node.log"
+        assert log_file.exists()
+        assert log_file.read_text().strip() != ""
+
+    def test_no_log_dir_no_files(self, tmp_path):
+        async def step_a(state):
+            return {"a": "done"}
+
+        step_a.__name__ = "a"
+        p = Pipeline(
+            working_dir="/tmp",
+            task="test",
+            steps=[step_a],
+        )
+        asyncio.run(p.run())
+        assert not (tmp_path / "a.log").exists()
+
+
 class TestPublicAPI:
     def test_importable_from_agentpipe(self):
         from agentpipe import (

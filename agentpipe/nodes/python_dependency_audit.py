@@ -18,7 +18,9 @@ class DependencyAuditFinding(BaseModel):
     )
     category: str = Field(examples=["vulnerable_dependency"])
     source: str = Field(examples=["python_dependency_audit"])
-    description: str = Field(examples=["requests 2.28.0 has CVE-2023-XXXXX (CVSS 9.1)."])
+    description: str = Field(
+        examples=["requests 2.28.0 has CVE-2023-XXXXX (CVSS 9.1)."]
+    )
     recommendation: str = Field(examples=["Upgrade to requests>=2.31.0."])
     confidence: Literal["high", "medium", "low"] = Field(
         description="high: confirmed CVE from pip-audit. medium: advisory with caveats. low: disputed or withdrawn."

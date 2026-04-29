@@ -12,71 +12,83 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from agentpipe.nodes.base import Verbosity
 from agentpipe.nodes.resolve_findings import ResolveFindings
 from agentpipe.pipeline import Pipeline
 
-_FAKE_REVIEW = json.dumps(
-    {
-        "findings": [
-            {
-                "severity": "HIGH",
-                "file": "app/api.py",
-                "line": 42,
-                "category": "logic_error",
-                "description": "Off-by-one in pagination offset causes duplicate results.",
-            },
-            {
-                "severity": "MEDIUM",
-                "file": "app/api.py",
-                "line": 88,
-                "category": "error_handling",
-                "description": "Bare except swallows KeyboardInterrupt.",
-            },
-            {
-                "severity": "LOW",
-                "file": "app/utils.py",
-                "line": 12,
-                "category": "dead_code",
-                "description": "Unused helper function `_legacy_hash`.",
-            },
-        ],
-        "summary": {"total": 3, "high": 1, "medium": 1, "low": 1},
-    }
+
+class FakeFinding(BaseModel):
+    severity: str
+    file: str
+    line: int
+    category: str
+    description: str
+    source: str = ""
+
+
+class FakeOutput(BaseModel):
+    findings: list[FakeFinding] = Field(default_factory=list)
+    summary: dict[str, int] = Field(default_factory=dict)
+
+
+_REVIEW_OUTPUT = FakeOutput(
+    findings=[
+        FakeFinding(
+            severity="HIGH",
+            file="app/api.py",
+            line=42,
+            category="logic_error",
+            description="Off-by-one in pagination offset causes duplicate results.",
+        ),
+        FakeFinding(
+            severity="MEDIUM",
+            file="app/api.py",
+            line=88,
+            category="error_handling",
+            description="Bare except swallows KeyboardInterrupt.",
+        ),
+        FakeFinding(
+            severity="LOW",
+            file="app/utils.py",
+            line=12,
+            category="dead_code",
+            description="Unused helper function `_legacy_hash`.",
+        ),
+    ],
+    summary={"total": 3, "high": 1, "medium": 1, "low": 1},
 )
 
-_FAKE_SECURITY = json.dumps(
-    {
-        "findings": [
-            {
-                "severity": "CRITICAL",
-                "file": "app/auth.py",
-                "line": 15,
-                "category": "injection",
-                "description": "SQL query built with f-string from user input.",
-            },
-            {
-                "severity": "HIGH",
-                "file": "app/auth.py",
-                "line": 31,
-                "category": "hardcoded_secret",
-                "description": "JWT signing key hardcoded as string literal.",
-            },
-        ],
-        "summary": {"total": 2, "critical": 1, "high": 1},
-    }
+_SECURITY_OUTPUT = FakeOutput(
+    findings=[
+        FakeFinding(
+            severity="CRITICAL",
+            file="app/auth.py",
+            line=15,
+            category="injection",
+            description="SQL query built with f-string from user input.",
+        ),
+        FakeFinding(
+            severity="HIGH",
+            file="app/auth.py",
+            line=31,
+            category="hardcoded_secret",
+            description="JWT signing key hardcoded as string literal.",
+        ),
+    ],
+    summary={"total": 2, "critical": 1, "high": 1},
 )
 
 
 def fake_code_review(state: dict[str, Any]) -> dict[str, Any]:
-    return {"fake_code_review": f"```json\n{_FAKE_REVIEW}\n```"}
+    return {"fake_code_review": _REVIEW_OUTPUT}
 
 
 def fake_security_audit(state: dict[str, Any]) -> dict[str, Any]:
-    return {"fake_security_audit": f"```json\n{_FAKE_SECURITY}\n```"}
+    return {"fake_security_audit": _SECURITY_OUTPUT}
 
 
 def main() -> None:
@@ -91,7 +103,6 @@ def main() -> None:
     resolve = ResolveFindings(
         reads_from=[review, security],
         interactive=not args.no_interactive,
-        verbosity=Verbosity.status,
     )
 
     pipeline = Pipeline(

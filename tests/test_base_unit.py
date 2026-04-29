@@ -308,27 +308,23 @@ class TestShellNode:
         node = ShellNode(name="myshell", command="true")
         assert node.declared_outputs == ("myshell",)
 
-    def test_verbose_run(self):
-        node = ShellNode(
-            name="t", command="echo verbose_test", verbosity=Verbosity.normal
-        )
+    def test_streaming_run(self):
+        node = ShellNode(name="t", command="echo streaming_test")
+        lines: list[str] = []
+        node.on_output = lambda name, line: lines.append(line)
         result = asyncio.run(node({"working_dir": None}))
-        assert "verbose_test" in result["t"]
+        assert "streaming_test" in result["t"]
+        assert any("streaming_test" in l for l in lines)
 
-    def test_verbose_check_failure(self):
-        node = ShellNode(
-            name="t", command="false", check=True, verbosity=Verbosity.normal
-        )
+    def test_streaming_check_failure(self):
+        node = ShellNode(name="t", command="false", check=True)
+        node.on_output = lambda name, line: None
         with pytest.raises(subprocess.CalledProcessError):
             asyncio.run(node({"working_dir": None}))
 
-    def test_verbose_timeout(self):
-        node = ShellNode(
-            name="t",
-            command="sleep 60",
-            timeout=0.1,
-            verbosity=Verbosity.normal,
-        )
+    def test_streaming_timeout(self):
+        node = ShellNode(name="t", command="sleep 60", timeout=0.1)
+        node.on_output = lambda name, line: None
         with pytest.raises(subprocess.TimeoutExpired):
             asyncio.run(node({"working_dir": None}))
 
@@ -367,7 +363,7 @@ class TestShellNodeOutput:
         class MyOutput(BaseModel):
             value: int
 
-        node = ShellNode(name="t", command='echo \'{"value": 42}\'', output=MyOutput)
+        node = ShellNode(name="t", command="echo '{\"value\": 42}'", output=MyOutput)
         result = asyncio.run(node({"working_dir": None}))
         assert hasattr(result["t"], "value")
         assert result["t"].value == 42

@@ -23,9 +23,9 @@ agentpipe solves a different problem: **repeatable, unattended, cost-controlled 
 
 **Guaranteed execution.** The pipeline topology is deterministic. If you define 5 parallel review nodes, all 5 run. A skill prompt says "run lint, then review, then test" but Claude might skip steps, combine them, or decide one isn't needed. The pipeline doesn't interpret — it executes.
 
-**Cost tracking and controls.** Every node reports its token cost. Per-node budget caps, model tier selection, and structured run logs (`.agentpipe/runs/`) give you visibility and control over spend. A Claude Code session gives you a single bill at the end.
+**Cost tracking and controls.** Every node reports its token cost. Per-node budget caps and model tier selection give you visibility and control over spend. A Claude Code session gives you a single bill at the end.
 
-**Structured, machine-readable output.** Each node produces JSON findings with severity, file, line, category. Downstream nodes consume this programmatically — `resolve_findings` parses upstream JSON and presents a numbered list for the user to triage. Claude Code subagents produce free-text summaries that require human interpretation.
+**Structured, machine-readable output.** Each node defines a Pydantic model for its output. The framework auto-generates output instructions in the prompt and validates the response — no regex, no string parsing. Downstream nodes consume typed objects: `ResolveFindings` walks upstream models for findings and presents a numbered list for triage. Claude Code subagents produce free-text summaries that require human interpretation.
 
 ### When Claude Code alone is enough
 
@@ -111,7 +111,7 @@ Each owns a single concern. They do not overlap — code review doesn't run lint
 | `PythonSecurityAudit` | Traces data flow from inputs to sinks. Injection, auth bypass, hardcoded secrets, unsafe deserialization, data exposure. No external scanners. |
 | `DocsReview` | Doc drift detection. Checks docstrings, README, CHANGELOG against actual code for accuracy. |
 | `PythonTest` | Runs pytest, reads failing tests and the code under test to identify root causes. |
-| `PythonDependencyAudit` | Runs `pip-audit` to scan for CVEs, upgrades affected packages to patched versions. |
+| `PythonDependencyAudit` | Runs `pip-audit` to scan for CVEs, reports findings with CVSS-based severity. Read-only by default. |
 | `ResolveFindings` | Extracts findings from upstream nodes, optionally prompts the user for selection, delegates to an inner agent to apply fixes. |
 
 All `ClaudeAgentNode` quality nodes default to read-only. Pass Edit/Write in the allow list to enable fixing.
@@ -120,9 +120,9 @@ All `ClaudeAgentNode` quality nodes default to read-only. Pass Edit/Write in the
 
 | Class | What it does |
 |---|---|
-| `PythonLint` | Runs `ruff check --fix`. Pass `fix=False` for check-only. |
+| `PythonLint` | Runs `ruff check --fix`. |
 | `PythonFormat` | Runs `ruff format`. |
-| `PythonTypeCheck` | Runs `mypy --output json` and returns findings in standard JSON format. |
+| `PythonTypeCheck` | Runs `mypy --output json`, parses results into a `TypeCheckOutput` Pydantic model. |
 | `PythonEnsureTools` | Preflight check — installs `agentpipe[python]` tools if missing. |
 
 These are `ShellNode` instances — they run subprocesses directly, no LLM call. They don't accept `model`, `allow`/`deny`, or `extra_skills`.
@@ -226,11 +226,17 @@ python -m agentpipe.graphs.python.check /path/to/repo
 **`ClaudeAgentNode`** — wraps `claude_agent_sdk.query()`:
 
 ```python
+from pydantic import BaseModel, Field
 from agentpipe import ClaudeAgentNode, PYTHON_CLEAN_CODE
+
+class ReviewOutput(BaseModel):
+    findings: list[dict] = Field(default_factory=list)
+    summary: str = Field(examples=["No issues found."])
 
 reviewer = ClaudeAgentNode(
     name="reviewer",
     system_prompt="You review pull requests.",
+    output=ReviewOutput,  # auto-generates output instructions, validates response
     skills=[PYTHON_CLEAN_CODE],
     allow=["Read", "Glob", "Grep", "Bash(git diff*)"],
     deny=["Bash(git push*)"],
@@ -241,9 +247,14 @@ reviewer = ClaudeAgentNode(
 **`ShellNode`** — runs a subprocess:
 
 ```python
+from pydantic import BaseModel
 from agentpipe import ShellNode
 
-run_tests = ShellNode(name="tests", command="pytest -x")
+class TestResult(BaseModel):
+    passed: int
+    failed: int
+
+run_tests = ShellNode(name="tests", command="pytest -x", output=TestResult)
 ```
 
 **Plain functions** — any `(state) -> dict` callable works as a node.
@@ -259,7 +270,7 @@ ClaudeAgentNode(
 )
 ```
 
-Each run writes `last_cost_usd` into state and logs per-node costs to `.agentpipe/runs/`. Other levers: cheaper models, turn caps (`max_turns=10`), tighter allow lists.
+Each run writes `last_cost_usd` into state. Other levers: cheaper models, turn caps (`max_turns=10`), tighter allow lists.
 
 ## Language skills
 

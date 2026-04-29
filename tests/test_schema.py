@@ -96,6 +96,7 @@ def test_multiple_literal_fields_each_rendered():
 
 # --- parse_output tests ---
 
+
 class ValueModel(BaseModel):
     value: int
 
@@ -136,7 +137,7 @@ def test_raises_on_validation_error():
 
 
 def test_handles_text_before_and_after_json():
-    text = "Some preamble text.\n```json\n{\"value\": 7}\n```\nSome trailing text."
+    text = 'Some preamble text.\n```json\n{"value": 7}\n```\nSome trailing text.'
     result = parse_output(ValueModel, text)
     assert result.value == 7
 
@@ -144,13 +145,20 @@ def test_handles_text_before_and_after_json():
 class TestCodeReviewModels:
     def test_code_review_output_validates(self):
         from agentpipe.nodes.python_code_review import CodeReviewOutput
+
         data = {
-            "findings": [{
-                "file": "a.py", "line": 42, "severity": "HIGH",
-                "category": "logic_error", "source": "python_code_review",
-                "description": "Bug.", "recommendation": "Fix it.",
-                "confidence": "high",
-            }],
+            "findings": [
+                {
+                    "file": "a.py",
+                    "line": 42,
+                    "severity": "HIGH",
+                    "category": "logic_error",
+                    "source": "python_code_review",
+                    "description": "Bug.",
+                    "recommendation": "Fix it.",
+                    "confidence": "high",
+                }
+            ],
             "summary": {"files_reviewed": 1, "high": 1, "medium": 0, "low": 0},
         }
         output = CodeReviewOutput.model_validate(data)
@@ -159,6 +167,7 @@ class TestCodeReviewModels:
 
     def test_code_review_node_has_output_instructions(self):
         from agentpipe.nodes.python_code_review import PythonCodeReview
+
         node = PythonCodeReview()
         assert "## Output" in node.system_prompt
         assert "severity" in node.system_prompt.lower()
@@ -167,13 +176,21 @@ class TestCodeReviewModels:
 class TestSecurityAuditModels:
     def test_security_audit_output_validates(self):
         from agentpipe.nodes.python_security_audit import SecurityAuditOutput
+
         data = {
-            "findings": [{
-                "file": "a.py", "line": 10, "severity": "HIGH",
-                "category": "command_injection", "source": "python_security_audit",
-                "description": "Vuln.", "exploit_scenario": "Attack.",
-                "recommendation": "Fix.", "confidence": "high",
-            }],
+            "findings": [
+                {
+                    "file": "a.py",
+                    "line": 10,
+                    "severity": "HIGH",
+                    "category": "command_injection",
+                    "source": "python_security_audit",
+                    "description": "Vuln.",
+                    "exploit_scenario": "Attack.",
+                    "recommendation": "Fix.",
+                    "confidence": "high",
+                }
+            ],
             "summary": {"files_reviewed": 5, "high": 1, "medium": 0, "low": 0},
         }
         output = SecurityAuditOutput.model_validate(data)
@@ -181,6 +198,7 @@ class TestSecurityAuditModels:
 
     def test_security_audit_node_has_output_instructions(self):
         from agentpipe.nodes.python_security_audit import PythonSecurityAudit
+
         node = PythonSecurityAudit()
         assert "## Output" in node.system_prompt
 
@@ -188,13 +206,20 @@ class TestSecurityAuditModels:
 class TestDocsReviewModels:
     def test_docs_review_output_validates(self):
         from agentpipe.nodes.docs_review import DocsReviewOutput
+
         data = {
-            "findings": [{
-                "file": "README.md", "line": 10, "severity": "MEDIUM",
-                "category": "doc_drift", "source": "docs_review",
-                "description": "Stale ref.", "recommendation": "Update.",
-                "confidence": "high",
-            }],
+            "findings": [
+                {
+                    "file": "README.md",
+                    "line": 10,
+                    "severity": "MEDIUM",
+                    "category": "doc_drift",
+                    "source": "docs_review",
+                    "description": "Stale ref.",
+                    "recommendation": "Update.",
+                    "confidence": "high",
+                }
+            ],
             "summary": {"files_reviewed": 5, "high": 0, "medium": 1, "low": 0},
         }
         output = DocsReviewOutput.model_validate(data)
@@ -202,6 +227,7 @@ class TestDocsReviewModels:
 
     def test_docs_review_node_has_output_instructions(self):
         from agentpipe.nodes.docs_review import DocsReview
+
         node = DocsReview()
         assert "## Output" in node.system_prompt
 
@@ -209,16 +235,30 @@ class TestDocsReviewModels:
 class TestPythonTestModels:
     def test_test_output_validates(self):
         from agentpipe.nodes.python_test import TestOutput
+
         data = {
-            "findings": [{
-                "file": "tests/test_foo.py", "line": 10, "severity": "HIGH",
-                "category": "test_failure", "source": "python_test",
-                "description": "Assertion failed.", "recommendation": "Fix.",
-                "confidence": "high",
-            }],
-            "summary": {"tests_run": 50, "tests_passed": 49, "tests_failed": 1,
-                        "tests_skipped": 0, "tests_xfailed": 0,
-                        "high": 1, "medium": 0, "low": 0},
+            "findings": [
+                {
+                    "file": "tests/test_foo.py",
+                    "line": 10,
+                    "severity": "HIGH",
+                    "category": "test_failure",
+                    "source": "python_test",
+                    "description": "Assertion failed.",
+                    "recommendation": "Fix.",
+                    "confidence": "high",
+                }
+            ],
+            "summary": {
+                "tests_run": 50,
+                "tests_passed": 49,
+                "tests_failed": 1,
+                "tests_skipped": 0,
+                "tests_xfailed": 0,
+                "high": 1,
+                "medium": 0,
+                "low": 0,
+            },
         }
         output = TestOutput.model_validate(data)
         assert len(output.findings) == 1
@@ -226,6 +266,7 @@ class TestPythonTestModels:
 
     def test_test_node_has_output_instructions(self):
         from agentpipe.nodes.python_test import PythonTest
+
         node = PythonTest()
         assert "## Output" in node.system_prompt
 
@@ -233,13 +274,20 @@ class TestPythonTestModels:
 class TestDependencyAuditModels:
     def test_dependency_audit_output_validates(self):
         from agentpipe.nodes.python_dependency_audit import DependencyAuditOutput
+
         data = {
-            "findings": [{
-                "file": "pyproject.toml", "line": 1, "severity": "HIGH",
-                "category": "vulnerable_dependency", "source": "python_dependency_audit",
-                "description": "CVE.", "recommendation": "Upgrade.",
-                "confidence": "high",
-            }],
+            "findings": [
+                {
+                    "file": "pyproject.toml",
+                    "line": 1,
+                    "severity": "HIGH",
+                    "category": "vulnerable_dependency",
+                    "source": "python_dependency_audit",
+                    "description": "CVE.",
+                    "recommendation": "Upgrade.",
+                    "confidence": "high",
+                }
+            ],
             "summary": {"packages_scanned": 45, "high": 1, "medium": 0, "low": 0},
         }
         output = DependencyAuditOutput.model_validate(data)
@@ -247,6 +295,7 @@ class TestDependencyAuditModels:
 
     def test_dependency_audit_node_has_output_instructions(self):
         from agentpipe.nodes.python_dependency_audit import PythonDependencyAudit
+
         node = PythonDependencyAudit()
         assert "## Output" in node.system_prompt
 
@@ -254,12 +303,19 @@ class TestDependencyAuditModels:
 class TestTypeCheckModels:
     def test_type_check_output_validates(self):
         from agentpipe.nodes.python_type_check import TypeCheckOutput
+
         data = {
-            "findings": [{
-                "file": "foo.py", "line": 10, "severity": "HIGH",
-                "category": "type_error", "source": "python_type_check",
-                "description": "Incompatible types.", "confidence": "high",
-            }],
+            "findings": [
+                {
+                    "file": "foo.py",
+                    "line": 10,
+                    "severity": "HIGH",
+                    "category": "type_error",
+                    "source": "python_type_check",
+                    "description": "Incompatible types.",
+                    "confidence": "high",
+                }
+            ],
             "summary": {"high": 1, "medium": 0, "low": 0},
         }
         output = TypeCheckOutput.model_validate(data)
@@ -267,5 +323,6 @@ class TestTypeCheckModels:
 
     def test_type_check_node_has_output_cls(self):
         from agentpipe.nodes.python_type_check import PythonTypeCheck, TypeCheckOutput
+
         node = PythonTypeCheck()
         assert node.output_cls is TypeCheckOutput

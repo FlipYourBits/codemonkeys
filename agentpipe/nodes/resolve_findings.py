@@ -21,8 +21,6 @@ from agentpipe.display import default_prompt as _default_prompt
 from agentpipe.models import OPUS_4_6
 from agentpipe.nodes.base import (
     ClaudeAgentNode,
-    Verbosity,
-    _build_prior_results as _build_prior,
     _node_name,
 )
 from agentpipe.permissions import UnmatchedPolicy
@@ -234,7 +232,6 @@ class ResolveFindings:
         deny: Sequence[str] | None = None,
         on_unmatched: UnmatchedPolicy = "deny",
         max_turns: int | None = None,
-        verbosity: Verbosity = Verbosity.silent,
         ask_findings: AskFindings = ask_findings_via_stdin,
         prompt_fn: PromptFn | None = None,
         **kwargs: Any,
@@ -259,7 +256,6 @@ class ResolveFindings:
             prompt_template="{_fix_prompt}",
             model=model,
             max_turns=max_turns,
-            verbosity=verbosity,
             **kwargs,
         )
 

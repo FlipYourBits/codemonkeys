@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import sys
 
-from agentpipe.nodes.base import ShellNode, Verbosity
+from agentpipe.nodes.base import ShellNode
 
 
 class PythonEnsureTools(ShellNode):
-    def __init__(self, *, verbosity: Verbosity = Verbosity.silent) -> None:
+    def __init__(self) -> None:
         super().__init__(
             name="python_ensure_tools",
             command=[sys.executable, "-m", "pip", "install", "agentpipe[python]"],
-            verbosity=verbosity,
         )

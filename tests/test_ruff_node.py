@@ -58,7 +58,16 @@ def test_lint_fixes_unsorted_imports(tmp_path: Path):
 
     node = ShellNode(
         name="lint_test",
-        command=[sys.executable, "-m", "ruff", "check", "--fix", "--select", "I", "messy.py"],
+        command=[
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--fix",
+            "--select",
+            "I",
+            "messy.py",
+        ],
         check=False,
     )
     asyncio.run(node({"working_dir": str(tmp_path)}))

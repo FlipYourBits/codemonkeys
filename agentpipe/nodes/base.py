@@ -191,8 +191,6 @@ class ClaudeAgentNode:
         hard_cap: bool = True,
         warn_at_pct: float | Sequence[float] | None = 0.8,
         on_warn: WarnCallback | None = None,
-        verbosity: Verbosity = Verbosity.silent,
-        on_message: MessageCallback | None = None,
         extra_options: dict[str, Any] | None = None,
     ) -> None:
         self.name = name
@@ -210,13 +208,13 @@ class ClaudeAgentNode:
         self.hard_cap = hard_cap
         self.warn_at_pct = self._resolve_warn_pcts(warn_at_pct, hard_cap)
         self.on_warn = on_warn
-        self.verbosity = verbosity
-        self.on_message: MessageCallback | None = on_message or _make_printer(verbosity)
+        self.on_message: MessageCallback | None = None
         self.extra_options = extra_options or {}
         self.declared_outputs: tuple[str, ...] = (self.name, "last_cost_usd")
         self.output_cls: type[_BaseModel] | None = output
         if output is not None:
             from agentpipe.schema import generate_output_instructions
+
             self.system_prompt += "\n\n" + generate_output_instructions(output)
 
     @staticmethod
@@ -305,6 +303,7 @@ class ClaudeAgentNode:
         final = result_text if result_text else "\n".join(text_chunks).strip()
         if self.output_cls is not None:
             from agentpipe.schema import parse_output
+
             final = parse_output(self.output_cls, final)
         return {
             self.name: final,
@@ -327,14 +326,12 @@ class ShellNode:
         output: type[_BaseModel] | None = None,
         check: bool = True,
         timeout: float | None = None,
-        verbosity: Verbosity = Verbosity.silent,
     ) -> None:
         self.name = name
         self.command = command
         self.output_cls: type[_BaseModel] | None = output
         self.check = check
         self.timeout = timeout
-        self.verbosity = verbosity
         self.on_output: Callable[[str, str], None] | None = None
         self.declared_outputs: tuple[str, ...] = (self.name,)
 
@@ -348,7 +345,7 @@ class ShellNode:
         argv = self._resolve(state)
         cwd = state.get("working_dir")
 
-        if self.verbosity == Verbosity.silent:
+        if self.on_output is None:
 
             def run() -> subprocess.CompletedProcess[str]:
                 return subprocess.run(
@@ -364,6 +361,7 @@ class ShellNode:
             stdout = result.stdout.strip()
             if self.output_cls is not None:
                 from agentpipe.schema import parse_output
+
                 return {self.name: parse_output(self.output_cls, stdout)}
             return {self.name: stdout}
 
@@ -382,10 +380,7 @@ class ShellNode:
             async for raw in stream:
                 line = raw.decode("utf-8", errors="replace")
                 sink.append(line)
-                if self.on_output is not None:
-                    self.on_output(self.name, line.rstrip())
-                else:
-                    print(f"[{self.name}] {line.rstrip()}", file=sys.stderr)
+                self.on_output(self.name, line.rstrip())
 
         try:
             await asyncio.wait_for(
@@ -411,5 +406,6 @@ class ShellNode:
         stdout = "".join(stdout_chunks).strip()
         if self.output_cls is not None:
             from agentpipe.schema import parse_output
+
             return {self.name: parse_output(self.output_cls, stdout)}
         return {self.name: stdout}

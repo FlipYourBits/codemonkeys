@@ -6,7 +6,7 @@ import sys
 
 from pydantic import BaseModel, Field
 
-from agentpipe.nodes.base import ShellNode, Verbosity
+from agentpipe.nodes.base import ShellNode
 
 
 class TypeCheckFinding(BaseModel):
@@ -24,6 +24,7 @@ class TypeCheckOutput(BaseModel):
     summary: dict[str, int] = Field(
         default_factory=dict, examples=[{"high": 0, "medium": 0, "low": 0}]
     )
+
 
 _MYPY_SCRIPT = """\
 import json, subprocess, sys
@@ -66,7 +67,6 @@ class PythonTypeCheck(ShellNode):
         self,
         *,
         timeout: float | None = None,
-        verbosity: Verbosity = Verbosity.silent,
     ) -> None:
         super().__init__(
             name="python_type_check",
@@ -74,5 +74,4 @@ class PythonTypeCheck(ShellNode):
             output=TypeCheckOutput,
             check=False,
             timeout=timeout,
-            verbosity=verbosity,
         )

@@ -49,7 +49,9 @@ def _model_example(cls: type[BaseModel]) -> dict:
     return example
 
 
-def _literal_description_lines(field_name: str, annotation, field_info: FieldInfo) -> str:
+def _literal_description_lines(
+    field_name: str, annotation, field_info: FieldInfo
+) -> str:
     """Render allowed values + meanings for a Literal field that has a description."""
     if get_origin(annotation) is not Literal:
         return ""
@@ -66,7 +68,7 @@ def _literal_description_lines(field_name: str, annotation, field_info: FieldInf
         for v in values:
             prefix = f"{v}:"
             if sentence.startswith(prefix):
-                meaning[v] = sentence[len(prefix):].strip()
+                meaning[v] = sentence[len(prefix) :].strip()
                 break
 
     label = field_name.capitalize()

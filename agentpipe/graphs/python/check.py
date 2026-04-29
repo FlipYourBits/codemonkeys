@@ -40,15 +40,15 @@ def build_pipeline(
     interactive: bool = True,
     verbosity: Verbosity = Verbosity.normal,
 ) -> Pipeline:
-    python_ensure_tools = PythonEnsureTools(verbosity=verbosity)
-    python_lint = PythonLint(verbosity=verbosity)
-    python_format = PythonFormat(verbosity=verbosity)
-    python_test = PythonTest(verbosity=verbosity)
-    python_code_review = PythonCodeReview(base_ref=base_ref, verbosity=verbosity)
-    python_security_audit = PythonSecurityAudit(base_ref=base_ref, verbosity=verbosity)
-    docs_review = DocsReview(base_ref=base_ref, verbosity=verbosity)
-    python_dependency_audit = PythonDependencyAudit(verbosity=verbosity)
-    python_type_check = PythonTypeCheck(verbosity=verbosity)
+    python_ensure_tools = PythonEnsureTools()
+    python_lint = PythonLint()
+    python_format = PythonFormat()
+    python_test = PythonTest()
+    python_code_review = PythonCodeReview(base_ref=base_ref)
+    python_security_audit = PythonSecurityAudit(base_ref=base_ref)
+    docs_review = DocsReview(base_ref=base_ref)
+    python_dependency_audit = PythonDependencyAudit()
+    python_type_check = PythonTypeCheck()
     resolve_findings = ResolveFindings(
         interactive=interactive,
         reads_from=[
@@ -59,9 +59,8 @@ def build_pipeline(
             python_dependency_audit,
             python_type_check,
         ],
-        verbosity=verbosity,
     )
-    python_lint_final = PythonLint(verbosity=verbosity)
+    python_lint_final = PythonLint()
 
     return Pipeline(
         working_dir=working_dir,

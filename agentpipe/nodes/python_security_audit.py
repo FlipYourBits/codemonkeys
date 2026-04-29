@@ -18,9 +18,15 @@ class SecurityAuditFinding(BaseModel):
     )
     category: str = Field(examples=["command_injection"])
     source: str = Field(examples=["python_security_audit"])
-    description: str = Field(examples=["User input passed to subprocess with shell=True."])
-    exploit_scenario: str = Field(examples=["Attacker injects shell commands via the name parameter."])
-    recommendation: str = Field(examples=["Use subprocess.run() with a list argument instead of shell=True."])
+    description: str = Field(
+        examples=["User input passed to subprocess with shell=True."]
+    )
+    exploit_scenario: str = Field(
+        examples=["Attacker injects shell commands via the name parameter."]
+    )
+    recommendation: str = Field(
+        examples=["Use subprocess.run() with a list argument instead of shell=True."]
+    )
     confidence: Literal["high", "medium", "low"] = Field(
         description="high: confident this is exploitable. medium: likely exploitable but some ambiguity. low: speculative."
     )

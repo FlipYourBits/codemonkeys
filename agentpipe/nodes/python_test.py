@@ -68,7 +68,18 @@ class TestOutput(BaseModel):
     findings: list[TestFinding] = Field(default_factory=list)
     summary: dict[str, int] = Field(
         default_factory=dict,
-        examples=[{"tests_run": 50, "tests_passed": 48, "tests_failed": 2, "tests_skipped": 0, "tests_xfailed": 0, "high": 1, "medium": 1, "low": 0}],
+        examples=[
+            {
+                "tests_run": 50,
+                "tests_passed": 48,
+                "tests_failed": 2,
+                "tests_skipped": 0,
+                "tests_xfailed": 0,
+                "high": 1,
+                "medium": 1,
+                "low": 0,
+            }
+        ],
     )
 
 

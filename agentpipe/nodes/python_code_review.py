@@ -32,6 +32,7 @@ class CodeReviewOutput(BaseModel):
         examples=[{"files_reviewed": 12, "high": 1, "medium": 0, "low": 0}],
     )
 
+
 _SKILL = """\
 # Code review
 

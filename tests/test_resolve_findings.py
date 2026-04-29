@@ -31,8 +31,11 @@ class TestExtractItemsFromState:
         upstream = FakeUpstreamOutput(
             findings=[
                 FakeUpstreamFinding(
-                    file="a.py", line=1, severity="HIGH",
-                    category="logic_error", description="bug",
+                    file="a.py",
+                    line=1,
+                    severity="HIGH",
+                    category="logic_error",
+                    description="bug",
                 ),
             ]
         )
@@ -44,8 +47,20 @@ class TestExtractItemsFromState:
     def test_sorts_by_severity(self):
         upstream = FakeUpstreamOutput(
             findings=[
-                FakeUpstreamFinding(file="a.py", line=1, severity="LOW", category="clarity", description="minor"),
-                FakeUpstreamFinding(file="b.py", line=2, severity="CRITICAL", category="logic_error", description="crit"),
+                FakeUpstreamFinding(
+                    file="a.py",
+                    line=1,
+                    severity="LOW",
+                    category="clarity",
+                    description="minor",
+                ),
+                FakeUpstreamFinding(
+                    file="b.py",
+                    line=2,
+                    severity="CRITICAL",
+                    category="logic_error",
+                    description="crit",
+                ),
             ]
         )
         items = _extract_items_from_state(["review"], {"review": upstream})
@@ -53,12 +68,28 @@ class TestExtractItemsFromState:
         assert items[1]["severity"] == "LOW"
 
     def test_multiple_upstream_models(self):
-        review = FakeUpstreamOutput(findings=[
-            FakeUpstreamFinding(file="a.py", line=1, severity="HIGH", category="logic_error", description="bug"),
-        ])
-        security = FakeUpstreamOutput(findings=[
-            FakeUpstreamFinding(file="b.py", line=2, severity="MEDIUM", category="injection", description="sql inj"),
-        ])
+        review = FakeUpstreamOutput(
+            findings=[
+                FakeUpstreamFinding(
+                    file="a.py",
+                    line=1,
+                    severity="HIGH",
+                    category="logic_error",
+                    description="bug",
+                ),
+            ]
+        )
+        security = FakeUpstreamOutput(
+            findings=[
+                FakeUpstreamFinding(
+                    file="b.py",
+                    line=2,
+                    severity="MEDIUM",
+                    category="injection",
+                    description="sql inj",
+                ),
+            ]
+        )
         items = _extract_items_from_state(
             ["code_review", "security_audit"],
             {"code_review": review, "security_audit": security},
@@ -84,10 +115,22 @@ class TestFormatFindings:
 
     def test_formats_numbered_list(self):
         findings = [
-            {"severity": "HIGH", "source": "code_review", "file": "a.py", "line": 10,
-             "category": "logic_error", "description": "Off-by-one error"},
-            {"severity": "LOW", "source": "docs_review", "file": "b.py", "line": 5,
-             "category": "docstring_drift", "description": "Stale docstring"},
+            {
+                "severity": "HIGH",
+                "source": "code_review",
+                "file": "a.py",
+                "line": 10,
+                "category": "logic_error",
+                "description": "Off-by-one error",
+            },
+            {
+                "severity": "LOW",
+                "source": "docs_review",
+                "file": "b.py",
+                "line": 5,
+                "category": "docstring_drift",
+                "description": "Stale docstring",
+            },
         ]
         result = _format_findings(findings)
         assert "1" in result
@@ -131,8 +174,15 @@ class TestSelectByInput:
 class TestResolveOutput:
     def test_resolve_output_validates(self):
         data = {
-            "fixed": [{"file": "a.py", "line": 42, "category": "logic_error",
-                       "source": "review", "description": "Fixed."}],
+            "fixed": [
+                {
+                    "file": "a.py",
+                    "line": 42,
+                    "category": "logic_error",
+                    "source": "review",
+                    "description": "Fixed.",
+                }
+            ],
             "skipped": [],
         }
         output = ResolveOutput.model_validate(data)
@@ -155,7 +205,15 @@ class TestResolveFindingsNode:
 
     def test_auto_mode_skips_low_severity(self):
         upstream = FakeUpstreamOutput(
-            findings=[FakeUpstreamFinding(file="a.py", line=1, severity="LOW", category="clarity", description="minor")]
+            findings=[
+                FakeUpstreamFinding(
+                    file="a.py",
+                    line=1,
+                    severity="LOW",
+                    category="clarity",
+                    description="minor",
+                )
+            ]
         )
         node = ResolveFindings(reads_from=["review"], interactive=False)
         result = asyncio.run(node({"working_dir": "/tmp", "review": upstream}))
@@ -163,12 +221,22 @@ class TestResolveFindingsNode:
 
     def test_interactive_none_skips(self):
         upstream = FakeUpstreamOutput(
-            findings=[FakeUpstreamFinding(file="a.py", line=1, severity="HIGH", category="logic_error", description="bug")]
+            findings=[
+                FakeUpstreamFinding(
+                    file="a.py",
+                    line=1,
+                    severity="HIGH",
+                    category="logic_error",
+                    description="bug",
+                )
+            ]
         )
 
         async def ask_none(_summary):
             return "none"
 
-        node = ResolveFindings(reads_from=["review"], interactive=True, ask_findings=ask_none)
+        node = ResolveFindings(
+            reads_from=["review"], interactive=True, ask_findings=ask_none
+        )
         result = asyncio.run(node({"working_dir": "/tmp", "review": upstream}))
         assert result["last_cost_usd"] == 0.0

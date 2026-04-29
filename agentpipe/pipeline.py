@@ -28,7 +28,8 @@ class Pipeline:
         steps: list of node instances, (alias, node) tuples for name
             overrides, or nested lists for parallel fan-out. Duplicate
             names are auto-suffixed (e.g. "python_lint", "python_lint_2").
-        verbosity: default verbosity for nodes that accept it.
+        verbosity: controls display output (silent/status/normal/verbose).
+        log_dir: when set, each node writes output to {log_dir}/{name}.log.
         extra_state: additional key-value pairs merged into initial state.
     """
 
@@ -39,6 +40,7 @@ class Pipeline:
         task: str = "",
         steps: Sequence[Any],
         verbosity: Verbosity = Verbosity.silent,
+        log_dir: str | Path | None = None,
         extra_state: dict[str, Any] | None = None,
     ) -> None:
         if not steps:
@@ -47,8 +49,10 @@ class Pipeline:
         self.task = task
         self.steps = list(steps)
         self.verbosity = verbosity
+        self.log_dir = Path(log_dir) if log_dir is not None else None
         self.extra_state = dict(extra_state or {})
         self._display: Display | None = None
+        self._log_files: dict[str, Any] = {}
 
         self._node_costs: dict[str, float] = {}
         self._node_outputs: dict[str, str] = {}
@@ -62,10 +66,25 @@ class Pipeline:
         call = getattr(node, "__call__", None)
         return call is not None and inspect.iscoroutinefunction(call)
 
+    def _open_log(self, graph_name: str) -> Any:
+        if self.log_dir is None:
+            return None
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        fh = open(self.log_dir / f"{graph_name}.log", "w", encoding="utf-8")
+        self._log_files[graph_name] = fh
+        return fh
+
+    def _close_log(self, graph_name: str) -> None:
+        fh = self._log_files.pop(graph_name, None)
+        if fh is not None:
+            fh.close()
+
     def _node_enter(
         self, graph_name: str, node: Any, state: dict[str, Any]
     ) -> tuple[dict[str, Any], float]:
         t0 = 0.0
+        log_fh = self._open_log(graph_name)
+
         if self._display is not None:
             self._display.node_start(graph_name)
             t0 = time.time()
@@ -75,14 +94,37 @@ class Pipeline:
             ):
                 from agentpipe.nodes.base import _make_printer
 
-                node.on_message = _make_printer(self.verbosity, display=self._display)
+                display_printer = _make_printer(self.verbosity, display=self._display)
+                if log_fh is not None:
+
+                    def _log_message(
+                        name: str, msg: Any, _dp=display_printer, _fh=log_fh
+                    ) -> None:
+                        _dp(name, msg)
+                        _fh.write(f"{msg}\n")
+                        _fh.flush()
+
+                    node.on_message = _log_message
+                else:
+                    node.on_message = display_printer
             if hasattr(node, "on_output") and self.verbosity in (
                 Verbosity.normal,
                 Verbosity.verbose,
             ):
-                node.on_output = lambda name, line: self._display.node_output(
-                    name, line
-                )
+                if log_fh is not None:
+
+                    def _log_output(
+                        name: str, line: str, _d=self._display, _fh=log_fh
+                    ) -> None:
+                        _d.node_output(name, line)
+                        _fh.write(f"{line}\n")
+                        _fh.flush()
+
+                    node.on_output = _log_output
+                else:
+                    node.on_output = lambda name, line: self._display.node_output(
+                        name, line
+                    )
             if hasattr(node, "on_warn"):
                 from agentpipe.budget import default_on_warn
 
@@ -91,9 +133,27 @@ class Pipeline:
                 )
             if hasattr(node, "prompt_fn"):
                 node.prompt_fn = self._display.prompt
+        elif log_fh is not None:
+            t0 = time.time()
+            if hasattr(node, "on_message"):
+
+                def _log_message_only(name: str, msg: Any, _fh=log_fh) -> None:
+                    _fh.write(f"{msg}\n")
+                    _fh.flush()
+
+                node.on_message = _log_message_only
+            if hasattr(node, "on_output"):
+
+                def _log_output_only(name: str, line: str, _fh=log_fh) -> None:
+                    _fh.write(f"{line}\n")
+                    _fh.flush()
+
+                node.on_output = _log_output_only
         return state, t0
 
     def _node_exit(self, graph_name: str, result: Any, t0: float) -> dict[str, Any]:
+        self._close_log(graph_name)
+
         if not isinstance(result, dict):
             if self._display is not None:
                 self._display.node_done(graph_name, elapsed=time.time() - t0)

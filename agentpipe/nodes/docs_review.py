@@ -18,8 +18,12 @@ class DocsReviewFinding(BaseModel):
     )
     category: str = Field(examples=["docstring_drift"])
     source: str = Field(examples=["docs_review"])
-    description: str = Field(examples=["Docstring says raises ValueError but function returns None."])
-    recommendation: str = Field(examples=["Update the docstring to match the current behavior."])
+    description: str = Field(
+        examples=["Docstring says raises ValueError but function returns None."]
+    )
+    recommendation: str = Field(
+        examples=["Update the docstring to match the current behavior."]
+    )
     confidence: Literal["high", "medium", "low"] = Field(
         description="high: confident this is wrong. medium: likely wrong but some ambiguity. low: speculative."
     )
