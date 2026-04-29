@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel, Field
 
-from agentpipe.nodes.base import (
+from codemonkeys.nodes.base import (
     ClaudeAgentNode,
     ShellNode,
     Verbosity,

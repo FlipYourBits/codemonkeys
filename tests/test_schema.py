@@ -1,7 +1,7 @@
 from typing import Literal
 from pydantic import BaseModel, Field
 import pytest
-from agentpipe.schema import generate_output_instructions, parse_output
+from codemonkeys.schema import generate_output_instructions, parse_output
 
 
 class SimpleModel(BaseModel):
@@ -144,7 +144,7 @@ def test_handles_text_before_and_after_json():
 
 class TestCodeReviewModels:
     def test_code_review_output_validates(self):
-        from agentpipe.nodes.python_code_review import CodeReviewOutput
+        from codemonkeys.nodes.python_code_review import CodeReviewOutput
 
         data = {
             "findings": [
@@ -166,7 +166,7 @@ class TestCodeReviewModels:
         assert output.findings[0].severity == "HIGH"
 
     def test_code_review_node_has_output_instructions(self):
-        from agentpipe.nodes.python_code_review import PythonCodeReview
+        from codemonkeys.nodes.python_code_review import PythonCodeReview
 
         node = PythonCodeReview()
         assert "## Output" in node.system_prompt
@@ -175,7 +175,7 @@ class TestCodeReviewModels:
 
 class TestSecurityAuditModels:
     def test_security_audit_output_validates(self):
-        from agentpipe.nodes.python_security_audit import SecurityAuditOutput
+        from codemonkeys.nodes.python_security_audit import SecurityAuditOutput
 
         data = {
             "findings": [
@@ -197,7 +197,7 @@ class TestSecurityAuditModels:
         assert len(output.findings) == 1
 
     def test_security_audit_node_has_output_instructions(self):
-        from agentpipe.nodes.python_security_audit import PythonSecurityAudit
+        from codemonkeys.nodes.python_security_audit import PythonSecurityAudit
 
         node = PythonSecurityAudit()
         assert "## Output" in node.system_prompt
@@ -205,7 +205,7 @@ class TestSecurityAuditModels:
 
 class TestDocsReviewModels:
     def test_docs_review_output_validates(self):
-        from agentpipe.nodes.docs_review import DocsReviewOutput
+        from codemonkeys.nodes.docs_review import DocsReviewOutput
 
         data = {
             "findings": [
@@ -226,7 +226,7 @@ class TestDocsReviewModels:
         assert len(output.findings) == 1
 
     def test_docs_review_node_has_output_instructions(self):
-        from agentpipe.nodes.docs_review import DocsReview
+        from codemonkeys.nodes.docs_review import DocsReview
 
         node = DocsReview()
         assert "## Output" in node.system_prompt
@@ -234,7 +234,7 @@ class TestDocsReviewModels:
 
 class TestPythonTestModels:
     def test_test_output_validates(self):
-        from agentpipe.nodes.python_test import TestOutput
+        from codemonkeys.nodes.python_test import TestOutput
 
         data = {
             "findings": [
@@ -265,7 +265,7 @@ class TestPythonTestModels:
         assert output.summary["tests_run"] == 50
 
     def test_test_node_has_output_instructions(self):
-        from agentpipe.nodes.python_test import PythonTest
+        from codemonkeys.nodes.python_test import PythonTest
 
         node = PythonTest()
         assert "## Output" in node.system_prompt
@@ -273,7 +273,7 @@ class TestPythonTestModels:
 
 class TestDependencyAuditModels:
     def test_dependency_audit_output_validates(self):
-        from agentpipe.nodes.python_dependency_audit import DependencyAuditOutput
+        from codemonkeys.nodes.python_dependency_audit import DependencyAuditOutput
 
         data = {
             "findings": [
@@ -294,7 +294,7 @@ class TestDependencyAuditModels:
         assert len(output.findings) == 1
 
     def test_dependency_audit_node_has_output_instructions(self):
-        from agentpipe.nodes.python_dependency_audit import PythonDependencyAudit
+        from codemonkeys.nodes.python_dependency_audit import PythonDependencyAudit
 
         node = PythonDependencyAudit()
         assert "## Output" in node.system_prompt
@@ -302,7 +302,7 @@ class TestDependencyAuditModels:
 
 class TestTypeCheckModels:
     def test_type_check_output_validates(self):
-        from agentpipe.nodes.python_type_check import TypeCheckOutput
+        from codemonkeys.nodes.python_type_check import TypeCheckOutput
 
         data = {
             "findings": [
@@ -322,7 +322,7 @@ class TestTypeCheckModels:
         assert len(output.findings) == 1
 
     def test_type_check_node_has_output_cls(self):
-        from agentpipe.nodes.python_type_check import PythonTypeCheck, TypeCheckOutput
+        from codemonkeys.nodes.python_type_check import PythonTypeCheck, TypeCheckOutput
 
         node = PythonTypeCheck()
         assert node.output_cls is TypeCheckOutput

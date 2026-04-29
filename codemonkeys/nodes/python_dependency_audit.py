@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agentpipe.models import HAIKU_4_5
-from agentpipe.nodes.base import ClaudeAgentNode
+from codemonkeys.models import HAIKU_4_5
+from codemonkeys.nodes.base import ClaudeAgentNode
 
 
 class DependencyAuditFinding(BaseModel):

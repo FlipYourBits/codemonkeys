@@ -4,7 +4,7 @@ import asyncio
 
 from pydantic import BaseModel, Field
 
-from agentpipe.nodes.resolve_findings import (
+from codemonkeys.nodes.resolve_findings import (
     ResolveFindings,
     ResolveOutput,
     _extract_items_from_state,

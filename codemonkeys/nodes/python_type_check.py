@@ -6,7 +6,7 @@ import sys
 
 from pydantic import BaseModel, Field
 
-from agentpipe.nodes.base import ShellNode
+from codemonkeys.nodes.base import ShellNode
 
 
 class TypeCheckFinding(BaseModel):

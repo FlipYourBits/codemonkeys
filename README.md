@@ -1,4 +1,4 @@
-# agentpipe
+# codemonkeys
 
 Deterministic AI pipelines with per-node model selection, least-privilege permissions, and guaranteed execution. Built on the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
 
@@ -13,9 +13,9 @@ Deterministic AI pipelines with per-node model selection, least-privilege permis
 
 Claude Code (with plugins like superpowers) is excellent for interactive work — brainstorming, implementing features with human-in-the-loop review, debugging. A skilled developer steering Claude through a conversation will outperform any automated pipeline for novel, judgment-heavy tasks.
 
-agentpipe solves a different problem: **repeatable, unattended, cost-controlled code operations** where you need guarantees that a conversation can't provide.
+codemonkeys solves a different problem: **repeatable, unattended, cost-controlled code operations** where you need guarantees that a conversation can't provide.
 
-### What agentpipe gives you
+### What codemonkeys gives you
 
 **Per-node model selection.** Each pipeline step runs its own Claude instance on a specific model. Run dependency audit on Haiku ($0.25/MTok), test analysis on Sonnet ($3/MTok), and code review on Opus ($15/MTok). A Claude Code session uses one model for all subagents unless you manually override each dispatch.
 
@@ -34,7 +34,7 @@ agentpipe solves a different problem: **repeatable, unattended, cost-controlled 
 - **Novel, ambiguous work** — tasks where you don't know the steps upfront. A conversation adapts; a pipeline executes a fixed topology.
 - **Small repos or solo projects** — if the cost of running 5 parallel review nodes isn't justified by the codebase size or team requirements.
 
-### When you need agentpipe
+### When you need codemonkeys
 
 - **CI/CD quality gates** — run on every PR with guaranteed lint, test, review, security scan, dependency audit. Post structured results. No human babysitting.
 - **Compliance/audit pipelines** — nightly security scan with Opus, license check with Haiku, SBOM generation with a shell node. Read-only permissions guarantee audit integrity.
@@ -56,22 +56,22 @@ export ANTHROPIC_API_KEY=...
 ## Run
 
 ```bash
-.venv/bin/python3 -m agentpipe.cli python check .
-.venv/bin/python3 -m agentpipe.cli python check /path/to/repo --base-ref develop
-.venv/bin/python3 -m agentpipe.cli python check . --no-interactive --verbosity verbose
+.venv/bin/python3 -m codemonkeys.cli python check .
+.venv/bin/python3 -m codemonkeys.cli python check /path/to/repo --base-ref develop
+.venv/bin/python3 -m codemonkeys.cli python check . --no-interactive --verbosity verbose
 ```
 
 ## Quick start
 
 ```python
 import asyncio
-from agentpipe import Pipeline, Verbosity
-from agentpipe.nodes.python_lint import PythonLint
-from agentpipe.nodes.python_format import PythonFormat
-from agentpipe.nodes.python_code_review import PythonCodeReview
-from agentpipe.nodes.python_security_audit import PythonSecurityAudit
-from agentpipe.nodes.python_test import PythonTest
-from agentpipe.nodes.resolve_findings import ResolveFindings
+from codemonkeys import Pipeline, Verbosity
+from codemonkeys.nodes.python_lint import PythonLint
+from codemonkeys.nodes.python_format import PythonFormat
+from codemonkeys.nodes.python_code_review import PythonCodeReview
+from codemonkeys.nodes.python_security_audit import PythonSecurityAudit
+from codemonkeys.nodes.python_test import PythonTest
+from codemonkeys.nodes.resolve_findings import ResolveFindings
 
 async def main():
     test = PythonTest()
@@ -123,7 +123,7 @@ All `ClaudeAgentNode` quality nodes default to read-only. Pass Edit/Write in the
 | `PythonLint` | Runs `ruff check --fix`. |
 | `PythonFormat` | Runs `ruff format`. |
 | `PythonTypeCheck` | Runs `mypy --output json`, parses results into a `TypeCheckOutput` Pydantic model. |
-| `PythonEnsureTools` | Preflight check — installs `agentpipe[python]` tools if missing. |
+| `PythonEnsureTools` | Preflight check — installs `codemonkeys[python]` tools if missing. |
 
 These are `ShellNode` instances — they run subprocesses directly, no LLM call. They don't accept `model`, `allow`/`deny`, or `extra_skills`.
 
@@ -138,8 +138,8 @@ Every node always tries to find and fix issues. Permissions decide what actually
    - `ask_via_stdin`: prompt the user per call
 
 ```python
-from agentpipe.nodes.python_code_review import PythonCodeReview
-from agentpipe.permissions import ask_via_stdin
+from codemonkeys.nodes.python_code_review import PythonCodeReview
+from codemonkeys.permissions import ask_via_stdin
 
 # Report only (default):
 PythonCodeReview()
@@ -176,12 +176,12 @@ Deny always wins over allow.
 `Pipeline` takes node instances directly and runs them with `asyncio`.
 
 ```python
-from agentpipe import Pipeline, Verbosity
-from agentpipe.nodes.python_lint import PythonLint
-from agentpipe.nodes.python_test import PythonTest
-from agentpipe.nodes.python_code_review import PythonCodeReview
-from agentpipe.nodes.python_security_audit import PythonSecurityAudit
-from agentpipe.nodes.resolve_findings import ResolveFindings
+from codemonkeys import Pipeline, Verbosity
+from codemonkeys.nodes.python_lint import PythonLint
+from codemonkeys.nodes.python_test import PythonTest
+from codemonkeys.nodes.python_code_review import PythonCodeReview
+from codemonkeys.nodes.python_security_audit import PythonSecurityAudit
+from codemonkeys.nodes.resolve_findings import ResolveFindings
 
 test = PythonTest()
 review = PythonCodeReview(scope="diff")
@@ -216,9 +216,9 @@ Duplicate node names are auto-suffixed (e.g. two `PythonLint()` steps become `py
 **`python check`** — lint → format → parallel (test + code review + security audit + docs review + dependency audit + type check) → resolve findings → final lint. No branch, no commit.
 
 ```bash
-agentpipe python check /path/to/repo
+codemonkeys python check /path/to/repo
 # or as a module:
-python -m agentpipe.graphs.python.check /path/to/repo
+python -m codemonkeys.graphs.python.check /path/to/repo
 ```
 
 ## Building blocks
@@ -227,7 +227,7 @@ python -m agentpipe.graphs.python.check /path/to/repo
 
 ```python
 from pydantic import BaseModel, Field
-from agentpipe import ClaudeAgentNode, PYTHON_CLEAN_CODE
+from codemonkeys import ClaudeAgentNode, PYTHON_CLEAN_CODE
 
 class ReviewOutput(BaseModel):
     findings: list[dict] = Field(default_factory=list)
@@ -248,7 +248,7 @@ reviewer = ClaudeAgentNode(
 
 ```python
 from pydantic import BaseModel
-from agentpipe import ShellNode
+from codemonkeys import ShellNode
 
 class TestResult(BaseModel):
     passed: int
@@ -274,10 +274,10 @@ Each run writes `last_cost_usd` into state. Other levers: cheaper models, turn c
 
 ## Language skills
 
-Language-specific clean code and security guidance are constants under `agentpipe.skills`:
+Language-specific clean code and security guidance are constants under `codemonkeys.skills`:
 
 ```python
-from agentpipe.skills import PYTHON_CLEAN_CODE, PYTHON_SECURITY
+from codemonkeys.skills import PYTHON_CLEAN_CODE, PYTHON_SECURITY
 
 PythonCodeReview(extra_skills=[PYTHON_CLEAN_CODE])
 ```

@@ -1,11 +1,11 @@
-"""Tests for agentpipe.models provider detection and model resolution."""
+"""Tests for codemonkeys.models provider detection and model resolution."""
 
 from __future__ import annotations
 
 
 import pytest
 
-from agentpipe.models import (
+from codemonkeys.models import (
     HAIKU_4_5,
     OPUS_4_6,
     OPUS_4_7,

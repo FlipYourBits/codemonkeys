@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agentpipe.models import SONNET_4_6
-from agentpipe.nodes.base import ClaudeAgentNode
+from codemonkeys.models import SONNET_4_6
+from codemonkeys.nodes.base import ClaudeAgentNode
 
 _SKILL = """\
 # Test analysis

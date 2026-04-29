@@ -203,8 +203,9 @@ cython_debug/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
-# agentpipe run logs
-.agentpipe/
+# codemonkeys run logs
+.codemonkeys/
+review.json
 
 # superpowers skill artifacts
 docs/superpowers/

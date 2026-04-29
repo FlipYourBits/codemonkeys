@@ -4,10 +4,10 @@ import asyncio
 
 import pytest
 
-from agentpipe.pipeline import Pipeline
-from agentpipe.nodes.base import Verbosity
-from agentpipe.nodes.python_lint import PythonLint
-from agentpipe.nodes.python_format import PythonFormat
+from codemonkeys.pipeline import Pipeline
+from codemonkeys.nodes.base import Verbosity
+from codemonkeys.nodes.python_lint import PythonLint
+from codemonkeys.nodes.python_format import PythonFormat
 
 
 class TestPipelineConstruction:
@@ -193,7 +193,7 @@ class TestLogDir:
         assert (log_dir / "b.log").exists()
 
     def test_log_dir_with_verbosity_writes_files(self, tmp_path):
-        from agentpipe.nodes.base import ShellNode
+        from codemonkeys.nodes.base import ShellNode
 
         log_dir = tmp_path / "logs"
         p = Pipeline(
@@ -223,8 +223,8 @@ class TestLogDir:
 
 
 class TestPublicAPI:
-    def test_importable_from_agentpipe(self):
-        from agentpipe import (
+    def test_importable_from_codemonkeys(self):
+        from codemonkeys import (
             Display,
             Pipeline,
         )

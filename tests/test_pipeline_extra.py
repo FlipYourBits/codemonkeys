@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 
-from agentpipe.pipeline import Pipeline
+from codemonkeys.pipeline import Pipeline
 
 
 class TestIsAsync:

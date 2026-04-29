@@ -24,7 +24,6 @@ from rich.table import Table
 from rich.text import Text
 
 from claude_agent_sdk import (
-    AgentDefinition,
     AssistantMessage,
     ClaudeAgentOptions,
     ResultMessage,
@@ -35,7 +34,16 @@ from claude_agent_sdk import (
     query,
 )
 
-from agentpipe.skills.python import CLEAN_CODE as PYTHON_CLEAN_CODE
+from codemonkeys.agents import (
+    CODE_REVIEWER,
+    DOCS_REVIEWER,
+    DEPENDENCY_AUDITOR,
+    FIXER,
+    LINTER,
+    SECURITY_AUDITOR,
+    TEST_RUNNER,
+    TYPE_CHECKER,
+)
 
 
 # ── Output models ────────────────────────────────────────────────
@@ -45,8 +53,8 @@ class Finding(BaseModel):
     file: str = Field(description="File path relative to repo root")
     line: int = Field(description="Line number")
     severity: Literal["HIGH", "MEDIUM", "LOW"] = Field(description="Issue severity")
-    source: Literal["code_review", "test_runner"] = Field(description="Which agent found this")
-    category: str = Field(description="e.g. logic_error, test_failure, resource_leak")
+    source: str = Field(description="Which agent found this (code_reviewer, test_runner, security_auditor, type_checker)")
+    category: str = Field(description="e.g. logic_error, test_failure, resource_leak, vulnerability, type_error")
     description: str = Field(description="What the issue is")
     recommendation: str = Field(description="How to fix it")
 
@@ -57,16 +65,21 @@ class ReviewResult(BaseModel):
     tests_passed: bool = Field(description="Whether all tests passed")
 
 
-# ── Agent definitions ────────────────────────────────────────────
+# ── Coordinator prompt ───────────────────────────────────────────
 
 COORDINATOR_PROMPT = """\
-You are a code quality coordinator. You have exactly two review agents:
+You are a code quality coordinator. You have these review agents:
 
 1. "code_reviewer" — static code review (logic errors, leaks, dead code)
 2. "test_runner" — runs pytest and analyzes failures
+3. "security_auditor" — finds security vulnerabilities
+4. "type_checker" — runs mypy and reports type errors
+5. "linter" — runs ruff and reports lint violations
+6. "dependency_auditor" — scans for known CVEs via pip-audit
+7. "docs_reviewer" — finds documentation drift against code
 
 Your job:
-1. Dispatch BOTH agents by name. Always dispatch both, never skip one.
+1. Dispatch ALL review agents. Always dispatch all of them, never skip any.
 2. Wait for their results.
 3. Combine ALL findings into the structured output format.
 
@@ -74,83 +87,6 @@ Include every finding from every agent — do not summarize or drop any.
 
 If a fixer agent is available and you are asked to fix issues, dispatch it
 with the specific findings to fix."""
-
-
-CODE_REVIEWER = AgentDefinition(
-    description="Reviews Python code for logic errors, resource leaks, error handling gaps, dead code.",
-    prompt="""\
-Review the Python code in this repository for:
-- Logic errors and off-by-one bugs
-- Resource leaks (unclosed files, connections)
-- Error handling gaps (bare except, swallowed errors)
-- Dead code and unused imports
-- Concurrency issues
-
-Only review .py files. Ignore all other file types.
-
-Focus on the diff from the main branch if available (git diff main...HEAD -- '*.py').
-If no diff, review the most recently changed .py files.
-
-Report each finding with: file, line, severity (HIGH/MEDIUM/LOW), description.""",
-    model="claude-haiku-4-5-20251001",
-    tools=["Read", "Glob", "Grep", "Bash"],
-    disallowedTools=["Edit", "Write", "Bash(git push*)", "Bash(git commit*)"],
-    permissionMode="bypassPermissions",
-)
-
-
-TEST_RUNNER = AgentDefinition(
-    description="Runs pytest and analyzes test failures to identify root causes.",
-    prompt="""\
-Run the test suite and analyze any failures:
-
-1. Run: python -m pytest -x -q --tb=short --no-header
-2. For each failure, read the failing test and code under test
-3. Identify the root cause
-4. Report: file, line, severity (HIGH/MEDIUM/LOW), description, recommended fix
-
-If all tests pass, report that clearly.""",
-    model="claude-haiku-4-5-20251001",
-    tools=["Read", "Glob", "Grep", "Bash"],
-    disallowedTools=["Edit", "Write", "Bash(git push*)", "Bash(git commit*)"],
-    permissionMode="bypassPermissions",
-)
-
-
-FIXER = AgentDefinition(
-    description="Fixes specific code issues identified by review agents.",
-    prompt=f"""\
-You fix specific findings reported by review agents.
-Each finding includes a file, line, severity, and description.
-Fix only what is listed — nothing else.
-
-## Method
-
-1. Read the finding's file and surrounding context.
-2. Understand the root cause described in the finding.
-3. Make the smallest correct change that resolves the issue.
-4. Re-read the changed file to verify correctness.
-5. After all fixes, run `python -m pytest -x -q --tb=short --no-header`.
-
-## Rules
-
-- One fix per finding. Do not refactor or improve surrounding code.
-- If a finding is a false positive, skip it and note why.
-- Do not push, commit, or modify git state.
-
-## Code guidelines
-
-{PYTHON_CLEAN_CODE}""",
-    model="claude-haiku-4-5-20251001",
-    tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-    disallowedTools=[
-        "Bash(git push*)",
-        "Bash(git commit*)",
-        "Bash(pip install*)",
-        "Bash(pip uninstall*)",
-    ],
-    permissionMode="bypassPermissions",
-)
 
 
 # ── Display ──────────────────────────────────────────────────────
@@ -358,6 +294,11 @@ async def main(working_dir: str, allow_fix: bool = True, output_file: str | None
     agents = {
         "code_reviewer": CODE_REVIEWER,
         "test_runner": TEST_RUNNER,
+        "security_auditor": SECURITY_AUDITOR,
+        "type_checker": TYPE_CHECKER,
+        "linter": LINTER,
+        "dependency_auditor": DEPENDENCY_AUDITOR,
+        "docs_reviewer": DOCS_REVIEWER,
     }
     if allow_fix:
         agents["fixer"] = FIXER
@@ -367,6 +308,7 @@ async def main(working_dir: str, allow_fix: bool = True, output_file: str | None
         model="claude-sonnet-4-6",
         cwd=working_dir,
         permission_mode="bypassPermissions",
+        allowed_tools=["Agent"],
         agents=agents,
         output_format={"type": "json_schema", "schema": ReviewResult.model_json_schema()},
     )
@@ -377,9 +319,9 @@ async def main(working_dir: str, allow_fix: bool = True, output_file: str | None
 
     # Phase 1: review
     if target_file:
-        review_prompt = f"Review only the file {target_file}. Dispatch both review agents scoped to this file and summarize findings."
+        review_prompt = f"Review only the file {target_file}. Dispatch all review agents scoped to this file and combine their findings."
     else:
-        review_prompt = "Run a full quality check on this repository. Dispatch both review agents and summarize findings."
+        review_prompt = "Run a full quality check on this repository. Dispatch all review agents and combine their findings."
 
     result_msg = await _run_query(
         review_options,
@@ -420,9 +362,10 @@ async def main(working_dir: str, allow_fix: bool = True, output_file: str | None
 
     fix_options = ClaudeAgentOptions(
         system_prompt=COORDINATOR_PROMPT,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-4-6",
         cwd=working_dir,
         permission_mode="bypassPermissions",
+        allowed_tools=["Agent"],
         agents={"fixer": FIXER},
     )
     findings_json = json.dumps([f.model_dump() for f in to_fix], indent=2)

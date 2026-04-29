@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 
-from agentpipe.display import Display
-from agentpipe.nodes.base import _make_printer, Verbosity
+from codemonkeys.display import Display
+from codemonkeys.nodes.base import _make_printer, Verbosity
 
 
 class TestDisplayNonLive:
@@ -131,7 +131,7 @@ class TestMakePrinterWithDisplay:
 
 class TestPrintResultsWithPydantic:
     def test_print_results_with_resolve_output(self, capsys):
-        from agentpipe.nodes.resolve_findings import ResolveOutput, FixedItem
+        from codemonkeys.nodes.resolve_findings import ResolveOutput, FixedItem
 
         d = Display(steps=["a"], title="T", live=False)
         resolve = ResolveOutput(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentpipe.budget import default_on_warn
+from codemonkeys.budget import default_on_warn
 
 
 class TestDefaultOnWarn:

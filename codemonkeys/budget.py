@@ -28,7 +28,7 @@ def default_on_warn(
     if display is not None:
         display.warn(msg)
     else:
-        print(f"[agentpipe] WARNING: {msg}", file=sys.stderr)
+        print(f"[codemonkeys] WARNING: {msg}", file=sys.stderr)
 
 
 def _normalize_pcts(

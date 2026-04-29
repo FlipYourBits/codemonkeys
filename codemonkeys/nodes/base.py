@@ -30,9 +30,9 @@ from claude_agent_sdk import (
 
 from pydantic import BaseModel as _BaseModel
 
-from agentpipe.budget import BudgetTracker, WarnCallback
-from agentpipe.models import SONNET_4_6, resolve_model
-from agentpipe.permissions import (
+from codemonkeys.budget import BudgetTracker, WarnCallback
+from codemonkeys.models import SONNET_4_6, resolve_model
+from codemonkeys.permissions import (
     PermissionRule,
     UnmatchedPolicy,
     build_can_use_tool,
@@ -213,7 +213,7 @@ class ClaudeAgentNode:
         self.declared_outputs: tuple[str, ...] = (self.name, "last_cost_usd")
         self.output_cls: type[_BaseModel] | None = output
         if output is not None:
-            from agentpipe.schema import generate_output_instructions
+            from codemonkeys.schema import generate_output_instructions
 
             self.system_prompt += "\n\n" + generate_output_instructions(output)
 
@@ -302,7 +302,7 @@ class ClaudeAgentNode:
 
         final = result_text if result_text else "\n".join(text_chunks).strip()
         if self.output_cls is not None:
-            from agentpipe.schema import parse_output
+            from codemonkeys.schema import parse_output
 
             final = parse_output(self.output_cls, final)
         return {
@@ -360,7 +360,7 @@ class ShellNode:
             result = await asyncio.to_thread(run)
             stdout = result.stdout.strip()
             if self.output_cls is not None:
-                from agentpipe.schema import parse_output
+                from codemonkeys.schema import parse_output
 
                 return {self.name: parse_output(self.output_cls, stdout)}
             return {self.name: stdout}
@@ -405,7 +405,7 @@ class ShellNode:
             )
         stdout = "".join(stdout_chunks).strip()
         if self.output_cls is not None:
-            from agentpipe.schema import parse_output
+            from codemonkeys.schema import parse_output
 
             return {self.name: parse_output(self.output_cls, stdout)}
         return {self.name: stdout}

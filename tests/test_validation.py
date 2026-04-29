@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from agentpipe import (
+from codemonkeys import (
     OutputKeyConflict,
     PythonCodeReview,
     PythonDependencyAudit,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from agentpipe.nodes.base import ShellNode
+from codemonkeys.nodes.base import ShellNode
 
 
 class PythonFormat(ShellNode):

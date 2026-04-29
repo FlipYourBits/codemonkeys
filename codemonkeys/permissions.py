@@ -137,7 +137,7 @@ async def ask_via_stdin(
         return False
 
     summary = ", ".join(f"{k}={v!r}" for k, v in list(input_data.items())[:3])
-    text = f"[agentpipe] Allow {tool_name}({summary})? [y/N]:"
+    text = f"[codemonkeys] Allow {tool_name}({summary})? [y/N]:"
     if prompt_fn is not None:
         answer = await asyncio.to_thread(prompt_fn, text, None)
     else:

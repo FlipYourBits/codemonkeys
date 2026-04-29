@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from agentpipe.graphs.python.check import build_pipeline
-from agentpipe.nodes.base import Verbosity
+from codemonkeys.graphs.python.check import build_pipeline
+from codemonkeys.nodes.base import Verbosity
 
 
 class TestBuildPipeline:

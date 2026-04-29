@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agentpipe.nodes.base import _split_allow
+from codemonkeys.nodes.base import _split_allow
 
 
 class TestSplitAllow:

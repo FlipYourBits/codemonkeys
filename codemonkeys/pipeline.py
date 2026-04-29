@@ -15,8 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from agentpipe.display import Display
-from agentpipe.nodes.base import Verbosity, _node_name
+from codemonkeys.display import Display
+from codemonkeys.nodes.base import Verbosity, _node_name
 
 
 class Pipeline:
@@ -92,7 +92,7 @@ class Pipeline:
                 Verbosity.normal,
                 Verbosity.verbose,
             ):
-                from agentpipe.nodes.base import _make_printer
+                from codemonkeys.nodes.base import _make_printer
 
                 display_printer = _make_printer(self.verbosity, display=self._display)
                 if log_fh is not None:
@@ -126,7 +126,7 @@ class Pipeline:
                         name, line
                     )
             if hasattr(node, "on_warn"):
-                from agentpipe.budget import default_on_warn
+                from codemonkeys.budget import default_on_warn
 
                 node.on_warn = lambda cost, cap: default_on_warn(
                     cost, cap, display=self._display
@@ -267,7 +267,7 @@ class Pipeline:
 
     def _save_run(self, result: dict[str, Any]) -> Path | None:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        runs_dir = Path(self.working_dir) / ".agentpipe" / "runs"
+        runs_dir = Path(self.working_dir) / ".codemonkeys" / "runs"
         try:
             runs_dir.mkdir(parents=True, exist_ok=True)
         except OSError:

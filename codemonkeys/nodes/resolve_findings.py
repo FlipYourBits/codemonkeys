@@ -17,13 +17,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agentpipe.display import default_prompt as _default_prompt
-from agentpipe.models import OPUS_4_6
-from agentpipe.nodes.base import (
+from codemonkeys.display import default_prompt as _default_prompt
+from codemonkeys.models import OPUS_4_6
+from codemonkeys.nodes.base import (
     ClaudeAgentNode,
     _node_name,
 )
-from agentpipe.permissions import UnmatchedPolicy
+from codemonkeys.permissions import UnmatchedPolicy
 
 AskFindings = Callable[[str], Awaitable[str | None]]
 PromptFn = Callable[[str, str | None], str]

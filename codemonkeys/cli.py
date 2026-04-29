@@ -1,11 +1,11 @@
-"""CLI entry point: agentpipe <language> <action> [options]."""
+"""CLI entry point: codemonkeys <language> <action> [options]."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 
-from agentpipe.nodes.base import Verbosity
+from codemonkeys.nodes.base import Verbosity
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -29,7 +29,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_check(args: argparse.Namespace) -> None:
-    from agentpipe.graphs.python.check import main
+    from codemonkeys.graphs.python.check import main
 
     asyncio.run(
         main(
@@ -43,7 +43,7 @@ def _run_check(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="agentpipe",
+        prog="codemonkeys",
         description="Deterministic AI pipelines powered by the Claude Agent SDK.",
     )
     lang_parsers = parser.add_subparsers(dest="language", required=True)

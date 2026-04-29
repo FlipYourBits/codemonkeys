@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentpipe"
+name = "codemonkeys"
 version = "0.1.0"
 description = "Deterministic AI pipelines powered by the Claude Agent SDK, with per-node permissions and model selection."
 readme = "README.md"
@@ -34,18 +34,18 @@ python = [
     "mypy>=1.10",
 ]
 dev = [
-    "agentpipe[python]",
+    "codemonkeys[python]",
     "pytest-asyncio>=0.23",
 ]
 
 [project.scripts]
-agentpipe = "agentpipe.cli:main"
+codemonkeys = "codemonkeys.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/FlipYourBits/agentpipe"
+Homepage = "https://github.com/FlipYourBits/codemonkeys"
 
 [tool.hatch.build.targets.wheel]
-packages = ["agentpipe"]
+packages = ["codemonkeys"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

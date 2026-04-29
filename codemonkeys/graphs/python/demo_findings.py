@@ -5,7 +5,7 @@ ResolveFindings so you can see the Rich table and prompt without
 spending real tokens.  Pick "none" at the prompt to skip fixing.
 
 Usage:
-    .venv/bin/python -m agentpipe.graphs.python.demo_findings
+    .venv/bin/python -m codemonkeys.graphs.python.demo_findings
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agentpipe.nodes.base import Verbosity
-from agentpipe.nodes.resolve_findings import ResolveFindings
-from agentpipe.pipeline import Pipeline
+from codemonkeys.nodes.base import Verbosity
+from codemonkeys.nodes.resolve_findings import ResolveFindings
+from codemonkeys.pipeline import Pipeline
 
 
 class FakeFinding(BaseModel):

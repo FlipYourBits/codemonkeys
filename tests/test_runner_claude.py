@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from agentpipe.nodes.base import ClaudeAgentNode
-from agentpipe.nodes.python_test import PythonTest
+from codemonkeys.nodes.base import ClaudeAgentNode
+from codemonkeys.nodes.python_test import PythonTest
 
 
 class TestPytestClaudeNode:

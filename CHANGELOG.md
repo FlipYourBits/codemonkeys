@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 - `ClaudeAgentNode` — wraps `claude_agent_sdk.query()` with per-node permissions, model selection, and skill injection
 - `ShellNode` — runs subprocesses with streaming output and timeout support
 - Node-level `reads_from` for selective upstream output injection (token-cost control)
-- Per-node cost tracking with budget caps, warning thresholds, and run logs (`.agentpipe/runs/`)
+- Per-node cost tracking with budget caps, warning thresholds, and run logs (`.codemonkeys/runs/`)
 - Rich terminal display with live status updates and cost summary tables
 - Permission system: allow/deny lists with glob patterns, `on_unmatched` policy, interactive `ask_via_stdin`
 
@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 
 ### Pre-built pipelines
 
-- `agentpipe python check` — lint → format → [test, review, security, docs, dep audit, type check] → resolve findings → lint
+- `codemonkeys python check` — lint → format → [test, review, security, docs, dep audit, type check] → resolve findings → lint
 
 ### Language skills
 

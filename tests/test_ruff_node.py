@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agentpipe.nodes.python_format import PythonFormat
-from agentpipe.nodes.python_lint import PythonLint
+from codemonkeys.nodes.python_format import PythonFormat
+from codemonkeys.nodes.python_lint import PythonLint
 
 
 def _ruff_available() -> bool:
@@ -54,7 +54,7 @@ def test_lint_fixes_unsorted_imports(tmp_path: Path):
     )
 
     # Use the underlying ShellNode with a custom command to test ruff with specific args
-    from agentpipe.nodes.base import ShellNode
+    from codemonkeys.nodes.base import ShellNode
 
     node = ShellNode(
         name="lint_test",
