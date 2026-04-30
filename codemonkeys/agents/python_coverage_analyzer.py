@@ -1,9 +1,9 @@
 """Coverage analyzer agent — runs pytest with coverage and returns a report.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_coverage
-    .venv/bin/python -m codemonkeys.agents.python_coverage --scope file --path src/main.py
-    .venv/bin/python -m codemonkeys.agents.python_coverage --scope diff
+    python -m codemonkeys.agents.python_coverage
+    python -m codemonkeys.agents.python_coverage --scope file --path src/main.py
+    python -m codemonkeys.agents.python_coverage --scope diff
 """
 
 from __future__ import annotations

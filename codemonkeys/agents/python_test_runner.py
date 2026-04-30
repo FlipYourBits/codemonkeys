@@ -1,9 +1,9 @@
 """Test runner agent — runs pytest and returns results.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_test_runner
-    .venv/bin/python -m codemonkeys.agents.python_test_runner --scope file --path tests/test_models.py
-    .venv/bin/python -m codemonkeys.agents.python_test_runner --scope diff
+    python -m codemonkeys.agents.python_test_runner
+    python -m codemonkeys.agents.python_test_runner --scope file --path tests/test_models.py
+    python -m codemonkeys.agents.python_test_runner --scope diff
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from codemonkeys.agents.changelog_writer import make_changelog_writer as make_changelog_writer
+    from codemonkeys.agents.changelog_reviewer import make_changelog_reviewer as make_changelog_reviewer
     from codemonkeys.agents.python_coverage_analyzer import make_python_coverage_analyzer as make_python_coverage_analyzer
     from codemonkeys.agents.python_dep_auditor import make_python_dep_auditor as make_python_dep_auditor
     from codemonkeys.agents.python_fixer import make_python_fixer as make_python_fixer
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "make_definition_reviewer",
-    "make_changelog_writer",
+    "make_changelog_reviewer",
     "make_python_coverage_analyzer",
     "make_python_dep_auditor",
     "make_python_fixer",
@@ -40,9 +40,9 @@ def __getattr__(name: str) -> object:
     if name == "make_definition_reviewer":
         from codemonkeys.agents.review_agent_definition import make_definition_reviewer
         return make_definition_reviewer
-    if name == "make_changelog_writer":
-        from codemonkeys.agents.changelog_writer import make_changelog_writer
-        return make_changelog_writer
+    if name == "make_changelog_reviewer":
+        from codemonkeys.agents.changelog_reviewer import make_changelog_reviewer
+        return make_changelog_reviewer
     if name == "make_python_coverage_analyzer":
         from codemonkeys.agents.python_coverage_analyzer import make_python_coverage_analyzer
         return make_python_coverage_analyzer

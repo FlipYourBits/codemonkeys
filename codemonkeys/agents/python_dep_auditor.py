@@ -1,7 +1,7 @@
 """Dependency auditor agent — runs pip-audit and returns vulnerabilities.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_dep_auditor
+    python -m codemonkeys.agents.python_dep_auditor
 """
 
 from __future__ import annotations

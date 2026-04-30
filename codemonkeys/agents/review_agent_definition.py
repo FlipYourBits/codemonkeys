@@ -1,8 +1,8 @@
 """AgentDefinition reviewer — evaluates description, prompt, permissions, and model.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.review_agent_definition codemonkeys/agents/python_code_review.py
-    .venv/bin/python -m codemonkeys.agents.review_agent_definition codemonkeys/agents/ -o results.json
+    python -m codemonkeys.agents.review_agent_definition codemonkeys/agents/python_code_review.py
+    python -m codemonkeys.agents.review_agent_definition codemonkeys/agents/ -o results.json
 """
 
 from __future__ import annotations

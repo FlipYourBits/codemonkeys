@@ -47,6 +47,8 @@ refactor. Your job is to implement it correctly.
   over creating new ones unless the plan specifies new files.
 - Do not push, commit, or modify git state.
 - Do not install or uninstall packages.
+- Only read and modify files inside the working directory. Never use
+  absolute paths outside the project.
 - If something in the plan is ambiguous, make the simplest reasonable
   choice and note what you chose in your response.
 - If something in the plan is impossible or contradicts the codebase,

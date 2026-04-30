@@ -1,8 +1,8 @@
 """README reviewer agent — checks README quality, accuracy, and completeness.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.readme_reviewer
-    .venv/bin/python -m codemonkeys.agents.readme_reviewer --path docs/
+    python -m codemonkeys.agents.readme_reviewer
+    python -m codemonkeys.agents.readme_reviewer --path docs/
 """
 
 from __future__ import annotations
@@ -136,7 +136,6 @@ A good README has these sections (flag any that are missing or empty):
 - Only report findings where the doc is clearly wrong or missing
   something important. Don't flag style or tone preferences.
 - Deduplicate — if the same rename broke 5 references, report it once.
-- Cap at 15 findings. If you have more, keep the highest severity ones.
 
 ## Exclusions — DO NOT REPORT
 

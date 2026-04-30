@@ -1,9 +1,9 @@
 """Type checker agent — runs mypy and returns errors.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_type_checker
-    .venv/bin/python -m codemonkeys.agents.python_type_checker --scope file --path src/main.py
-    .venv/bin/python -m codemonkeys.agents.python_type_checker --scope diff
+    python -m codemonkeys.agents.python_type_checker
+    python -m codemonkeys.agents.python_type_checker --scope file --path src/main.py
+    python -m codemonkeys.agents.python_type_checker --scope diff
 """
 
 from __future__ import annotations

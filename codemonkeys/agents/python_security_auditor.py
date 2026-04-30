@@ -1,9 +1,9 @@
 """Security audit agent — injection, secrets, unsafe deserialization, auth bypass.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_security_audit
-    .venv/bin/python -m codemonkeys.agents.python_security_audit --scope file --path src/auth.py
-    .venv/bin/python -m codemonkeys.agents.python_security_audit --scope repo
+    python -m codemonkeys.agents.python_security_audit
+    python -m codemonkeys.agents.python_security_audit --scope file --path src/auth.py
+    python -m codemonkeys.agents.python_security_audit --scope repo
 """
 
 from __future__ import annotations
@@ -119,8 +119,6 @@ handlers, CLI args, env vars, queue consumers, file ingest) to sinks.
 - Drop duplicates — keep the finding with the strongest evidence.
 - Only report findings you believe are genuinely exploitable. If you
   can't describe a concrete attack scenario, leave it out.
-- Cap at 15 findings. If you have more, keep the highest severity
-  and confidence ones.
 
 ## Exclusions — DO NOT REPORT
 

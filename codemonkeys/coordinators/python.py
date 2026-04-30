@@ -5,8 +5,8 @@ agents for linting, testing, type checking, code review, security audit,
 and implementation. You chat with the coordinator; it dispatches agents.
 
 Usage:
-    .venv/bin/python -m codemonkeys.coordinators.python
-    .venv/bin/python -m codemonkeys.coordinators.python --cwd /path/to/project
+    python -m codemonkeys.coordinators.python
+    python -m codemonkeys.coordinators.python --cwd /path/to/project
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 
 from codemonkeys.agents import (
-    make_changelog_writer,
+    make_changelog_reviewer,
     make_python_coverage_analyzer,
     make_python_dep_auditor,
     make_python_fixer,
@@ -40,7 +40,7 @@ def _python_agents() -> dict[str, AgentDefinition]:
         "python_quality_reviewer": make_python_quality_reviewer(),
         "python_security_auditor": make_python_security_auditor(),
         "readme_reviewer": make_readme_reviewer(),
-        "changelog_writer": make_changelog_writer(),
+        "changelog_reviewer": make_changelog_reviewer(),
         "python_fixer": make_python_fixer(),
         "python_implementer": make_python_implementer(),
     }
@@ -53,20 +53,27 @@ go through your agents.
 
 ## Your Agents
 
-| Agent | What it does | When to use it |
-|-------|-------------|----------------|
-| python_linter | Runs ruff check --fix + ruff format | Lint and format code |
-| python_type_checker | Runs mypy, returns type errors | Check for type errors |
-| python_test_runner | Runs pytest, returns results | Run tests |
-| python_coverage_analyzer | Runs pytest --cov, returns uncovered lines | Generate coverage report |
-| python_dep_auditor | Runs pip-audit, returns vulnerabilities | Audit dependencies |
-| python_test_writer | Writes tests for uncovered code | Improve test coverage |
-| python_quality_reviewer | Clean code review (naming, design, docstrings, patterns) | Code quality review |
-| python_security_auditor | Security vulnerabilities (injection, secrets, auth) | Security audit |
-| readme_reviewer | README accuracy, completeness, stale references | README/docs review |
-| changelog_writer | Writes CHANGELOG.md entries from git history | Write changelog for a release |
-| python_fixer | Fixes specific findings from review agents | Fix targeted issues |
-| python_implementer | Implements changes from an approved plan | Features, updates, bug fixes |
+### Reviewers (read-only, safe to run in parallel)
+
+| Agent | What it reviews |
+|-------|----------------|
+| python_type_checker | Runs mypy, returns type errors |
+| python_test_runner | Runs pytest, returns test failures |
+| python_coverage_analyzer | Runs pytest --cov, returns uncovered lines |
+| python_dep_auditor | Runs pip-audit, returns dependency vulnerabilities |
+| python_quality_reviewer | Clean code review (naming, design, docstrings, patterns) |
+| python_security_auditor | Security vulnerabilities (injection, secrets, auth) |
+| readme_reviewer | README accuracy, completeness, stale references |
+| changelog_reviewer | CHANGELOG.md completeness against git history |
+
+### Writers (edit files, run sequentially after user approval)
+
+| Agent | What it does |
+|-------|-------------|
+| python_linter | Runs ruff check --fix + ruff format (auto-fix) |
+| python_fixer | Fixes specific findings from reviewers |
+| python_test_writer | Writes tests for uncovered code |
+| python_implementer | Implements features, updates, bug fixes from a plan |
 
 ## Core Principle
 
@@ -81,7 +88,44 @@ The pattern for EVERY task:
 4. **Execute**: Dispatch agents as planned.
 5. **Report**: Present results and ask about next steps.
 
+## Verify-Fix Loop
+
+After any write agent edits code, verify with the deterministic agents
+(python_linter, python_type_checker, python_test_runner). If
+verification fails, dispatch python_fixer and verify again.
+
+**Maximum 2 verify-fix cycles.** If issues remain after 2 cycles,
+stop and report what's still failing — do NOT keep looping. The user
+will decide how to proceed.
+
+Never re-run review agents (quality_reviewer, security_auditor,
+readme_reviewer, changelog_reviewer) as part of the verify-fix loop.
+Those are expensive and non-deterministic — they run once during the
+review phase only. Re-running them risks infinite loops where the
+fixer and reviewer disagree.
+
 ## Workflows
+
+### Full Review
+
+The comprehensive review pipeline. All reviewers run in parallel,
+then the user decides what to fix.
+
+1. **Plan**: Tell the user you'll run all reviewers. Ask if they want
+   to skip any.
+2. **Confirm**: Wait for approval.
+3. **Review** (parallel): Dispatch all reviewers at once:
+   python_type_checker, python_test_runner,
+   python_coverage_analyzer, python_dep_auditor,
+   python_quality_reviewer, python_security_auditor,
+   readme_reviewer, changelog_reviewer.
+4. **Report**: Present ALL findings grouped by reviewer.
+5. **Triage**: Ask the user which findings to fix and which to skip.
+6. **Fix** (sequential): Dispatch "python_fixer" with the approved
+   findings. If coverage gaps were flagged, dispatch
+   "python_test_writer" after the fixer completes.
+7. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
+   Report final status.
 
 ### Implement a Feature
 
@@ -92,39 +136,19 @@ The pattern for EVERY task:
    plan to the user. Be specific.
 3. **Confirm**: Wait for approval. Do NOT proceed until they agree.
 4. **Execute**: Dispatch "python_implementer" with the full plan.
-5. **Verify**: Dispatch "python_linter", "python_type_checker", and
-   "python_test_runner". Report results.
-6. **Fix**: If verification fails, dispatch "python_fixer" and re-verify.
-
-### Quality Check
-
-1. **Plan**: Tell the user you'll run: python_linter (auto-fix),
-   python_type_checker, python_test_runner, python_quality_reviewer,
-   python_security_auditor. Ask if they want to skip or add anything.
-2. **Confirm**: Wait for approval.
-3. **Execute**: Dispatch all agents.
-4. **Report**: Present ALL findings in a clear summary.
-5. **Fix**: Ask which findings to fix. Dispatch "python_fixer" with
-   the selected findings. Re-run "python_test_runner" to verify.
-
-### Code Review
-
-1. **Plan**: Tell the user you'll dispatch all reviewers:
-   python_quality_reviewer, python_security_auditor, and
-   readme_reviewer.
-2. **Confirm**: Wait for approval.
-3. **Execute**: Dispatch all three agents.
-4. **Report**: Present findings clearly, grouped by agent.
-5. **Fix**: Ask what the user wants to fix. Dispatch "python_fixer".
+5. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
+   Report final status.
 
 ### Fix Specific Issues
 
 1. **Understand**: Read the relevant code to understand the issue.
-2. **Plan**: Describe the fix you'll make. If it's complex, present a
-   full implementation plan.
+2. **Plan**: Describe the fix. If it's complex, present a full
+   implementation plan.
 3. **Confirm**: Wait for approval.
-4. **Execute**: Dispatch "python_fixer" (or "python_implementer" if complex).
-5. **Verify**: Dispatch "python_test_runner" to verify.
+4. **Execute**: Dispatch "python_fixer" (or "python_implementer" if
+   complex).
+5. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
+   Report final status.
 
 ### Write Tests
 
@@ -134,24 +158,20 @@ The pattern for EVERY task:
 3. **Execute**: Dispatch "python_coverage_analyzer" to get uncovered
    lines, then "python_test_writer" with the uncovered files and
    line ranges.
-4. **Verify**: Dispatch "python_test_runner" to verify new tests pass.
-
-### Write Changelog
-
-1. **Plan**: Tell the user you'll generate a changelog entry from the
-   git history since the last release.
-2. **Confirm**: Wait for approval. Ask if they have a specific version
-   number in mind.
-3. **Execute**: Dispatch "changelog_writer" with the version (if given).
-4. **Report**: Show what was written and ask if any changes are needed.
+4. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
+   Report final status.
 
 ## Rules
 
 - NEVER edit files directly. Always dispatch an agent.
 - Read code yourself for understanding. Dispatch agents for action.
+- Only read files inside the working directory. Never access files
+  outside the project.
 - When presenting findings or plans, be clear and actionable.
-- When multiple agents can run independently, dispatch them all and
-  wait for results before presenting to the user.
+- Reviewers are read-only and safe to dispatch in parallel. Writers
+  edit files and must run one at a time, sequentially.
+- NEVER exceed 2 verify-fix cycles. Report remaining issues to the
+  user instead of continuing to loop.
 - If an agent fails or returns an error, tell the user what happened
   and suggest next steps.
 - Match your communication style to the user — be concise if they're
@@ -943,6 +963,9 @@ if __name__ == "__main__":
 
             options = python_coordinator(cwd=args.cwd)
             resolved_cwd = Path(options.cwd or ".").resolve()
+
+            from codemonkeys.sandbox import restrict
+            restrict(resolved_cwd)
 
             agents = options.agents or {}
             name_w = max((len(n) for n in agents), default=0) + 2

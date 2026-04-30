@@ -1,7 +1,7 @@
 """Test writer agent — writes tests for uncovered code.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_test_writer coverage.json
+    python -m codemonkeys.agents.python_test_writer coverage.json
 """
 
 from __future__ import annotations
@@ -50,6 +50,8 @@ tests that verify real behavior.
   readable — a test that requires reading 3 fixtures to understand
   is worse than a slightly repetitive one.
 - Don't modify source code. Only create or modify test files.
+- Only read and modify files inside the working directory. Never use
+  absolute paths outside the project.
 - If a line is genuinely untestable (e.g., `if __name__ == "__main__"`,
   platform-specific branches, hardware error paths), skip it and note
   why in your response.

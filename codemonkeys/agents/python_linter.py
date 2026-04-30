@@ -1,9 +1,9 @@
 """Linter agent — runs ruff check --fix and ruff format.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_linter
-    .venv/bin/python -m codemonkeys.agents.python_linter --scope file --path src/main.py
-    .venv/bin/python -m codemonkeys.agents.python_linter --scope diff
+    python -m codemonkeys.agents.python_linter
+    python -m codemonkeys.agents.python_linter --scope file --path src/main.py
+    python -m codemonkeys.agents.python_linter --scope diff
 """
 
 from __future__ import annotations

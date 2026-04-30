@@ -1,7 +1,7 @@
 """Fixer agent — applies targeted fixes for findings from review agents.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_fixer findings.json
+    python -m codemonkeys.agents.python_fixer findings.json
 """
 
 from __future__ import annotations
@@ -44,9 +44,8 @@ Fix only what is listed — nothing else.
   requires it.
 - Do not push, commit, or modify git state.
 - Do not fix issues that are not in the findings list.
-- Cap: fix at most 20 findings per session. If given more, fix the
-  highest severity first and report which ones you skipped.
-
+- Only read and modify files inside the working directory. Never use
+  absolute paths outside the project.
 ## Test failures after fixes
 
 - If tests fail after your fixes, read the failure output and determine

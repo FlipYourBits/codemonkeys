@@ -1,9 +1,9 @@
 """Quality review agent — clean code, naming, design patterns, docstrings.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_quality_review
-    .venv/bin/python -m codemonkeys.agents.python_quality_review --scope file --path src/main.py
-    .venv/bin/python -m codemonkeys.agents.python_quality_review --scope repo
+    python -m codemonkeys.agents.python_quality_review
+    python -m codemonkeys.agents.python_quality_review --scope file --path src/main.py
+    python -m codemonkeys.agents.python_quality_review --scope repo
 """
 
 from __future__ import annotations
@@ -208,8 +208,6 @@ you're confident a real problem exists — not style preferences.
 - Drop anything where you can't articulate a concrete problem —
   "I would have written it differently" is not a finding.
 - Deduplicate — keep the finding with the strongest evidence.
-- Cap at 20 findings. If you have more, keep the highest severity
-  and confidence ones.
 
 ## Exclusions — DO NOT REPORT
 
