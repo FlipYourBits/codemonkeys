@@ -168,6 +168,10 @@ class AgentRunner:
         self._console = Console(stderr=True)
 
     async def run(self, options: ClaudeAgentOptions, prompt: str) -> str:
+        from codemonkeys.sandbox import restrict
+
+        restrict(self.cwd)
+
         display = _Display()
         last_active_tid: str | None = None
         result_text = ""
