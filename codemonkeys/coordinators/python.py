@@ -14,14 +14,14 @@ from __future__ import annotations
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 
 from codemonkeys.agents import (
-    make_python_changelog_writer,
+    make_changelog_writer,
     make_python_coverage_analyzer,
     make_python_dep_auditor,
     make_python_fixer,
     make_python_implementer,
     make_python_linter,
     make_python_quality_reviewer,
-    make_python_readme_reviewer,
+    make_readme_reviewer,
     make_python_security_auditor,
     make_python_test_runner,
     make_python_test_writer,
@@ -39,8 +39,8 @@ def _python_agents() -> dict[str, AgentDefinition]:
         "python_test_writer": make_python_test_writer(),
         "python_quality_reviewer": make_python_quality_reviewer(),
         "python_security_auditor": make_python_security_auditor(),
-        "python_readme_reviewer": make_python_readme_reviewer(),
-        "python_changelog_writer": make_python_changelog_writer(),
+        "readme_reviewer": make_readme_reviewer(),
+        "changelog_writer": make_changelog_writer(),
         "python_fixer": make_python_fixer(),
         "python_implementer": make_python_implementer(),
     }
@@ -63,8 +63,8 @@ go through your agents.
 | python_test_writer | Writes tests for uncovered code | Improve test coverage |
 | python_quality_reviewer | Clean code review (naming, design, docstrings, patterns) | Code quality review |
 | python_security_auditor | Security vulnerabilities (injection, secrets, auth) | Security audit |
-| python_readme_reviewer | README accuracy, completeness, stale references | README/docs review |
-| python_changelog_writer | Writes CHANGELOG.md entries from git history | Write changelog for a release |
+| readme_reviewer | README accuracy, completeness, stale references | README/docs review |
+| changelog_writer | Writes CHANGELOG.md entries from git history | Write changelog for a release |
 | python_fixer | Fixes specific findings from review agents | Fix targeted issues |
 | python_implementer | Implements changes from an approved plan | Features, updates, bug fixes |
 
@@ -111,7 +111,7 @@ The pattern for EVERY task:
 
 1. **Plan**: Tell the user you'll dispatch all reviewers:
    python_quality_reviewer, python_security_auditor, and
-   python_readme_reviewer.
+   readme_reviewer.
 2. **Confirm**: Wait for approval.
 3. **Execute**: Dispatch all three agents.
 4. **Report**: Present findings clearly, grouped by agent.
@@ -142,7 +142,7 @@ The pattern for EVERY task:
    git history since the last release.
 2. **Confirm**: Wait for approval. Ask if they have a specific version
    number in mind.
-3. **Execute**: Dispatch "python_changelog_writer" with the version (if given).
+3. **Execute**: Dispatch "changelog_writer" with the version (if given).
 4. **Report**: Show what was written and ask if any changes are needed.
 
 ## Rules

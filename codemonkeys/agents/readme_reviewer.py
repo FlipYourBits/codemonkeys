@@ -1,8 +1,8 @@
 """README reviewer agent — checks README quality, accuracy, and completeness.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_readme_review
-    .venv/bin/python -m codemonkeys.agents.python_readme_review --path docs/
+    .venv/bin/python -m codemonkeys.agents.readme_reviewer
+    .venv/bin/python -m codemonkeys.agents.readme_reviewer --path docs/
 """
 
 from __future__ import annotations
@@ -10,18 +10,18 @@ from __future__ import annotations
 from claude_agent_sdk import AgentDefinition
 
 
-def make_python_readme_reviewer(path: str | None = None) -> AgentDefinition:
+def make_readme_reviewer(path: str | None = None) -> AgentDefinition:
     """Create a readme reviewer that checks README quality and accuracy."""
     if path:
         start_by = (
             f"Start by reading `{path}` (or `{path}/README.md` if it's a "
-            "directory). Then read pyproject.toml and scan the source code "
-            "to verify claims."
+            "directory). Then read the project metadata file and scan the "
+            "source code to verify claims."
         )
     else:
         start_by = (
-            "Start by reading `README.md`. Then read `pyproject.toml` and "
-            "scan the source code to verify claims."
+            "Start by reading `README.md`. Then read the project metadata "
+            "file and scan the source code to verify claims."
         )
 
     return AgentDefinition(
@@ -43,8 +43,14 @@ Report findings only — do not fix issues.
 
 1. Read the README and all project doc files (CONTRIBUTING.md,
    docs/*.md if they exist).
-2. Read `pyproject.toml` for project metadata (name, version,
-   dependencies, extras, scripts, entry points).
+2. Read the project metadata file for name, version, dependencies,
+   scripts, and entry points. Look for whichever exists:
+   - Python: `pyproject.toml` or `setup.cfg`
+   - JavaScript/TypeScript: `package.json`
+   - Rust: `Cargo.toml`
+   - Go: `go.mod`
+   - Ruby: `Gemfile` / `*.gemspec`
+   - Java/Kotlin: `pom.xml` or `build.gradle`
 3. Cross-reference every claim in the docs against the actual code:
    - Do the import paths work?
    - Do the CLI commands exist?
@@ -64,10 +70,10 @@ A good README has these sections (flag any that are missing or empty):
 - **Badges** (optional but encouraged): build status, version, license
 
 ### Getting Started
-- **Prerequisites**: Python version, OS requirements, system
+- **Prerequisites**: language/runtime version, OS requirements, system
   dependencies
-- **Installation**: exact commands to install (pip install, extras,
-  from source). Must match the actual package name in pyproject.toml.
+- **Installation**: exact commands to install. Must match the actual
+  package name in the project metadata file.
 - **Quick Start**: minimal working example that a new user can
   copy-paste and see results. Must use current API — no removed
   functions or renamed arguments.
@@ -107,9 +113,9 @@ A good README has these sections (flag any that are missing or empty):
 - No quick start / minimal example
 
 ### `inaccurate_metadata`
-- Package name in README doesn't match pyproject.toml
-- Version number in README doesn't match pyproject.toml
-- Dependency list in README doesn't match pyproject.toml
+- Package name in README doesn't match project metadata file
+- Version number in README doesn't match project metadata file
+- Dependency list in README doesn't match project metadata file
 - License type in README doesn't match LICENSE file
 - URLs (homepage, repo) are broken or wrong
 
@@ -161,7 +167,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     async def _main() -> None:
-        agent = make_python_readme_reviewer(path=args.path)
+        agent = make_readme_reviewer(path=args.path)
         runner = AgentRunner()
         prompt = "Review the README and project documentation for accuracy and completeness."
         result = await runner.run_agent(agent, prompt)

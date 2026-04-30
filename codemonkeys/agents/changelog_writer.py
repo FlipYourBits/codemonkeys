@@ -1,8 +1,8 @@
 """Changelog writer agent — writes keepachangelog entries from git history.
 
 Usage:
-    .venv/bin/python -m codemonkeys.agents.python_changelog
-    .venv/bin/python -m codemonkeys.agents.python_changelog --version 0.2.0
+    .venv/bin/python -m codemonkeys.agents.changelog_writer
+    .venv/bin/python -m codemonkeys.agents.changelog_writer --version 0.2.0
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from claude_agent_sdk import AgentDefinition
 
 
-def make_python_changelog_writer() -> AgentDefinition:
+def make_changelog_writer() -> AgentDefinition:
     """Create a changelog writer agent that appends keepachangelog entries."""
     return AgentDefinition(
         description=(
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     async def _main() -> None:
-        agent = make_python_changelog_writer()
+        agent = make_changelog_writer()
         runner = AgentRunner()
         parts = ["Write a CHANGELOG.md entry for the unreleased changes."]
         if args.version:

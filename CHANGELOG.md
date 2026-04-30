@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive Python coordinator TUI with prompt-toolkit — chat with a coordinator that dispatches constrained subagents (`codemonkeys.coordinators.python`)
 - `make_python_implementer()` agent for implementing features from approved plans
 - `make_python_coverage_analyzer()` agent for generating pytest coverage reports (pairs with test_writer)
-- `make_python_changelog_writer()` agent for writing keepachangelog entries from git history
+- `make_changelog_writer()` agent for writing keepachangelog entries from git history
 - `AgentRunner` for running individual agents with a Rich live display
 - Composable coordinator architecture — coordinators extend base coordinators with additional agents and prompt
 - Reusable prompt fragments in `codemonkeys/prompts/` (`PYTHON_GUIDELINES`, `PYTHON_SOURCE_FILTER`, `PYTHON_CMD`)
