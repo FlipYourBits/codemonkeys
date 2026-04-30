@@ -18,6 +18,8 @@ Claude Code is a general-purpose coding assistant. codemonkeys builds specialize
 ## Install
 
 ```bash
+git clone https://github.com/FlipYourBits/codemonkeys.git
+cd codemonkeys
 pip install -e ".[dev]"
 ```
 
@@ -49,21 +51,30 @@ codemonkeys/
 
 ### Agents
 
-Each file in `agents/` exports a single `AgentDefinition` — a self-contained agent with a prompt, model, tool permissions, and scope. Agents are stateless workers that do one focused job.
+Each file in `agents/` exports a factory function that returns an `AgentDefinition` — a self-contained agent with a prompt, model, tool permissions, and scope. Agents are stateless workers that do one focused job.
 
-| Agent | Model | What it does |
-|-------|-------|-------------|
-| `LINTER` | haiku | Runs ruff check --fix + ruff format |
-| `TYPE_CHECKER` | haiku | Runs mypy, returns type errors |
-| `TEST_RUNNER` | haiku | Runs pytest, returns results |
-| `DEP_AUDITOR` | haiku | Runs pip-audit, returns vulnerabilities |
-| `CODE_REVIEWER` | opus | Static code review — logic errors, resource leaks, dead code, complexity |
-| `SECURITY_AUDITOR` | opus | Security vulnerabilities — injection, secrets, unsafe deserialization |
-| `DOCS_REVIEWER` | sonnet | Finds documentation drift against code |
-| `FIXER` | opus | Applies targeted fixes for findings from any agent |
-| `IMPLEMENTER` | opus | Implements features from an approved plan |
-| `TEST_WRITER` | opus | Writes tests for uncovered code from coverage reports |
-| `DEFINITION_REVIEWER` | opus | Reviews AgentDefinition files for correctness |
+#### Reviewers (read-only, safe to run in parallel)
+
+| Factory | Model | What it does |
+|---------|-------|-------------|
+| `make_python_type_checker` | haiku | Runs mypy, returns type errors |
+| `make_python_test_runner` | haiku | Runs pytest, returns results |
+| `make_python_coverage_analyzer` | haiku | Runs pytest --cov, returns uncovered lines |
+| `make_python_dep_auditor` | haiku | Runs pip-audit, returns vulnerabilities |
+| `make_python_quality_reviewer` | opus | Clean code review — naming, design, patterns, complexity |
+| `make_python_security_auditor` | opus | Security vulnerabilities — injection, secrets, auth |
+| `make_readme_reviewer` | sonnet | README accuracy, completeness, stale references |
+| `make_changelog_reviewer` | sonnet | CHANGELOG.md completeness against git history |
+| `make_definition_reviewer` | opus | Reviews AgentDefinition files for correctness |
+
+#### Writers (edit files, run sequentially after user approval)
+
+| Factory | Model | What it does |
+|---------|-------|-------------|
+| `make_python_linter` | haiku | Runs ruff check --fix + ruff format |
+| `make_python_fixer` | opus | Applies targeted fixes for findings from reviewers |
+| `make_python_test_writer` | opus | Writes tests for uncovered code from coverage reports |
+| `make_python_implementer` | opus | Implements features from an approved plan |
 
 ### Coordinators
 
@@ -82,16 +93,20 @@ Built-in workflows:
 Coordinators are composable — extend a base coordinator with additional expertise:
 
 ```python
-from codemonkeys.coordinators.python import python_coordinator, PYTHON_AGENTS, PYTHON_PROMPT
+from codemonkeys.coordinators.python import python_coordinator, PYTHON_PROMPT
+from codemonkeys.agents import make_python_linter, make_python_test_runner
 
 def fastapi_coordinator(cwd="."):
+    base = python_coordinator(cwd)
+    agents = dict(base.agents or {})
+    agents["api_tester"] = make_api_tester()
     return ClaudeAgentOptions(
         system_prompt=PYTHON_PROMPT + FASTAPI_ADDITIONS,
         model="sonnet",
         cwd=cwd,
-        permission_mode="bypassPermissions",
-        allowed_tools=["Read", "Glob", "Grep", "Bash", "Agent"],
-        agents={**PYTHON_AGENTS, "api_tester": API_TESTER},
+        permission_mode="acceptEdits",
+        allowed_tools=["Read", "Glob", "Grep", "Agent"],
+        agents=agents,
     )
 ```
 
@@ -100,23 +115,23 @@ def fastapi_coordinator(cwd="."):
 Each agent can also be run standalone via its `__main__` block or dispatched programmatically:
 
 ```python
-from codemonkeys.agents import CODE_REVIEWER, make_code_reviewer
+from codemonkeys.agents import make_python_quality_reviewer
 from codemonkeys.runner import AgentRunner
 
 runner = AgentRunner()
 
 # Run with default scope (diff against main)
-result = await runner.run_agent(CODE_REVIEWER, "Review the code.")
+result = await runner.run_agent(make_python_quality_reviewer(), "Review the code.")
 
-# Use a factory to customize scope
-reviewer = make_code_reviewer(scope="repo", path="src/")
+# Customize scope
+reviewer = make_python_quality_reviewer(scope="repo", path="src/")
 result = await runner.run_agent(reviewer, "Review src/ for issues.")
 ```
 
-**Definition Review** — reviews AgentDefinition files for correctness and optionally fixes issues:
+**Definition Review** — reviews AgentDefinition files for correctness:
 
 ```bash
-.venv/bin/python -m codemonkeys.agents.review_agent_definition codemonkeys/agents/python_code_review.py
+.venv/bin/python -m codemonkeys.agents.review_agent_definition codemonkeys/agents/python_quality_reviewer.py
 ```
 
 ## Model Configuration
@@ -149,9 +164,28 @@ MY_AGENT = AgentDefinition(
 )
 ```
 
-For parameterized agents, use a factory function + default constant. See existing agents for the pattern.
+For parameterized agents, use a factory function. See existing agents for the pattern.
 
 See [docs/agent-definition.md](docs/agent-definition.md) for a full reference of all parameters.
+
+## Sandbox
+
+Agents run inside an OS-level filesystem sandbox that restricts writes to the project directory. Call `restrict()` once at startup — all child processes (including SDK-spawned agents) inherit the restriction.
+
+```python
+from codemonkeys.sandbox import restrict
+
+restrict("/path/to/project")
+# From here, writes outside the project directory are denied by the kernel.
+```
+
+| Platform | Mechanism | Dependency |
+|----------|-----------|------------|
+| Linux | Landlock LSM (kernel 5.13+) | `landlock` (pure Python) |
+| macOS | sandbox-exec / Seatbelt | none |
+| Windows | Low Integrity Token | none |
+
+The sandbox is integrated into `AgentRunner` and the coordinator — you don't need to call it manually unless building a custom entry point.
 
 ## Tests
 
@@ -162,3 +196,7 @@ See [docs/agent-definition.md](docs/agent-definition.md) for a full reference of
 ## Docs
 
 - [AgentDefinition Parameters](docs/agent-definition.md) — full reference for all agent configuration options
+
+## License
+
+MIT — see [LICENSE](LICENSE).

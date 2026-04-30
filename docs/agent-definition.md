@@ -164,13 +164,13 @@ LOG_ANALYZER = AgentDefinition(
 
 ### `skills` (list[str] | None)
 
-Names of Claude Code skill files (`.claude/skills/*.md`) to inject into the agent's context. Not the same as the `codemonkeys/skills/` Python module — those are string constants you embed directly in the `prompt` field.
+Names of Claude Code skill files (`.claude/skills/*.md`) to inject into the agent's context. Not the same as the `codemonkeys/prompts/` Python module — those are string constants you embed directly in the `prompt` field.
 
 ```python
 skills=["python-best-practices"]
 ```
 
-Most agents don't need this. Embedding prompt text directly via the `prompt` field (or f-string constants from `codemonkeys/skills/`) is simpler and more explicit.
+Most agents don't need this. Embedding prompt text directly via the `prompt` field (or f-string constants from `codemonkeys/prompts/`) is simpler and more explicit.
 
 ### `memory` (str | None)
 
