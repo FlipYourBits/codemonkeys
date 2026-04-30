@@ -13,7 +13,7 @@ from typing import Literal
 from claude_agent_sdk import AgentDefinition
 
 
-def make_security_auditor(
+def make_python_security_auditor(
     scope: Literal["file", "diff", "repo"] = "diff",
     path: str | None = None,
 ) -> AgentDefinition:
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     async def _main() -> None:
-        agent = make_security_auditor(scope=args.scope, path=args.path)
+        agent = make_python_security_auditor(scope=args.scope, path=args.path)
         runner = AgentRunner()
         prompt = f"Audit Python source files under {args.path}." if args.path else "Audit the code for security vulnerabilities."
         result = await runner.run_agent(agent, prompt)

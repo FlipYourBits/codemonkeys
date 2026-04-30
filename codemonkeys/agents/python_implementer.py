@@ -12,7 +12,7 @@ from claude_agent_sdk import AgentDefinition
 from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
 
 
-def make_implementer() -> AgentDefinition:
+def make_python_implementer() -> AgentDefinition:
     """Create an implementer agent that builds features, applies updates, and fixes bugs from approved plans."""
     return AgentDefinition(
         description=(
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
         runner = AgentRunner()
         result = await runner.run_agent(
-            make_implementer(), f"Implement this plan:\n\n{plan}"
+            make_python_implementer(), f"Implement this plan:\n\n{plan}"
         )
         print(result)
 

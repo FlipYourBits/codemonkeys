@@ -10,7 +10,7 @@ from __future__ import annotations
 from claude_agent_sdk import AgentDefinition
 
 
-def make_readme_reviewer(path: str | None = None) -> AgentDefinition:
+def make_python_readme_reviewer(path: str | None = None) -> AgentDefinition:
     """Create a readme reviewer that checks README quality and accuracy."""
     if path:
         start_by = (
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     async def _main() -> None:
-        agent = make_readme_reviewer(path=args.path)
+        agent = make_python_readme_reviewer(path=args.path)
         runner = AgentRunner()
         prompt = "Review the README and project documentation for accuracy and completeness."
         result = await runner.run_agent(agent, prompt)

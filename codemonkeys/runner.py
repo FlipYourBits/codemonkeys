@@ -153,7 +153,7 @@ class AgentRunner:
         runner = AgentRunner()
 
         # Run a single agent directly
-        result = await runner.run_agent(make_code_reviewer(), "Review the diff")
+        result = await runner.run_agent(make_python_quality_reviewer(), "Review the diff")
 
         # Run with full ClaudeAgentOptions (workflows, custom config)
         result = await runner.run(options, "Dispatch all agents")

@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Interactive Python coordinator TUI with prompt-toolkit — chat with a coordinator that dispatches constrained subagents (`codemonkeys.coordinators.python`)
-- `make_implementer()` agent for implementing features from approved plans
-- `make_coverage_analyzer()` agent for generating pytest coverage reports (pairs with test_writer)
-- `make_changelog_writer()` agent for writing keepachangelog entries from git history
+- `make_python_implementer()` agent for implementing features from approved plans
+- `make_python_coverage_analyzer()` agent for generating pytest coverage reports (pairs with test_writer)
+- `make_python_changelog_writer()` agent for writing keepachangelog entries from git history
 - `AgentRunner` for running individual agents with a Rich live display
 - Composable coordinator architecture — coordinators extend base coordinators with additional agents and prompt
 - Reusable prompt fragments in `codemonkeys/prompts/` (`PYTHON_GUIDELINES`, `PYTHON_SOURCE_FILTER`, `PYTHON_CMD`)
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Breaking:** renamed package from `agentpipe` to `codemonkeys`
 - **Breaking:** replaced pipeline/node architecture with agent/coordinator architecture
-- Agents are now `AgentDefinition` factory functions (`make_*()`) instead of constants, enabling parameterization (e.g., `make_code_reviewer(scope="repo")`)
+- Agents are now `AgentDefinition` factory functions (`make_python_*()`) instead of constants, enabling parameterization (e.g., `make_python_quality_reviewer(scope="repo")`)
 - Coordinator dispatches agents via Claude Agent SDK `ClaudeSDKClient` instead of custom pipeline orchestrator
 - Agent table in TUI shows registered agent names (e.g., "code_reviewer") instead of generic "local_agent"
 - Agent table moved to separate `ConditionalContainer` to prevent scroll locking during agent dispatch

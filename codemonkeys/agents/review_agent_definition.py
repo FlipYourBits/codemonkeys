@@ -226,7 +226,7 @@ if __name__ == "__main__":
             structured = json.loads(structured)
         return DefinitionReviewResult.model_validate(structured)
 
-    from codemonkeys.agents.python_fixer import make_fixer
+    from codemonkeys.agents.python_fixer import make_python_fixer
 
     parser = argparse.ArgumentParser(description="Review AgentDefinitions for correctness")
     parser.add_argument("path", nargs="?", default=".", help="Agent .py file or folder (default: cwd)")
@@ -300,7 +300,7 @@ if __name__ == "__main__":
         findings_json = json.dumps(to_fix, indent=2)
         console.print(f"[bold cyan]Fixing {len(to_fix)} finding{'s' if len(to_fix) != 1 else ''}...[/bold cyan]")
         fix_result = await runner.run_agent(
-            make_fixer(),
+            make_python_fixer(),
             f"Fix these AgentDefinition issues:\n\n{findings_json}\n\n"
             f"After fixing, summarize what you changed: which findings you "
             f"fixed, what files you modified, and any findings you skipped "

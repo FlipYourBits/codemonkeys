@@ -14,35 +14,35 @@ from __future__ import annotations
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 
 from codemonkeys.agents import (
-    make_changelog_writer,
-    make_coverage_analyzer,
-    make_dep_auditor,
-    make_fixer,
-    make_implementer,
-    make_linter,
-    make_quality_reviewer,
-    make_readme_reviewer,
-    make_security_auditor,
-    make_test_runner,
-    make_test_writer,
-    make_type_checker,
+    make_python_changelog_writer,
+    make_python_coverage_analyzer,
+    make_python_dep_auditor,
+    make_python_fixer,
+    make_python_implementer,
+    make_python_linter,
+    make_python_quality_reviewer,
+    make_python_readme_reviewer,
+    make_python_security_auditor,
+    make_python_test_runner,
+    make_python_test_writer,
+    make_python_type_checker,
 )
 
 
 def _python_agents() -> dict[str, AgentDefinition]:
     return {
-        "linter": make_linter(),
-        "type_checker": make_type_checker(),
-        "test_runner": make_test_runner(),
-        "coverage_analyzer": make_coverage_analyzer(),
-        "dep_auditor": make_dep_auditor(),
-        "test_writer": make_test_writer(),
-        "quality_reviewer": make_quality_reviewer(),
-        "security_auditor": make_security_auditor(),
-        "readme_reviewer": make_readme_reviewer(),
-        "changelog_writer": make_changelog_writer(),
-        "fixer": make_fixer(),
-        "implementer": make_implementer(),
+        "linter": make_python_linter(),
+        "type_checker": make_python_type_checker(),
+        "test_runner": make_python_test_runner(),
+        "coverage_analyzer": make_python_coverage_analyzer(),
+        "dep_auditor": make_python_dep_auditor(),
+        "test_writer": make_python_test_writer(),
+        "quality_reviewer": make_python_quality_reviewer(),
+        "security_auditor": make_python_security_auditor(),
+        "readme_reviewer": make_python_readme_reviewer(),
+        "changelog_writer": make_python_changelog_writer(),
+        "fixer": make_python_fixer(),
+        "implementer": make_python_implementer(),
     }
 
 PYTHON_PROMPT = """\

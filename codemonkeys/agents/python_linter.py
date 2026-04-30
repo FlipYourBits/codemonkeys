@@ -15,7 +15,7 @@ from claude_agent_sdk import AgentDefinition
 from codemonkeys.prompts import PYTHON_CMD
 
 
-def make_linter(
+def make_python_linter(
     scope: Literal["file", "diff", "repo"] = "repo",
     path: str | None = None,
 ) -> AgentDefinition:
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     async def _main() -> None:
         runner = AgentRunner()
         result = await runner.run_agent(
-            make_linter(scope=args.scope, path=args.path),
+            make_python_linter(scope=args.scope, path=args.path),
             "Lint and format the code.",
         )
         print(result)

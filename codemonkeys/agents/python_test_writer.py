@@ -11,7 +11,7 @@ from claude_agent_sdk import AgentDefinition
 from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
 
 
-def make_test_writer() -> AgentDefinition:
+def make_python_test_writer() -> AgentDefinition:
     """Create a test writer agent that writes tests for uncovered code."""
     return AgentDefinition(
         description=(
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         report = Path(args.coverage).read_text(encoding="utf-8")
         runner = AgentRunner()
         result = await runner.run_agent(
-            make_test_writer(), f"Write tests for the uncovered code:\n\n{report}"
+            make_python_test_writer(), f"Write tests for the uncovered code:\n\n{report}"
         )
         print(result)
 

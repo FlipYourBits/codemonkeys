@@ -11,7 +11,7 @@ from claude_agent_sdk import AgentDefinition
 from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
 
 
-def make_fixer() -> AgentDefinition:
+def make_python_fixer() -> AgentDefinition:
     """Create a fixer agent that applies targeted fixes for review findings."""
     return AgentDefinition(
         description=(
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     async def _main() -> None:
         findings = Path(args.findings).read_text(encoding="utf-8")
         runner = AgentRunner()
-        result = await runner.run_agent(make_fixer(), f"Fix these findings:\n\n{findings}")
+        result = await runner.run_agent(make_python_fixer(), f"Fix these findings:\n\n{findings}")
         print(result)
 
     asyncio.run(_main())

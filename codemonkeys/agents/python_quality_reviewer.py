@@ -15,7 +15,7 @@ from claude_agent_sdk import AgentDefinition
 from codemonkeys.prompts import PYTHON_SOURCE_FILTER
 
 
-def make_quality_reviewer(
+def make_python_quality_reviewer(
     scope: Literal["file", "diff", "repo"] = "diff",
     path: str | None = None,
 ) -> AgentDefinition:
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     async def _main() -> None:
-        agent = make_quality_reviewer(scope=args.scope, path=args.path)
+        agent = make_python_quality_reviewer(scope=args.scope, path=args.path)
         runner = AgentRunner()
         prompt = f"Review Python source files under {args.path}." if args.path else "Review the code."
         result = await runner.run_agent(agent, prompt)

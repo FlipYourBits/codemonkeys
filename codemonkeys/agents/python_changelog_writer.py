@@ -10,7 +10,7 @@ from __future__ import annotations
 from claude_agent_sdk import AgentDefinition
 
 
-def make_changelog_writer() -> AgentDefinition:
+def make_python_changelog_writer() -> AgentDefinition:
     """Create a changelog writer agent that appends keepachangelog entries."""
     return AgentDefinition(
         description=(
@@ -49,7 +49,7 @@ Each item is a bullet point describing the change from the USER's
 perspective. Focus on what changed and why it matters, not
 implementation details. Write for someone deciding whether to upgrade.
 
-Good: "- Added `make_coverage_analyzer()` agent for generating pytest coverage reports"
+Good: "- Added `make_python_coverage_analyzer()` agent for generating pytest coverage reports"
 Bad: "- Created python_coverage.py with a new function"
 
 Good: "- Changed agent factories from constants to `make_*()` functions for parameterization"
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     async def _main() -> None:
-        agent = make_changelog_writer()
+        agent = make_python_changelog_writer()
         runner = AgentRunner()
         parts = ["Write a CHANGELOG.md entry for the unreleased changes."]
         if args.version:

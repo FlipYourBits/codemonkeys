@@ -11,7 +11,7 @@ from claude_agent_sdk import AgentDefinition
 from codemonkeys.prompts import PYTHON_CMD
 
 
-def make_dep_auditor() -> AgentDefinition:
+def make_python_dep_auditor() -> AgentDefinition:
     """Create a dependency auditor agent that runs pip-audit."""
     return AgentDefinition(
         description=(
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     async def _main() -> None:
         runner = AgentRunner()
-        result = await runner.run_agent(make_dep_auditor(), "Audit dependencies for vulnerabilities.")
+        result = await runner.run_agent(make_python_dep_auditor(), "Audit dependencies for vulnerabilities.")
         print(result)
 
     asyncio.run(_main())
