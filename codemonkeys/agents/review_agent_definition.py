@@ -174,9 +174,6 @@ an empty findings list.""",
     )
 
 
-DEFINITION_REVIEWER = make_definition_reviewer()
-
-
 if __name__ == "__main__":
     import argparse
     import asyncio
@@ -229,7 +226,7 @@ if __name__ == "__main__":
             structured = json.loads(structured)
         return DefinitionReviewResult.model_validate(structured)
 
-    from codemonkeys.agents.python_fixer import FIXER
+    from codemonkeys.agents.python_fixer import make_fixer
 
     parser = argparse.ArgumentParser(description="Review AgentDefinitions for correctness")
     parser.add_argument("path", nargs="?", default=".", help="Agent .py file or folder (default: cwd)")
@@ -255,7 +252,7 @@ if __name__ == "__main__":
             console.print(f"[bold cyan]Reviewing {file_path}...[/bold cyan]")
 
             await runner.run_agent(
-                DEFINITION_REVIEWER,
+                make_definition_reviewer(),
                 f"Review the AgentDefinition in this file: {file_path}",
                 output_format=output_format,
             )
@@ -303,7 +300,7 @@ if __name__ == "__main__":
         findings_json = json.dumps(to_fix, indent=2)
         console.print(f"[bold cyan]Fixing {len(to_fix)} finding{'s' if len(to_fix) != 1 else ''}...[/bold cyan]")
         fix_result = await runner.run_agent(
-            FIXER,
+            make_fixer(),
             f"Fix these AgentDefinition issues:\n\n{findings_json}\n\n"
             f"After fixing, summarize what you changed: which findings you "
             f"fixed, what files you modified, and any findings you skipped "

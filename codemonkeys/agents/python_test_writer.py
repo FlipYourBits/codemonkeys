@@ -10,12 +10,15 @@ from claude_agent_sdk import AgentDefinition
 
 from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
 
-TEST_WRITER = AgentDefinition(
-    description=(
-        "Use this agent to write tests for uncovered code. "
-        "Give it a coverage report with uncovered files and line ranges."
-    ),
-    prompt=f"""\
+
+def make_test_writer() -> AgentDefinition:
+    """Create a test writer agent that writes tests for uncovered code."""
+    return AgentDefinition(
+        description=(
+            "Use this agent to write tests for uncovered code. "
+            "Give it a coverage report with uncovered files and line ranges."
+        ),
+        prompt=f"""\
 You write tests for code that lacks coverage. You receive a coverage
 report showing which files and lines are uncovered. Write meaningful
 tests that verify real behavior.
@@ -50,18 +53,36 @@ tests that verify real behavior.
 - If a line is genuinely untestable (e.g., `if __name__ == "__main__"`,
   platform-specific branches, hardware error paths), skip it and note
   why in your response.
+- Cap: create or modify at most 5 test files per session. Prioritize
+  the files with the most uncovered lines.
+
+## Test failures
+
+- If your new tests fail, fix them. Do not leave failing tests.
+- Maximum 3 test-fix cycles per test file. If a test still fails after
+  3 attempts, delete it and note why in your response.
+- If existing tests break after your changes, you have a bug — fix it.
+
+## Output
+
+End your response with a structured summary:
+- **Tests written**: count of new test functions
+- **Files created/modified**: list
+- **Skipped areas**: uncovered lines you chose not to test and why
+- **Tests**: pass/fail
 
 {PYTHON_GUIDELINES}""",
-    model="opus",
-    tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-    disallowedTools=[
-        "Bash(git push*)",
-        "Bash(git commit*)",
-        "Bash(pip install*)",
-        "Bash(pip uninstall*)",
-    ],
-    permissionMode="dontAsk",
-)
+        model="opus",
+        tools=[
+            "Read",
+            "Glob",
+            "Grep",
+            "Edit",
+            "Write",
+            f"Bash({PYTHON_CMD} -m pytest*)",
+        ],
+        permissionMode="dontAsk",
+    )
 
 
 if __name__ == "__main__":
@@ -79,7 +100,7 @@ if __name__ == "__main__":
         report = Path(args.coverage).read_text(encoding="utf-8")
         runner = AgentRunner()
         result = await runner.run_agent(
-            TEST_WRITER, f"Write tests for the uncovered code:\n\n{report}"
+            make_test_writer(), f"Write tests for the uncovered code:\n\n{report}"
         )
         print(result)
 

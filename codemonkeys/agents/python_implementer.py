@@ -1,4 +1,4 @@
-"""Implementer agent — implements features from an approved plan.
+"""Implementer agent — implements features, updates, and bug fixes from a plan.
 
 Usage:
     Dispatched by a coordinator after the user approves an implementation plan.
@@ -11,15 +11,21 @@ from claude_agent_sdk import AgentDefinition
 
 from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
 
-IMPLEMENTER = AgentDefinition(
-    description=(
-        "Use this agent to implement a feature or change based on an approved plan. "
-        "Give it the full implementation plan including what files to create or modify, "
-        "what the expected behavior is, and any constraints."
-    ),
-    prompt=f"""\
-You implement features and changes based on an approved plan. The plan
-tells you what to build — your job is to build it correctly.
+
+def make_implementer() -> AgentDefinition:
+    """Create an implementer agent that builds features, applies updates, and fixes bugs from approved plans."""
+    return AgentDefinition(
+        description=(
+            "Use this agent to implement changes based on an approved plan — new "
+            "features, feature updates, bug fixes, or refactors. Give it the full "
+            "plan including what files to create or modify, what the expected "
+            "behavior is, and any constraints. For targeted fixes of specific "
+            "review findings (with file/line/description), use the fixer agent instead."
+        ),
+        prompt=f"""\
+You implement changes based on an approved plan. The plan may describe
+a new feature, an update to existing functionality, a bug fix, or a
+refactor. Your job is to implement it correctly.
 
 ## Method
 
@@ -46,17 +52,36 @@ tells you what to build — your job is to build it correctly.
 - If something in the plan is impossible or contradicts the codebase,
   skip it and explain why in your response.
 
+## Test failures
+
+- If tests fail after implementation, read the failure output and fix
+  your changes to make tests pass.
+- Maximum 3 test-fix cycles. If tests still fail after 3 attempts,
+  stop and report the state.
+- Do not modify existing tests to make them pass unless the plan
+  explicitly says to.
+
+## Output
+
+End your response with a structured summary:
+- **Files created**: list of new files
+- **Files modified**: list of changed files
+- **Ambiguous choices**: what you decided and why
+- **Skipped items**: what you couldn't do and why
+- **Tests**: pass/fail (with failure details if applicable)
+
 {PYTHON_GUIDELINES}""",
-    model="opus",
-    tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-    disallowedTools=[
-        "Bash(git push*)",
-        "Bash(git commit*)",
-        "Bash(pip install*)",
-        "Bash(pip uninstall*)",
-    ],
-    permissionMode="dontAsk",
-)
+        model="opus",
+        tools=[
+            "Read",
+            "Glob",
+            "Grep",
+            "Edit",
+            "Write",
+            f"Bash({PYTHON_CMD} -m pytest*)",
+        ],
+        permissionMode="dontAsk",
+    )
 
 
 if __name__ == "__main__":
@@ -79,7 +104,7 @@ if __name__ == "__main__":
 
         runner = AgentRunner()
         result = await runner.run_agent(
-            IMPLEMENTER, f"Implement this plan:\n\n{plan}"
+            make_implementer(), f"Implement this plan:\n\n{plan}"
         )
         print(result)
 

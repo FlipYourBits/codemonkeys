@@ -2,8 +2,8 @@
 
 Usage:
     .venv/bin/python -m codemonkeys.agents.python_security_audit
+    .venv/bin/python -m codemonkeys.agents.python_security_audit --scope file --path src/auth.py
     .venv/bin/python -m codemonkeys.agents.python_security_audit --scope repo
-    .venv/bin/python -m codemonkeys.agents.python_security_audit --scope diff --path src/
 """
 
 from __future__ import annotations
@@ -14,10 +14,18 @@ from claude_agent_sdk import AgentDefinition
 
 
 def make_security_auditor(
-    scope: Literal["diff", "repo"] = "diff",
+    scope: Literal["file", "diff", "repo"] = "diff",
     path: str | None = None,
 ) -> AgentDefinition:
-    if scope == "diff":
+    tools: list[str] = ["Read", "Glob", "Grep"]
+
+    if scope == "file":
+        if not path:
+            msg = "path is required when scope is 'file'"
+            raise ValueError(msg)
+        method_intro = f"Read `{path}` and audit it."
+        scope_exclusion = ""
+    elif scope == "diff":
         if path:
             method_intro = (
                 f"Start by running `git diff main...HEAD -- '{path}'` and reading "
@@ -30,6 +38,7 @@ def make_security_auditor(
                 "and review the most recently changed files."
             )
         scope_exclusion = "\n- Pre-existing issues outside the diff"
+        tools.extend(["Bash(git diff*)", "Bash(git ls-files*)"])
     else:
         if path:
             method_intro = f"Review all Python source files under `{path}`."
@@ -39,6 +48,7 @@ def make_security_auditor(
                 "review them."
             )
         scope_exclusion = ""
+        tools.append("Bash(git ls-files*)")
 
     return AgentDefinition(
         description=(
@@ -109,14 +119,17 @@ handlers, CLI args, env vars, queue consumers, file ingest) to sinks.
 - Drop duplicates — keep the finding with the strongest evidence.
 - Only report findings you believe are genuinely exploitable. If you
   can't describe a concrete attack scenario, leave it out.
+- Cap at 15 findings. If you have more, keep the highest severity
+  and confidence ones.
 
 ## Exclusions — DO NOT REPORT
 
-- Code quality, complexity, or maintainability concerns (code review
-  owns these)
+- Code quality, naming, complexity, or maintainability concerns
+  (quality reviewer owns these)
 - Dependency vulnerabilities (dependency audit owns these)
 - Test failures or missing tests (test runner owns these)
-- Documentation drift (docs review owns these)
+- Documentation accuracy (quality reviewer owns docstrings, readme
+  reviewer owns project docs)
 - Denial of service or resource exhaustion
 - Lack of input validation on fields with no security impact
 - Performance issues{scope_exclusion}
@@ -124,18 +137,9 @@ handlers, CLI args, env vars, queue consumers, file ingest) to sinks.
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
 category, description, recommendation.""",
         model="opus",
-        tools=["Read", "Glob", "Grep", "Bash"],
-        disallowedTools=[
-            "Bash(git push*)",
-            "Bash(git commit*)",
-            "Bash(pip install*)",
-            "Bash(pip uninstall*)",
-        ],
+        tools=tools,
         permissionMode="dontAsk",
     )
-
-
-SECURITY_AUDITOR = make_security_auditor()
 
 
 if __name__ == "__main__":
@@ -145,7 +149,7 @@ if __name__ == "__main__":
     from codemonkeys.runner import AgentRunner
 
     parser = argparse.ArgumentParser(description="Security audit — injection, secrets, auth bypass")
-    parser.add_argument("--scope", choices=["diff", "repo"], default="diff")
+    parser.add_argument("--scope", choices=["file", "diff", "repo"], default="diff")
     parser.add_argument("--path", help="Narrow scope to this file or folder")
     args = parser.parse_args()
 

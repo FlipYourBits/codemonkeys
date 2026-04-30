@@ -10,12 +10,17 @@ from claude_agent_sdk import AgentDefinition
 
 from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
 
-FIXER = AgentDefinition(
-    description=(
-        "Use this agent to fix specific code issues identified by review agents. "
-        "Give it a list of findings with file, line, and description."
-    ),
-    prompt=f"""\
+
+def make_fixer() -> AgentDefinition:
+    """Create a fixer agent that applies targeted fixes for review findings."""
+    return AgentDefinition(
+        description=(
+            "Use this agent to fix specific code issues identified by review agents. "
+            "Give it a list of findings with file, line, and description. For broader "
+            "changes (new features, refactors, bug fixes without specific findings), "
+            "use the implementer agent instead."
+        ),
+        prompt=f"""\
 You fix specific findings reported by upstream review agents. Each
 finding includes a file, line, severity, category, and description.
 Fix only what is listed — nothing else.
@@ -39,18 +44,38 @@ Fix only what is listed — nothing else.
   requires it.
 - Do not push, commit, or modify git state.
 - Do not fix issues that are not in the findings list.
+- Cap: fix at most 20 findings per session. If given more, fix the
+  highest severity first and report which ones you skipped.
+
+## Test failures after fixes
+
+- If tests fail after your fixes, read the failure output and determine
+  whether YOUR change caused it or it was pre-existing.
+- If your change caused the failure: fix your fix, then re-run tests.
+- If pre-existing: report the test failure but do not attempt to fix it.
+- Maximum 3 test-fix cycles. If tests still fail after 3 attempts,
+  stop and report the state.
+
+## Output
+
+For each finding, report one of:
+- **Fixed**: file, line, what you changed and why
+- **Skipped**: file, line, reason (false positive, pre-existing, ambiguous)
+
+End with a summary: N fixed, N skipped, tests pass/fail.
 
 {PYTHON_GUIDELINES}""",
-    model="opus",
-    tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-    disallowedTools=[
-        "Bash(git push*)",
-        "Bash(git commit*)",
-        "Bash(pip install*)",
-        "Bash(pip uninstall*)",
-    ],
-    permissionMode="dontAsk",
-)
+        model="opus",
+        tools=[
+            "Read",
+            "Glob",
+            "Grep",
+            "Edit",
+            "Write",
+            f"Bash({PYTHON_CMD} -m pytest*)",
+        ],
+        permissionMode="dontAsk",
+    )
 
 
 if __name__ == "__main__":
@@ -67,7 +92,7 @@ if __name__ == "__main__":
     async def _main() -> None:
         findings = Path(args.findings).read_text(encoding="utf-8")
         runner = AgentRunner()
-        result = await runner.run_agent(FIXER, f"Fix these findings:\n\n{findings}")
+        result = await runner.run_agent(make_fixer(), f"Fix these findings:\n\n{findings}")
         print(result)
 
     asyncio.run(_main())

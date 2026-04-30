@@ -11,33 +11,39 @@ Usage:
 
 from __future__ import annotations
 
-from claude_agent_sdk import ClaudeAgentOptions
+from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 
 from codemonkeys.agents import (
-    CODE_REVIEWER,
-    DEP_AUDITOR,
-    DOCS_REVIEWER,
-    FIXER,
-    IMPLEMENTER,
-    LINTER,
-    SECURITY_AUDITOR,
-    TEST_RUNNER,
-    TEST_WRITER,
-    TYPE_CHECKER,
+    make_changelog_writer,
+    make_coverage_analyzer,
+    make_dep_auditor,
+    make_fixer,
+    make_implementer,
+    make_linter,
+    make_quality_reviewer,
+    make_readme_reviewer,
+    make_security_auditor,
+    make_test_runner,
+    make_test_writer,
+    make_type_checker,
 )
 
-PYTHON_AGENTS = {
-    "linter": LINTER,
-    "type_checker": TYPE_CHECKER,
-    "test_runner": TEST_RUNNER,
-    "dep_auditor": DEP_AUDITOR,
-    "test_writer": TEST_WRITER,
-    "code_reviewer": CODE_REVIEWER,
-    "security_auditor": SECURITY_AUDITOR,
-    "docs_reviewer": DOCS_REVIEWER,
-    "fixer": FIXER,
-    "implementer": IMPLEMENTER,
-}
+
+def _python_agents() -> dict[str, AgentDefinition]:
+    return {
+        "linter": make_linter(),
+        "type_checker": make_type_checker(),
+        "test_runner": make_test_runner(),
+        "coverage_analyzer": make_coverage_analyzer(),
+        "dep_auditor": make_dep_auditor(),
+        "test_writer": make_test_writer(),
+        "quality_reviewer": make_quality_reviewer(),
+        "security_auditor": make_security_auditor(),
+        "readme_reviewer": make_readme_reviewer(),
+        "changelog_writer": make_changelog_writer(),
+        "fixer": make_fixer(),
+        "implementer": make_implementer(),
+    }
 
 PYTHON_PROMPT = """\
 You are an expert Python developer and technical lead. You have a team of
@@ -51,14 +57,16 @@ go through your agents.
 |-------|-------------|----------------|
 | linter | Runs ruff check --fix + ruff format | Lint and format code |
 | type_checker | Runs mypy, returns type errors | Check for type errors |
-| test_runner | Runs pytest, returns results | Run tests or check coverage |
+| test_runner | Runs pytest, returns results | Run tests |
+| coverage_analyzer | Runs pytest --cov, returns uncovered lines | Generate coverage report |
 | dep_auditor | Runs pip-audit, returns vulnerabilities | Audit dependencies |
 | test_writer | Writes tests for uncovered code | Improve test coverage |
-| code_reviewer | Semantic code review (logic errors, leaks, complexity) | Deep code review |
+| quality_reviewer | Clean code review (naming, design, docstrings, patterns) | Code quality review |
 | security_auditor | Security vulnerabilities (injection, secrets, auth) | Security audit |
-| docs_reviewer | Documentation drift against code | Docs review |
+| readme_reviewer | README accuracy, completeness, stale references | README/docs review |
+| changelog_writer | Writes CHANGELOG.md entries from git history | Write changelog for a release |
 | fixer | Fixes specific findings from review agents | Fix targeted issues |
-| implementer | Implements features from an approved plan | Build new features |
+| implementer | Implements changes from an approved plan | Features, updates, bug fixes |
 
 ## Core Principle
 
@@ -91,8 +99,8 @@ The pattern for EVERY task:
 ### Quality Check
 
 1. **Plan**: Tell the user you'll run: linter (auto-fix), type_checker,
-   test_runner, code_reviewer, security_auditor. Ask if they want to
-   skip or add anything.
+   test_runner, quality_reviewer, security_auditor. Ask if they want
+   to skip or add anything.
 2. **Confirm**: Wait for approval.
 3. **Execute**: Dispatch all agents.
 4. **Report**: Present ALL findings in a clear summary.
@@ -101,11 +109,11 @@ The pattern for EVERY task:
 
 ### Code Review
 
-1. **Plan**: Tell the user you'll dispatch code_reviewer and
-   security_auditor.
+1. **Plan**: Tell the user you'll dispatch all reviewers:
+   quality_reviewer, security_auditor, and readme_reviewer.
 2. **Confirm**: Wait for approval.
-3. **Execute**: Dispatch both agents.
-4. **Report**: Present findings clearly.
+3. **Execute**: Dispatch all three agents.
+4. **Report**: Present findings clearly, grouped by agent.
 5. **Fix**: Ask what the user wants to fix. Dispatch "fixer".
 
 ### Fix Specific Issues
@@ -122,9 +130,18 @@ The pattern for EVERY task:
 1. **Plan**: Tell the user you'll run coverage, then write tests for
    uncovered code.
 2. **Confirm**: Wait for approval.
-3. **Execute**: Dispatch "test_runner" with coverage flags, then
-   "test_writer" with uncovered files and lines.
+3. **Execute**: Dispatch "coverage_analyzer" to get uncovered lines,
+   then "test_writer" with the uncovered files and line ranges.
 4. **Verify**: Dispatch "test_runner" to verify new tests pass.
+
+### Write Changelog
+
+1. **Plan**: Tell the user you'll generate a changelog entry from the
+   git history since the last release.
+2. **Confirm**: Wait for approval. Ask if they have a specific version
+   number in mind.
+3. **Execute**: Dispatch "changelog_writer" with the version (if given).
+4. **Report**: Show what was written and ask if any changes are needed.
 
 ## Rules
 
@@ -149,7 +166,7 @@ def python_coordinator(cwd: str = ".") -> ClaudeAgentOptions:
         cwd=cwd,
         permission_mode="acceptEdits",
         allowed_tools=PYTHON_TOOLS,
-        agents=PYTHON_AGENTS,
+        agents=_python_agents(),
     )
 
 
