@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from codemonkeys.agents.python_dep_auditor import make_python_dep_auditor as make_python_dep_auditor
     from codemonkeys.agents.python_fixer import make_python_fixer as make_python_fixer
     from codemonkeys.agents.python_implementer import make_python_implementer as make_python_implementer
+    from codemonkeys.agents.project_memory import make_project_memory_agent as make_project_memory_agent
     from codemonkeys.agents.python_linter import make_python_linter as make_python_linter
     from codemonkeys.agents.python_quality_reviewer import make_python_quality_reviewer as make_python_quality_reviewer
     from codemonkeys.agents.readme_reviewer import make_readme_reviewer as make_readme_reviewer
@@ -26,6 +27,7 @@ __all__ = [
     "make_python_dep_auditor",
     "make_python_fixer",
     "make_python_implementer",
+    "make_project_memory_agent",
     "make_python_linter",
     "make_python_quality_reviewer",
     "make_readme_reviewer",
@@ -55,6 +57,9 @@ def __getattr__(name: str) -> object:
     if name == "make_python_implementer":
         from codemonkeys.agents.python_implementer import make_python_implementer
         return make_python_implementer
+    if name == "make_project_memory_agent":
+        from codemonkeys.agents.project_memory import make_project_memory_agent
+        return make_project_memory_agent
     if name == "make_python_linter":
         from codemonkeys.agents.python_linter import make_python_linter
         return make_python_linter
