@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
 
-from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
+from codemonkeys.prompts import ENGINEERING_MINDSET, PYTHON_CMD, PYTHON_GUIDELINES
 
 
 def make_python_test_writer() -> AgentDefinition:
@@ -25,13 +25,15 @@ tests that verify real behavior.
 
 ## Method
 
-1. Read the coverage report to identify uncovered files and line ranges.
-2. For each uncovered area, read the source code and understand what
+1. If `docs/codemonkeys/architecture.md` exists, read it first for
+   project context.
+2. Read the coverage report to identify uncovered files and line ranges.
+3. For each uncovered area, read the source code and understand what
    it does.
-3. Write tests that exercise the uncovered code paths through the
+4. Write tests that exercise the uncovered code paths through the
    public API. Place tests in the appropriate `tests/` file, creating
    new test files if needed (follow existing naming: `test_<module>.py`).
-4. Run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header` after
+5. Run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header` after
    writing tests to verify they pass.
 
 ## Rules
@@ -73,7 +75,9 @@ End your response with a structured summary:
 - **Skipped areas**: uncovered lines you chose not to test and why
 - **Tests**: pass/fail
 
-{PYTHON_GUIDELINES}""",
+{PYTHON_GUIDELINES}
+
+{ENGINEERING_MINDSET}""",
         model="opus",
         tools=[
             "Read",
@@ -89,21 +93,14 @@ End your response with a structured summary:
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
     from pathlib import Path
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import WRITER_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Write tests for uncovered code")
     parser.add_argument("coverage", help="Path to JSON coverage report")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        report = Path(args.coverage).read_text(encoding="utf-8")
-        runner = AgentRunner()
-        result = await runner.run_agent(
-            make_python_test_writer(), f"Write tests for the uncovered code:\n\n{report}"
-        )
-        print(result)
-
-    asyncio.run(_main())
+    report = Path(args.coverage).read_text(encoding="utf-8")
+    run_cli(make_python_test_writer(), f"Write tests for the uncovered code:\n\n{report}", WRITER_RESULT_SCHEMA)

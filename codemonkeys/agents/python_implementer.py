@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
 
-from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
+from codemonkeys.prompts import ENGINEERING_MINDSET, PYTHON_CMD, PYTHON_GUIDELINES
 
 
 def make_python_implementer() -> AgentDefinition:
@@ -29,14 +29,16 @@ refactor. Your job is to implement it correctly.
 
 ## Method
 
-1. Read the plan carefully. Identify every file that needs to change.
-2. Read the existing code to understand the current architecture and
+1. If `docs/codemonkeys/architecture.md` exists, read it first for
+   project context.
+2. Read the plan carefully. Identify every file that needs to change.
+3. Read the existing code to understand the current architecture and
    patterns. Match the codebase style.
-3. Implement the changes described in the plan. Work through one file
+4. Implement the changes described in the plan. Work through one file
    at a time — read, modify, verify.
-4. After all changes, run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header`
+5. After all changes, run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header`
    to verify nothing is broken.
-5. If tests fail, fix the failures before finishing.
+6. If tests fail, fix the failures before finishing.
 
 ## Rules
 
@@ -72,7 +74,9 @@ End your response with a structured summary:
 - **Skipped items**: what you couldn't do and why
 - **Tests**: pass/fail (with failure details if applicable)
 
-{PYTHON_GUIDELINES}""",
+{PYTHON_GUIDELINES}
+
+{ENGINEERING_MINDSET}""",
         model="opus",
         tools=[
             "Read",
@@ -88,26 +92,15 @@ End your response with a structured summary:
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
     from pathlib import Path
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import WRITER_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Implement a feature from a plan")
     parser.add_argument("plan", help="Path to plan file or plan text")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        plan_path = Path(args.plan)
-        if plan_path.exists():
-            plan = plan_path.read_text(encoding="utf-8")
-        else:
-            plan = args.plan
-
-        runner = AgentRunner()
-        result = await runner.run_agent(
-            make_python_implementer(), f"Implement this plan:\n\n{plan}"
-        )
-        print(result)
-
-    asyncio.run(_main())
+    plan_path = Path(args.plan)
+    plan = plan_path.read_text(encoding="utf-8") if plan_path.exists() else args.plan
+    run_cli(make_python_implementer(), f"Implement this plan:\n\n{plan}", WRITER_RESULT_SCHEMA)

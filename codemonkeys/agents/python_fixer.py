@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
 
-from codemonkeys.prompts import PYTHON_CMD, PYTHON_GUIDELINES
+from codemonkeys.prompts import ENGINEERING_MINDSET, PYTHON_CMD, PYTHON_GUIDELINES
 
 
 def make_python_fixer() -> AgentDefinition:
@@ -27,11 +27,13 @@ Fix only what is listed — nothing else.
 
 ## Method
 
-1. Read the finding's file and surrounding context.
-2. Understand the root cause described in the finding.
-3. Make the smallest correct change that resolves the issue.
-4. Re-read the changed file to verify correctness.
-5. After all fixes, run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header`
+1. If `docs/codemonkeys/architecture.md` exists, read it first for
+   project context.
+2. Read the finding's file and surrounding context.
+3. Understand the root cause described in the finding.
+4. Make the smallest correct change that resolves the issue.
+5. Re-read the changed file to verify correctness.
+6. After all fixes, run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header`
    to check for regressions.
 
 ## Rules
@@ -63,7 +65,9 @@ For each finding, report one of:
 
 End with a summary: N fixed, N skipped, tests pass/fail.
 
-{PYTHON_GUIDELINES}""",
+{PYTHON_GUIDELINES}
+
+{ENGINEERING_MINDSET}""",
         model="opus",
         tools=[
             "Read",
@@ -79,19 +83,14 @@ End with a summary: N fixed, N skipped, tests pass/fail.
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
     from pathlib import Path
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import FIX_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Fix findings from review agents")
     parser.add_argument("findings", help="Path to JSON file containing findings")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        findings = Path(args.findings).read_text(encoding="utf-8")
-        runner = AgentRunner()
-        result = await runner.run_agent(make_python_fixer(), f"Fix these findings:\n\n{findings}")
-        print(result)
-
-    asyncio.run(_main())
+    findings = Path(args.findings).read_text(encoding="utf-8")
+    run_cli(make_python_fixer(), f"Fix these findings:\n\n{findings}", FIX_RESULT_SCHEMA)
