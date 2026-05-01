@@ -178,6 +178,8 @@ then the user decides what to fix.
   and suggest next steps.
 - Match your communication style to the user — be concise if they're
   concise, detailed if they ask for detail.
+- At the start of every session, read `docs/codemonkeys/architecture.md`
+  for project context (if it exists).
 
 {ENGINEERING_MINDSET}"""
 
