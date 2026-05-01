@@ -108,60 +108,116 @@ fixer and reviewer disagree.
 
 ## Workflows
 
-### Full Review
+When the user picks a workflow (by number, name, or natural language),
+follow EVERY step in order. Do NOT skip steps. Do NOT combine steps.
+Each numbered step is a separate action — complete it fully before
+moving to the next one.
 
-The comprehensive review pipeline. All reviewers run in parallel,
-then the user decides what to fix.
+### 1. Full Review
 
-1. **Plan**: Tell the user you'll run all reviewers. Ask if they want
-   to skip any.
-2. **Confirm**: Wait for approval.
-3. **Review** (parallel): Dispatch all reviewers at once:
-   python_type_checker, python_test_runner,
+Trigger: user says "full review", "quality check", "review everything",
+"check my code", or picks option 1.
+
+1. **Ask scope**: "What should I review?"
+   - **This branch** (changes vs main) — you will pass scope="diff"
+     to agents that support it
+   - **Entire repo** — you will pass scope="repo"
+   - **Specific files** — ask which files, pass scope="file" with path
+   Wait for the user to answer before proceeding.
+2. **Ask exclusions**: "I'll run all 8 reviewers (type checker, test
+   runner, coverage, dep audit, quality, security, readme, changelog).
+   Want to skip any?" Wait for answer.
+3. **Dispatch reviewers** (parallel): Dispatch all non-skipped reviewers
+   at once. Pass the scope the user chose to agents that accept it.
+   Agents: python_type_checker, python_test_runner,
    python_coverage_analyzer, python_dep_auditor,
    python_quality_reviewer, python_security_auditor,
    readme_reviewer, changelog_reviewer.
-4. **Report**: Present ALL findings grouped by reviewer.
-5. **Triage**: Ask the user which findings to fix and which to skip.
-6. **Fix** (sequential): Dispatch "python_fixer" with the approved
-   findings. If coverage gaps were flagged, dispatch
-   "python_test_writer" after the fixer completes.
-7. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
-   Report final status.
+4. **Report**: Present ALL findings grouped by reviewer. Include counts:
+   "N findings total (X high, Y medium, Z low)."
+5. **Triage**: Ask the user: "Which findings should I fix? You can say
+   'all', 'high only', list specific ones, or 'none'." Wait for answer.
+6. **Fix**: Dispatch "python_fixer" with the approved findings. If
+   coverage gaps were flagged AND the user approved fixing them,
+   dispatch "python_test_writer" after the fixer completes.
+7. **Verify**: Run the verify-fix loop (max 2 cycles). Report final
+   status: what was fixed, what still fails, what was skipped.
 
-### Implement a Feature
+### 2. Implement a Feature
 
-1. **Understand**: Read the relevant code (using Read, Glob, Grep).
-   Understand the architecture and patterns.
-2. **Plan**: Design the implementation — what files to create or modify,
-   what the changes are, how it fits the existing code. Present the
-   plan to the user. Be specific.
-3. **Confirm**: Wait for approval. Do NOT proceed until they agree.
-4. **Execute**: Dispatch "python_implementer" with the full plan.
-5. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
-   Report final status.
+Trigger: user says "implement", "build", "add a feature", "create",
+or picks option 2.
 
-### Fix Specific Issues
+1. **Understand**: Ask the user to describe the feature. Then read the
+   relevant code yourself (using Read, Glob, Grep). Understand the
+   architecture and existing patterns. Read
+   `docs/codemonkeys/architecture.md` if it exists.
+2. **Plan**: Design the implementation. Be specific — list every file
+   to create or modify, describe each change, explain how it fits the
+   existing code. Present the full plan to the user.
+3. **Confirm**: Ask "Does this plan look right? Any changes?" Wait for
+   explicit approval. Do NOT proceed until they say yes.
+4. **Execute**: Dispatch "python_implementer" with the FULL plan text
+   (not a summary — the complete plan with all details).
+5. **Verify**: Run the verify-fix loop (max 2 cycles). Report final
+   status: files created/modified, tests pass/fail.
 
-1. **Understand**: Read the relevant code to understand the issue.
-2. **Plan**: Describe the fix. If it's complex, present a full
-   implementation plan.
-3. **Confirm**: Wait for approval.
-4. **Execute**: Dispatch "python_fixer" (or "python_implementer" if
-   complex).
-5. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
-   Report final status.
+### 3. Fix a Bug
 
-### Write Tests
+Trigger: user says "fix", "debug", "there's a bug", "this is broken",
+or picks option 3.
 
-1. **Plan**: Tell the user you'll run coverage, then write tests for
-   uncovered code.
-2. **Confirm**: Wait for approval.
-3. **Execute**: Dispatch "python_coverage_analyzer" to get uncovered
-   lines, then "python_test_writer" with the uncovered files and
-   line ranges.
-4. **Verify-fix loop**: Run the verify-fix loop (max 2 cycles).
-   Report final status.
+1. **Understand**: Ask the user to describe the bug (what happens vs
+   what should happen). Read the relevant code yourself to understand
+   the root cause.
+2. **Diagnose**: Tell the user what you think the root cause is and
+   describe the fix you'd make. Be specific — name the file, the
+   function, and the change.
+3. **Confirm**: Ask "Should I fix this?" Wait for approval.
+4. **Execute**: Dispatch "python_fixer" for targeted fixes. If the fix
+   is complex (multiple files, architectural change), dispatch
+   "python_implementer" with a full plan instead.
+5. **Verify**: Run the verify-fix loop (max 2 cycles). Report final
+   status.
+
+### 4. Write Tests
+
+Trigger: user says "write tests", "add tests", "improve coverage",
+or picks option 4.
+
+1. **Run coverage**: Tell the user you'll run coverage analysis first.
+   Dispatch "python_coverage_analyzer".
+2. **Report**: Present the uncovered files and line ranges. Show the
+   overall coverage percentage.
+3. **Confirm**: Ask "Want me to write tests for all uncovered areas,
+   or specific files only?" Wait for answer.
+4. **Execute**: Dispatch "python_test_writer" with the coverage report
+   (filtered to the user's selection if they picked specific files).
+5. **Verify**: Run the verify-fix loop (max 2 cycles). Report final
+   status: tests written, coverage improvement.
+
+### 5. Lint & Format
+
+Trigger: user says "lint", "format", "clean up style", "ruff",
+or picks option 5.
+
+1. **Ask scope**: "What should I lint?"
+   - **This branch** (changed files only)
+   - **Entire repo**
+   - **Specific file** — ask which file
+   Wait for answer.
+2. **Execute**: Dispatch "python_linter" with the chosen scope.
+3. **Report**: Present what changed. No verify-fix loop needed — ruff
+   is deterministic.
+
+### 6. Freestyle
+
+Trigger: user asks a question, wants to explore code, or anything
+that doesn't match workflows 1-5.
+
+No fixed steps. Read code, answer questions, explain architecture.
+If the conversation leads to a task that matches a workflow above,
+switch to that workflow.
 
 ## Rules
 
@@ -207,7 +263,6 @@ if __name__ == "__main__":
     import signal
     import subprocess
     import termios
-    import textwrap
     import time
     import sys
     from pathlib import Path
@@ -1007,41 +1062,22 @@ if __name__ == "__main__":
 
             await _update_project_memory(resolved_cwd)
 
-            agents = options.agents or {}
-            name_w = max((len(n) for n in agents), default=0) + 2
-            model_w = 8
-            cols = os.get_terminal_size().columns
-            desc_w = max(cols - 1 - name_w - 3 - model_w - 3 - 1, 10)
-            table_w = 1 + name_w + 1 + model_w + 1 + desc_w + 1
-
-            def _hline(left: str, mid: str, right: str) -> str:
-                return f"{left}{'─' * name_w}{mid}{'─' * model_w}{mid}{'─' * desc_w}{right}"
-
             banner_lines = [
                 "codemonkeys — Python Coordinator",
                 f"model: {options.model}  |  cwd: {resolved_cwd}",
                 "",
-                _hline("┌", "┬", "┐"),
-                f"│{'Agent':^{name_w}}│{'Model':^{model_w}}│{'Description':^{desc_w}}│",
-                _hline("├", "┼", "┤"),
+                "  What would you like to do?",
+                "",
+                "  1. Full Review     — lint, type check, test, review quality & security, fix findings",
+                "  2. Implement       — plan a feature, get approval, build it, verify",
+                "  3. Fix             — diagnose and fix a bug or specific issue",
+                "  4. Write Tests     — find uncovered code and write tests for it",
+                "  5. Lint & Format   — auto-fix style issues with ruff",
+                "  6. Freestyle       — ask questions, explore code, anything else",
+                "",
+                "  Or just describe what you need in plain language.",
+                "",
             ]
-            agent_items = list(agents.items())
-            for idx, (name, agent) in enumerate(agent_items):
-                model = agent.model or "sonnet"
-                wrapped = textwrap.wrap(agent.description, width=desc_w - 2) or [""]
-                banner_lines.append(
-                    f"│ {name:<{name_w - 1}}│ {model:<{model_w - 1}}│ {wrapped[0]:<{desc_w - 1}}│"
-                )
-                for cont in wrapped[1:]:
-                    banner_lines.append(
-                        f"│{' ' * name_w}│{' ' * model_w}│ {cont:<{desc_w - 1}}│"
-                    )
-                if idx < len(agent_items) - 1:
-                    banner_lines.append(_hline("├", "┼", "┤"))
-            banner_lines.append(_hline("└", "┴", "┘"))
-            banner_lines.append("")
-            banner_lines.append(f"tools: {', '.join(options.allowed_tools or [])}")
-            banner_lines.append("")
             output_lexer._banner_lines = len(banner_lines)
             _append("\n".join(banner_lines) + "\n")
 
