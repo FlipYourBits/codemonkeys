@@ -50,13 +50,7 @@ If pip-audit exits with no vulnerabilities, say "No known vulnerabilities found.
 
 
 if __name__ == "__main__":
-    import asyncio
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
-    from codemonkeys.runner import AgentRunner
-
-    async def _main() -> None:
-        runner = AgentRunner()
-        result = await runner.run_agent(make_python_dep_auditor(), "Audit dependencies for vulnerabilities.")
-        print(result)
-
-    asyncio.run(_main())
+    run_cli(make_python_dep_auditor(), "Audit dependencies for vulnerabilities.", TOOL_RESULT_SCHEMA)

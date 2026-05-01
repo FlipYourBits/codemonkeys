@@ -124,16 +124,7 @@ for copy-paste into the file).""",
 
 
 if __name__ == "__main__":
-    import asyncio
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
-    from codemonkeys.runner import AgentRunner
-
-    async def _main() -> None:
-        agent = make_changelog_reviewer()
-        runner = AgentRunner()
-        result = await runner.run_agent(
-            agent, "Review CHANGELOG.md for missing or stale entries.",
-        )
-        print(result)
-
-    asyncio.run(_main())
+    run_cli(make_changelog_reviewer(), "Review CHANGELOG.md for missing or stale entries.", REVIEW_RESULT_SCHEMA)

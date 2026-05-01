@@ -157,19 +157,12 @@ Report each finding with: file, line (if applicable), severity
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="README review — accuracy, completeness, quality")
     parser.add_argument("--path", help="Path to README or docs directory")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        agent = make_readme_reviewer(path=args.path)
-        runner = AgentRunner()
-        prompt = "Review the README and project documentation for accuracy and completeness."
-        result = await runner.run_agent(agent, prompt)
-        print(result)
-
-    asyncio.run(_main())
+    run_cli(make_readme_reviewer(path=args.path), "Review the README and project documentation for accuracy and completeness.", REVIEW_RESULT_SCHEMA)

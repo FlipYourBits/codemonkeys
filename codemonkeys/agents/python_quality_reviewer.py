@@ -12,7 +12,7 @@ from typing import Literal
 
 from claude_agent_sdk import AgentDefinition
 
-from codemonkeys.prompts import PYTHON_SOURCE_FILTER
+from codemonkeys.prompts import ENGINEERING_MINDSET, PYTHON_SOURCE_FILTER
 
 
 def make_python_quality_reviewer(
@@ -55,8 +55,8 @@ def make_python_quality_reviewer(
     return AgentDefinition(
         description=(
             "Use this agent to review Python code for clean code violations: "
-            "naming, function design, class design, docstrings, error handling, "
-            "Pythonic patterns, dead code, and design pattern issues."
+            "naming, function design, class design, unnecessary complexity, "
+            "docstrings, error handling, Pythonic patterns, and dead code."
         ),
         prompt=f"""\
 You review Python code for clean code violations and maintainability
@@ -166,6 +166,39 @@ you're confident a real problem exists — not style preferences.
 - Long parameter lists passed through multiple call layers
   unchanged — suggest a context/config object
 
+### `complexity`
+
+The bar: a junior developer with six months of experience should be
+able to read any piece of code and understand what it does within
+30 seconds. If they can't, the code is too complex regardless of
+whether it "works."
+
+- Abstraction layers that add indirection without adding value —
+  a wrapper class that just delegates to another class, a factory
+  that always returns the same type, a base class with one subclass
+- Premature generalization — code designed for flexibility that
+  isn't used yet (config options nobody sets, plugin systems with
+  one plugin, generic type parameters used for only one type)
+- Clever-over-clear patterns — metaclasses, descriptors, decorator
+  stacks, or __getattr__ magic where a plain class or function
+  would work
+- Over-engineered solutions — design patterns (Strategy, Visitor,
+  Observer) applied where a simple if/else or function call suffices
+- Unnecessary indirection — data that passes through 3+ layers
+  of functions without being transformed, or a call chain where
+  each function just calls the next
+- Overly dense expressions — list comprehensions with multiple
+  conditions and nested loops, chained ternaries, one-liners that
+  pack 3 operations into a single statement
+- Implicit behavior — code that relies on side effects, module-level
+  state, import-time execution, or __init_subclass__ hooks that a
+  reader wouldn't expect without reading the full class hierarchy
+- Configuration complexity — more knobs and options than the
+  system has distinct use cases for
+
+For each complexity finding, include a **simplified alternative**
+showing how the code could be rewritten more simply.
+
 ### `pythonic_patterns`
 
 - File/connection/resource opened without a context manager
@@ -222,7 +255,9 @@ you're confident a real problem exists — not style preferences.
 - Performance issues with no measurable impact{scope_exclusion}
 
 Report each finding with: file, line, severity (HIGH/MEDIUM/LOW),
-category, description, recommendation.""",
+category, description, recommendation.
+
+{ENGINEERING_MINDSET}""",
         model="opus",
         tools=tools,
         permissionMode="dontAsk",
@@ -231,20 +266,14 @@ category, description, recommendation.""",
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Quality review — clean code, naming, design, docstrings")
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="diff")
     parser.add_argument("--path", help="Narrow scope to this file or folder")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        agent = make_python_quality_reviewer(scope=args.scope, path=args.path)
-        runner = AgentRunner()
-        prompt = f"Review Python source files under {args.path}." if args.path else "Review the code."
-        result = await runner.run_agent(agent, prompt)
-        print(result)
-
-    asyncio.run(_main())
+    prompt = f"Review Python source files under {args.path}." if args.path else "Review the code."
+    run_cli(make_python_quality_reviewer(scope=args.scope, path=args.path), prompt, REVIEW_RESULT_SCHEMA)

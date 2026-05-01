@@ -84,21 +84,13 @@ If neither command made changes, say "No lint or format changes needed."
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Lint and format Python code with ruff")
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="repo")
     parser.add_argument("--path", help="File or folder to lint")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        runner = AgentRunner()
-        result = await runner.run_agent(
-            make_python_linter(scope=args.scope, path=args.path),
-            "Lint and format the code.",
-        )
-        print(result)
-
-    asyncio.run(_main())
+    run_cli(make_python_linter(scope=args.scope, path=args.path), "Lint and format the code.", TOOL_RESULT_SCHEMA)

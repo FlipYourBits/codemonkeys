@@ -103,21 +103,13 @@ If all files have 100% coverage, say "Full coverage — no uncovered lines."
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Coverage analyzer — run pytest with coverage")
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="repo")
     parser.add_argument("--path", help="File or folder to analyze")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        runner = AgentRunner()
-        result = await runner.run_agent(
-            make_python_coverage_analyzer(scope=args.scope, path=args.path),
-            "Generate a test coverage report.",
-        )
-        print(result)
-
-    asyncio.run(_main())
+    run_cli(make_python_coverage_analyzer(scope=args.scope, path=args.path), "Generate a test coverage report.", TOOL_RESULT_SCHEMA)

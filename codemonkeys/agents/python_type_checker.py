@@ -82,21 +82,13 @@ If mypy exits with no errors, say "No type errors."
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Type check Python code with mypy")
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="repo")
     parser.add_argument("--path", help="File or folder to check")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        runner = AgentRunner()
-        result = await runner.run_agent(
-            make_python_type_checker(scope=args.scope, path=args.path),
-            "Run mypy type checking.",
-        )
-        print(result)
-
-    asyncio.run(_main())
+    run_cli(make_python_type_checker(scope=args.scope, path=args.path), "Run mypy type checking.", TOOL_RESULT_SCHEMA)

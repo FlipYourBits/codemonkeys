@@ -85,21 +85,13 @@ If the prompt specifies a different pytest command, run that instead.
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Run pytest and return results")
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="repo")
     parser.add_argument("--path", help="Test file or folder to run")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        runner = AgentRunner()
-        result = await runner.run_agent(
-            make_python_test_runner(scope=args.scope, path=args.path),
-            "Run the test suite.",
-        )
-        print(result)
-
-    asyncio.run(_main())
+    run_cli(make_python_test_runner(scope=args.scope, path=args.path), "Run the test suite.", TOOL_RESULT_SCHEMA)

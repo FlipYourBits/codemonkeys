@@ -8,25 +8,8 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
 
 from claude_agent_sdk import AgentDefinition
-from pydantic import BaseModel, Field
-
-
-class DefinitionFinding(BaseModel):
-    file: str = Field(description="Path to the reviewed file")
-    area: Literal["description", "prompt", "permissions", "model"] = Field(
-        description="Which part of the AgentDefinition has the issue",
-    )
-    severity: Literal["HIGH", "MEDIUM", "LOW"]
-    description: str = Field(description="What is wrong or missing")
-    recommendation: str = Field(description="Specific change to make")
-
-
-class DefinitionReviewResult(BaseModel):
-    findings: list[DefinitionFinding] = Field(default_factory=list)
-    summary: str = Field(description="Brief overall assessment")
 
 
 def make_definition_reviewer(target: str | None = None) -> AgentDefinition:
@@ -176,138 +159,12 @@ an empty findings list.""",
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
-    import json
 
-    from rich.console import Console
-    from rich.table import Table
-    from rich.text import Text
-
-    from codemonkeys.runner import AgentRunner
-
-    def _find_definition_files(target: Path) -> list[Path]:
-        if target.is_file():
-            return [target]
-        return sorted(
-            p for p in target.rglob("*.py")
-            if "AgentDefinition" in p.read_text(encoding="utf-8")
-        )
-
-    def _print_result(result: DefinitionReviewResult, console: Console) -> None:
-        console.print(f"\n[bold]{result.summary}[/bold]")
-        if not result.findings:
-            console.print("  [green]No findings.[/green]")
-            return
-
-        severity_styles = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "dim"}
-        table = Table(show_header=True, expand=True, padding=(0, 1), show_lines=True)
-        table.add_column("#", justify="right", style="dim", width=3)
-        table.add_column("Sev", width=8)
-        table.add_column("Area", style="cyan", width=14)
-        table.add_column("Description")
-        table.add_column("Recommendation", style="dim")
-
-        for i, finding in enumerate(result.findings, 1):
-            style = severity_styles.get(finding.severity, "")
-            table.add_row(
-                str(i),
-                Text(finding.severity, style=style),
-                finding.area,
-                finding.description,
-                finding.recommendation,
-            )
-        console.print(table)
-
-    def _parse_result(msg: object) -> DefinitionReviewResult | None:
-        structured = getattr(msg, "structured_output", None)
-        if not structured:
-            return None
-        if isinstance(structured, str):
-            structured = json.loads(structured)
-        return DefinitionReviewResult.model_validate(structured)
-
-    from codemonkeys.agents.python_fixer import make_python_fixer
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Review AgentDefinitions for correctness")
     parser.add_argument("path", nargs="?", default=".", help="Agent .py file or folder (default: cwd)")
-    parser.add_argument("--no-fix", action="store_true", help="Skip the fix prompt")
-    parser.add_argument("-o", "--output", help="Write structured results to a JSON file")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        console = Console(stderr=True)
-        files = _find_definition_files(Path(args.path))
-        if not files:
-            console.print(f"[yellow]No AgentDefinition files found under {args.path}[/yellow]")
-            return
-
-        output_format = {"type": "json_schema", "schema": DefinitionReviewResult.model_json_schema()}
-        runner = AgentRunner()
-        all_findings: list[dict] = []
-        all_results: list[dict] = []
-
-        for i, file_path in enumerate(files):
-            if i > 0:
-                console.print(f"\n{'─' * 60}\n")
-            console.print(f"[bold cyan]Reviewing {file_path}...[/bold cyan]")
-
-            await runner.run_agent(
-                make_definition_reviewer(),
-                f"Review the AgentDefinition in this file: {file_path}",
-                output_format=output_format,
-            )
-
-            console.print("[dim]Preparing summary...[/dim]")
-            result = _parse_result(runner.last_result) if runner.last_result else None
-            if result:
-                _print_result(result, console)
-                all_results.append(result.model_dump())
-                for finding in result.findings:
-                    all_findings.append(finding.model_dump())
-            else:
-                text = getattr(runner.last_result, "result", None) or "No output."
-                console.print(text)
-
-        if args.output and all_results:
-            Path(args.output).write_text(json.dumps(all_results, indent=2), encoding="utf-8")
-            console.print(f"\nResults written to {args.output}")
-
-        if args.no_fix or not all_findings:
-            if not all_findings:
-                console.print("\n[green]No fixes needed.[/green]")
-            return
-
-        numbered = {i: f for i, f in enumerate(all_findings, 1)}
-        console.print(f"\n{'─' * 60}")
-        console.print('What would you like to fix? (e.g. "all", "1 3 4", "1,2", "no" to skip)')
-        instructions = input('> ').strip()
-        if not instructions or instructions.lower() in ("no", "none", "exit", "quit", "q"):
-            return
-
-        if "all" in instructions.lower():
-            to_fix = list(numbered.values())
-        else:
-            import re
-            requested = [int(n) for n in re.findall(r"\d+", instructions)]
-            to_fix = [numbered[n] for n in requested if n in numbered]
-            invalid = [n for n in requested if n not in numbered]
-            if invalid:
-                console.print(f"[yellow]Skipping invalid numbers: {invalid}[/yellow]")
-            if not to_fix:
-                console.print("[yellow]No valid findings selected.[/yellow]")
-                return
-
-        findings_json = json.dumps(to_fix, indent=2)
-        console.print(f"[bold cyan]Fixing {len(to_fix)} finding{'s' if len(to_fix) != 1 else ''}...[/bold cyan]")
-        fix_result = await runner.run_agent(
-            make_python_fixer(),
-            f"Fix these AgentDefinition issues:\n\n{findings_json}\n\n"
-            f"After fixing, summarize what you changed: which findings you "
-            f"fixed, what files you modified, and any findings you skipped "
-            f"(with the reason).",
-        )
-        console.print(f"\n{'─' * 60}")
-        console.print("[bold]Fix summary:[/bold]")
-        console.print(fix_result or "No output from fixer.")
-
-    asyncio.run(_main())
+    run_cli(make_definition_reviewer(target=args.path), f"Review the AgentDefinition(s) at: {args.path}", REVIEW_RESULT_SCHEMA)

@@ -142,20 +142,14 @@ category, description, recommendation.""",
 
 if __name__ == "__main__":
     import argparse
-    import asyncio
 
-    from codemonkeys.runner import AgentRunner
+    from codemonkeys.runner import run_cli
+    from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
     parser = argparse.ArgumentParser(description="Security audit — injection, secrets, auth bypass")
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="diff")
     parser.add_argument("--path", help="Narrow scope to this file or folder")
     args = parser.parse_args()
 
-    async def _main() -> None:
-        agent = make_python_security_auditor(scope=args.scope, path=args.path)
-        runner = AgentRunner()
-        prompt = f"Audit Python source files under {args.path}." if args.path else "Audit the code for security vulnerabilities."
-        result = await runner.run_agent(agent, prompt)
-        print(result)
-
-    asyncio.run(_main())
+    prompt = f"Audit Python source files under {args.path}." if args.path else "Audit the code for security vulnerabilities."
+    run_cli(make_python_security_auditor(scope=args.scope, path=args.path), prompt, REVIEW_RESULT_SCHEMA)

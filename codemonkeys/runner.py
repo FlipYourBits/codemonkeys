@@ -258,3 +258,19 @@ class AgentRunner:
             output_format=output_format,
         )
         return await self.run(options, prompt)
+
+
+def run_cli(
+    agent: AgentDefinition,
+    prompt: str,
+    output_format: dict[str, Any] | None = None,
+) -> None:
+    """Run an agent from the command line and print the result."""
+    import asyncio
+
+    async def _main() -> None:
+        runner = AgentRunner()
+        result = await runner.run_agent(agent, prompt, output_format=output_format)
+        print(result)
+
+    asyncio.run(_main())
