@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 
+from codemonkeys.prompts import ENGINEERING_MINDSET
+
 from codemonkeys.agents import (
     make_changelog_reviewer,
     make_python_coverage_analyzer,
@@ -45,7 +47,7 @@ def _python_agents() -> dict[str, AgentDefinition]:
         "python_implementer": make_python_implementer(),
     }
 
-PYTHON_PROMPT = """\
+PYTHON_PROMPT = f"""\
 You are an expert Python developer and technical lead. You have a team of
 specialized agents you can dispatch for specific tasks. You read and
 understand code yourself, but you NEVER edit files directly — all changes
@@ -175,7 +177,9 @@ then the user decides what to fix.
 - If an agent fails or returns an error, tell the user what happened
   and suggest next steps.
 - Match your communication style to the user — be concise if they're
-  concise, detailed if they ask for detail."""
+  concise, detailed if they ask for detail.
+
+{ENGINEERING_MINDSET}"""
 
 PYTHON_TOOLS = ["Read", "Glob", "Grep", "Agent"]
 
@@ -199,11 +203,17 @@ if __name__ == "__main__":
     import os
     import re
     import signal
+    import subprocess
     import termios
     import textwrap
     import time
     import sys
     from pathlib import Path
+
+    from rich.console import Console
+
+    from codemonkeys.agents import make_project_memory_agent
+    from codemonkeys.runner import AgentRunner
 
     from claude_agent_sdk import (
         AssistantMessage,
@@ -527,6 +537,32 @@ if __name__ == "__main__":
             return get_line
 
     _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    async def _update_project_memory(cwd: Path) -> None:
+        """Check project memory freshness and update if stale."""
+        hash_file = cwd / "docs" / "codemonkeys" / ".memory-hash"
+        current_head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=str(cwd),
+        ).decode().strip()
+
+        if hash_file.exists():
+            stored_hash = hash_file.read_text().strip()
+            if stored_hash == current_head:
+                return
+            diff = subprocess.check_output(
+                ["git", "diff", f"{stored_hash}..HEAD"], cwd=str(cwd),
+            ).decode()
+            agent = make_project_memory_agent(mode="incremental", diff_text=diff)
+            prompt = "Update the project memory document based on the diff."
+        else:
+            agent = make_project_memory_agent(mode="full")
+            prompt = "Build the project memory document from scratch."
+
+        console = Console(stderr=True)
+        console.print("[bold]Updating project memory...[/bold]")
+        runner = AgentRunner(cwd=str(cwd))
+        await runner.run_agent(agent, prompt)
+        console.print("[bold green]Project memory updated.[/bold green]")
 
     async def _main() -> None:
         session_tokens = 0
@@ -966,6 +1002,8 @@ if __name__ == "__main__":
 
             from codemonkeys.sandbox import restrict
             restrict(resolved_cwd)
+
+            await _update_project_memory(resolved_cwd)
 
             agents = options.agents or {}
             name_w = max((len(n) for n in agents), default=0) + 2
