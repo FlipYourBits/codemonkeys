@@ -609,10 +609,14 @@ if __name__ == "__main__":
 
     async def _update_project_memory(cwd: Path) -> None:
         """Check project memory freshness and update if stale."""
+        try:
+            current_head = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=str(cwd),
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
+        except subprocess.CalledProcessError:
+            return
         hash_file = cwd / "docs" / "codemonkeys" / ".memory-hash"
-        current_head = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=str(cwd),
-        ).decode().strip()
 
         if hash_file.exists():
             stored_hash = hash_file.read_text().strip()
