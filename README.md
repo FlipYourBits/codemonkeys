@@ -15,6 +15,12 @@ Claude Code is a general-purpose coding assistant. codemonkeys builds specialize
 - **Structured output.** Review agents return typed findings (file, line, severity, category) that downstream agents can act on programmatically.
 - **Unattended agents.** Subagents run `dontAsk` with constrained tools. The coordinator handles all user interaction — subagents just execute.
 
+## Prerequisites
+
+- Python 3.10 or newer
+- `ANTHROPIC_API_KEY` environment variable set
+- Optional: Linux kernel 5.13+ for full Landlock sandbox support
+
 ## Install
 
 ```bash
@@ -22,6 +28,8 @@ git clone https://github.com/FlipYourBits/codemonkeys.git
 cd codemonkeys
 pip install -e ".[dev]"
 ```
+
+The `[dev]` extras are required to run the built-in Python toolchain agents (linter, type checker, test runner, dependency auditor). Installing without them will cause runtime failures when those agents try to invoke `ruff`, `pytest`, `mypy`, or `pip-audit`.
 
 Requires Python 3.10+ and a Claude API key (`ANTHROPIC_API_KEY`).
 
@@ -36,6 +44,9 @@ Requires Python 3.10+ and a Claude API key (`ANTHROPIC_API_KEY`).
 
 # With a specific working directory
 .venv/bin/python -m codemonkeys.coordinators.python --cwd /path/to/project
+
+# Auto-generate or update docs/codemonkeys/architecture.md before each session
+.venv/bin/python -m codemonkeys.coordinators.python --use-project-memory
 ```
 
 The coordinator is an interactive session — you chat with it, it dispatches agents.
@@ -47,6 +58,11 @@ codemonkeys/
   agents/           # Individual agent definitions (AgentDefinition instances)
   coordinators/     # Interactive sessions that dispatch agents
   prompts/          # Shared prompt fragments used across agents
+  runner.py         # AgentRunner — runs individual agents with a Rich live display
+  shell.py          # AppShell — reusable full-screen TUI for coordinators
+  ui.py             # AgentState dataclass and shared display helpers
+  sandbox.py        # OS-level filesystem write restriction (restrict())
+  schemas.py        # JSON output schema constants for structured agent output
 ```
 
 ### Agents
@@ -76,6 +92,13 @@ Each file in `agents/` exports a factory function that returns an `AgentDefiniti
 | `make_python_test_writer` | opus | Writes tests for uncovered code from coverage reports |
 | `make_python_implementer` | opus | Implements features from an approved plan |
 
+#### Memory
+
+| Factory | Model | What it does |
+|---------|-------|-------------|
+| `make_project_memory_agent` | sonnet | Builds or updates `docs/codemonkeys/architecture.md` — full scan in `mode="full"`, incremental diff-based update in `mode="incremental"` |
+| `make_project_memory_updater` | sonnet | Self-contained variant: checks `.memory-hash` against `HEAD` and rebuilds or updates only if stale. Safe to dispatch on startup |
+
 ### Coordinators
 
 A coordinator is an interactive Claude session with constrained subagents. You chat with the coordinator; it reads code, plans, dispatches agents, and reports back.
@@ -93,13 +116,14 @@ Built-in workflows:
 Coordinators are composable — extend a base coordinator with additional expertise:
 
 ```python
+from claude_agent_sdk import ClaudeAgentOptions
 from codemonkeys.coordinators.python import python_coordinator, PYTHON_PROMPT
-from codemonkeys.agents import make_python_linter, make_python_test_runner
+from codemonkeys.agents import make_python_quality_reviewer
 
 def fastapi_coordinator(cwd="."):
     base = python_coordinator(cwd)
     agents = dict(base.agents or {})
-    agents["api_tester"] = make_api_tester()
+    agents["fastapi_quality_reviewer"] = make_python_quality_reviewer(scope="repo")
     return ClaudeAgentOptions(
         system_prompt=PYTHON_PROMPT + FASTAPI_ADDITIONS,
         model="sonnet",
@@ -146,6 +170,8 @@ export ANTHROPIC_DEFAULT_SONNET_MODEL='us.anthropic.claude-sonnet-4-6'
 export ANTHROPIC_DEFAULT_HAIKU_MODEL='us.anthropic.claude-haiku-4-5'
 ```
 
+> **Note:** these are Claude CLI / Anthropic SDK environment variables. Verify the variable names against your installed Claude CLI version — naming has changed across releases.
+
 ## Writing New Agents
 
 Create a file in `codemonkeys/agents/` with a constant or factory:
@@ -185,7 +211,7 @@ restrict("/path/to/project")
 | macOS | sandbox-exec / Seatbelt | none |
 | Windows | Low Integrity Token | none |
 
-The sandbox is integrated into `AgentRunner` and the coordinator — you don't need to call it manually unless building a custom entry point.
+`AgentRunner` and the built-in Python coordinator call `restrict()` automatically. If you build a custom coordinator that uses `ClaudeSDKClient` directly (or any other entry point that doesn't go through `AgentRunner`), you must call `codemonkeys.sandbox.restrict(cwd)` yourself before any agent dispatch.
 
 ## Tests
 
@@ -196,6 +222,18 @@ The sandbox is integrated into `AgentRunner` and the coordinator — you don't n
 ## Docs
 
 - [AgentDefinition Parameters](docs/agent-definition.md) — full reference for all agent configuration options
+- [Changelog](CHANGELOG.md)
+
+## Contributing
+
+```bash
+git clone https://github.com/FlipYourBits/codemonkeys.git
+cd codemonkeys
+pip install -e ".[dev]"
+.venv/bin/python -m pytest tests/ -x -q --no-header
+```
+
+Open a GitHub issue for bug reports and feature requests.
 
 ## License
 

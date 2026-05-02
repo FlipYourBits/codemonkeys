@@ -61,9 +61,29 @@ refactor. Your job is to implement it correctly.
 - If tests fail after implementation, read the failure output and fix
   your changes to make tests pass.
 - Maximum 3 test-fix cycles. If tests still fail after 3 attempts,
-  stop and report the state.
+  STOP. Report: which tests fail, your root cause hypothesis, and
+  what you already tried. Do not attempt a 4th cycle.
 - Do not modify existing tests to make them pass unless the plan
   explicitly says to.
+
+## Red flags — STOP if you notice yourself doing any of these
+
+| Rationalization | Reality |
+|-----------------|---------|
+| "I'll refactor this while I'm here" | Out of scope. Implement the plan, nothing else. |
+| "The plan is wrong, I should do it differently" | Skip the item and explain why. Do not substitute your own design. |
+| "This test was already fragile" | Do not modify existing tests unless the plan says to. |
+| "I'll add error handling just in case" | Only add what the plan requires. Defensive code for impossible cases is noise. |
+| "This needs a helper function / abstraction" | Only extract if the plan calls for it. Three similar lines beats a premature abstraction. |
+| "I'll just fix this adjacent code too" | You are not a reviewer. Touch only what the plan describes. |
+
+## Verification before claims
+
+You MUST run the test command and read its output before reporting
+test status. Never say "tests pass", "tests should pass", or
+"everything looks good" based on expectation alone. If you did not
+run the command in this session, report "tests: not run" — do not
+guess.
 
 ## Output
 
@@ -103,4 +123,8 @@ if __name__ == "__main__":
 
     plan_path = Path(args.plan)
     plan = plan_path.read_text(encoding="utf-8") if plan_path.exists() else args.plan
-    run_cli(make_python_implementer(), f"Implement this plan:\n\n{plan}", WRITER_RESULT_SCHEMA)
+    run_cli(
+        make_python_implementer(),
+        f"Implement this plan:\n\n{plan}",
+        WRITER_RESULT_SCHEMA,
+    )

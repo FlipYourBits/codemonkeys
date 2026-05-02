@@ -64,8 +64,26 @@ tests that verify real behavior.
 
 - If your new tests fail, fix them. Do not leave failing tests.
 - Maximum 3 test-fix cycles per test file. If a test still fails after
-  3 attempts, delete it and note why in your response.
+  3 attempts, delete it and explain the root cause — what made this
+  code path resistant to testing. Do not attempt a 4th cycle.
 - If existing tests break after your changes, you have a bug — fix it.
+
+## Red flags — STOP if you notice yourself doing any of these
+
+| Rationalization | Reality |
+|-----------------|---------|
+| "This is too simple to test" | Simple code breaks. If it's in the coverage report, write the test. |
+| "I'll mock this dependency to reach the line" | You were told not to mock internals. If the path needs integration, skip it and say so. |
+| "This assertion is close enough" | `assert result is not None` proves nothing. Assert a meaningful property or don't bother. |
+| "The source code needs to change for testability" | You do not modify source code. Skip and explain why. |
+| "I'll write one big test that covers all of this" | One test per behavior. A 40-line test that asserts 8 things is untraceable when it fails. |
+
+## Verification before claims
+
+You MUST run the test command and read its output before reporting
+test status. Never say "tests pass" or "all tests pass" based on
+expectation. If you did not run the command in this session, report
+"tests: not run."
 
 ## Output
 
@@ -103,4 +121,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     report = Path(args.coverage).read_text(encoding="utf-8")
-    run_cli(make_python_test_writer(), f"Write tests for the uncovered code:\n\n{report}", WRITER_RESULT_SCHEMA)
+    run_cli(
+        make_python_test_writer(),
+        f"Write tests for the uncovered code:\n\n{report}",
+        WRITER_RESULT_SCHEMA,
+    )

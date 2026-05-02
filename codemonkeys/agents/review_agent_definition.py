@@ -19,7 +19,11 @@ def make_definition_reviewer(target: str | None = None) -> AgentDefinition:
             "2. Identify the AgentDefinition instance and extract each field."
         )
     else:
-        location = f"under `{target}`" if target and Path(target).is_dir() else "in the current working directory"
+        location = (
+            f"under `{target}`"
+            if target and Path(target).is_dir()
+            else "in the current working directory"
+        )
         first_step = (
             f"1. Recursively find all `.py` files {location} that contain "
             "AgentDefinition instances.\n"
@@ -163,8 +167,16 @@ if __name__ == "__main__":
     from codemonkeys.runner import run_cli
     from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
-    parser = argparse.ArgumentParser(description="Review AgentDefinitions for correctness")
-    parser.add_argument("path", nargs="?", default=".", help="Agent .py file or folder (default: cwd)")
+    parser = argparse.ArgumentParser(
+        description="Review AgentDefinitions for correctness"
+    )
+    parser.add_argument(
+        "path", nargs="?", default=".", help="Agent .py file or folder (default: cwd)"
+    )
     args = parser.parse_args()
 
-    run_cli(make_definition_reviewer(target=args.path), f"Review the AgentDefinition(s) at: {args.path}", REVIEW_RESULT_SCHEMA)
+    run_cli(
+        make_definition_reviewer(target=args.path),
+        f"Review the AgentDefinition(s) at: {args.path}",
+        REVIEW_RESULT_SCHEMA,
+    )

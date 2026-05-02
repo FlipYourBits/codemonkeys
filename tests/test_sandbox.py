@@ -22,7 +22,6 @@ def _run_sandboxed(code: str) -> subprocess.CompletedProcess[str]:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Landlock is Linux-only")
 class TestLandlockSandbox:
-
     def test_blocks_writes_outside_project(self) -> None:
         r = _run_sandboxed("""\
             from pathlib import Path

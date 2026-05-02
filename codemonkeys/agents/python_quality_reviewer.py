@@ -1,9 +1,9 @@
 """Quality review agent — clean code, naming, design patterns, docstrings.
 
 Usage:
-    python -m codemonkeys.agents.python_quality_review
-    python -m codemonkeys.agents.python_quality_review --scope file --path src/main.py
-    python -m codemonkeys.agents.python_quality_review --scope repo
+    python -m codemonkeys.agents.python_quality_reviewer
+    python -m codemonkeys.agents.python_quality_reviewer --scope file --path src/main.py
+    python -m codemonkeys.agents.python_quality_reviewer --scope repo
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from typing import Literal
 
 from claude_agent_sdk import AgentDefinition
 
+from codemonkeys.agents._scope import build_read_scope_context
 from codemonkeys.prompts import ENGINEERING_MINDSET, PYTHON_SOURCE_FILTER
 
 
@@ -19,38 +20,13 @@ def make_python_quality_reviewer(
     scope: Literal["file", "diff", "repo"] = "diff",
     path: str | None = None,
 ) -> AgentDefinition:
+    """Create a quality review agent for clean code, naming, and design patterns."""
     tools: list[str] = ["Read", "Glob", "Grep"]
 
-    if scope == "file":
-        if not path:
-            msg = "path is required when scope is 'file'"
-            raise ValueError(msg)
-        method_intro = f"Read `{path}` and review it."
-        scope_exclusion = ""
-    elif scope == "diff":
-        if path:
-            method_intro = (
-                f"Start by running `git diff main...HEAD -- '{path}'` and reading "
-                "the changed files."
-            )
-        else:
-            method_intro = (
-                "Start by running `git diff main...HEAD -- '*.py'` and reading the "
-                "changed files. If no diff is available, run `git ls-files '*.py'` "
-                "and review the most recently changed files."
-            )
-        scope_exclusion = "\n- Pre-existing issues outside the diff"
-        tools.extend(["Bash(git diff*)", "Bash(git ls-files*)"])
-    else:
-        if path:
-            method_intro = f"Review all Python source files under `{path}`."
-        else:
-            method_intro = (
-                "Run `git ls-files '*.py'` to find all Python source files and "
-                "review them."
-            )
-        scope_exclusion = ""
-        tools.append("Bash(git ls-files*)")
+    method_intro, scope_tools, scope_exclusion = build_read_scope_context(
+        scope, path, file_verb="review"
+    )
+    tools.extend(scope_tools)
 
     return AgentDefinition(
         description=(
@@ -237,9 +213,11 @@ showing how the code could be rewritten more simply.
 ## Triage
 
 - Only report findings you would flag in a real code review. If
-  you're not sure, leave it out.
+  you're less than 80% confident a finding is real, leave it out.
 - Drop anything where you can't articulate a concrete problem —
   "I would have written it differently" is not a finding.
+- Do not pad the report. Zero findings is a valid result — it means
+  the code is clean.
 - Deduplicate — keep the finding with the strongest evidence.
 
 ## Exclusions — DO NOT REPORT
@@ -270,10 +248,20 @@ if __name__ == "__main__":
     from codemonkeys.runner import run_cli
     from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
-    parser = argparse.ArgumentParser(description="Quality review — clean code, naming, design, docstrings")
+    parser = argparse.ArgumentParser(
+        description="Quality review — clean code, naming, design, docstrings"
+    )
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="diff")
     parser.add_argument("--path", help="Narrow scope to this file or folder")
     args = parser.parse_args()
 
-    prompt = f"Review Python source files under {args.path}." if args.path else "Review the code."
-    run_cli(make_python_quality_reviewer(scope=args.scope, path=args.path), prompt, REVIEW_RESULT_SCHEMA)
+    prompt = (
+        f"Review Python source files under {args.path}."
+        if args.path
+        else "Review the code."
+    )
+    run_cli(
+        make_python_quality_reviewer(scope=args.scope, path=args.path),
+        prompt,
+        REVIEW_RESULT_SCHEMA,
+    )

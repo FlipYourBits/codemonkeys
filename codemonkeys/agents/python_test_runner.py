@@ -94,4 +94,8 @@ if __name__ == "__main__":
     parser.add_argument("--path", help="Test file or folder to run")
     args = parser.parse_args()
 
-    run_cli(make_python_test_runner(scope=args.scope, path=args.path), "Run the test suite.", TOOL_RESULT_SCHEMA)
+    run_cli(
+        make_python_test_runner(scope=args.scope, path=args.path),
+        "Run the test suite.",
+        TOOL_RESULT_SCHEMA,
+    )

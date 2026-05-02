@@ -59,7 +59,7 @@ Denylist of tools the agent cannot use. Supports fnmatch patterns for tool input
 disallowedTools=["Edit", "Write", "Bash(git push*)", "Bash(git commit*)"]
 ```
 
-`tools` and `disallowedTools` control which tools the agent can see. `permissionMode` controls whether tool calls need user approval. They are independent — `bypassPermissions` does not override `disallowedTools`.
+`tools` and `disallowedTools` control which tools the agent can see. `permissionMode` controls whether tool calls need user approval. When an agent runs directly via `ClaudeAgentOptions`, `disallowedTools` is enforced under all permission modes. When an agent is dispatched as a subagent, the coordinator's `bypassPermissions` can override the subagent's `disallowedTools` — see the Note at the top of this document.
 
 ## Model
 
@@ -109,7 +109,6 @@ Controls how much reasoning the model does before responding.
 | `"medium"` | Balanced. Good for agentic tasks that need speed/cost/quality tradeoff. |
 | `"high"` | Deep reasoning (the default when unset). Complex coding, code review, security audit. |
 | `"max"` | No constraints on token spending. Only for frontier problems where missing something is very costly and token spend doesn't matter. Can cause overthinking on simpler tasks. |
-| `"xhigh"` | Opus 4.7 only. Extended capability for long-running tasks (30+ minutes). |
 
 `None` is equivalent to `"high"`. On most workloads `"max"` adds significant cost for relatively small quality gains.
 
@@ -217,9 +216,11 @@ Controls whether tool calls need user approval.
 | `"dontAsk"` | Denies anything that would normally prompt (no user interaction) |
 | `"auto"` | Auto-approves safe/read-only tools, asks for risky ones |
 
-**Important:** `permissionMode` is independent of `tools`/`disallowedTools`. Setting `bypassPermissions` does not let the agent use tools excluded by `disallowedTools`. The two systems work together:
+**Important:** `permissionMode` and `tools`/`disallowedTools` work together:
 
 1. `tools` / `disallowedTools` — can this agent see this tool?
 2. `permissionMode` — if yes, does it need user approval?
 
-For unattended agents, use `bypassPermissions` with a tight `disallowedTools` list to control what the agent can actually do.
+When the agent runs directly via `ClaudeAgentOptions`, both controls are enforced under all permission modes. When dispatched as a subagent, the coordinator's `bypassPermissions` can override the subagent's `disallowedTools` (see the Note at the top of this document) — `tools` remains the primary gatekeeper.
+
+For unattended agents, use `bypassPermissions` with a tight `tools` allowlist (and a `disallowedTools` denylist as a secondary guard) to control what the agent can actually do.

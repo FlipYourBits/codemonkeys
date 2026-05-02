@@ -3,7 +3,9 @@
 PYTHON_SOURCE_FILTER = """\
 ## Source Code Only
 
-Only analyze Python source files. Skip configuration, generated files,
-lock files, documentation, and vendored dependencies. Files to SKIP:
-`poetry.lock`, `*.pyc`, `*.egg-info/`, `__pycache__/`, `.venv/`,
-`dist/`, `*.generated.*`, `*.md`, `*.rst`."""
+Only analyze Python source files that are tracked by git. When
+discovering files, prefer `git ls-files '*.py'` over Glob — this
+automatically excludes `.venv/`, `__pycache__/`, `dist/`, and anything
+in `.gitignore`. Also skip configuration, generated files, lock files,
+and documentation: `poetry.lock`, `*.pyc`, `*.egg-info/`,
+`*.generated.*`, `*.md`, `*.rst`."""

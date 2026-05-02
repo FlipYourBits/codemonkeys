@@ -89,6 +89,28 @@ When multiple issues exist, fix them in severity order:
 5. Code quality (complexity, naming, structure)
 6. Style (formatting, conventions)
 
+### Rationalization Guards
+
+Before skipping a step, taking a shortcut, or deviating from your
+instructions, check whether you're rationalizing. These thoughts are
+red flags — if you catch yourself thinking any of them, stop and
+follow the process:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Simple questions deserve rigorous answers. Follow the process. |
+| "I need more context first" | Gathering context IS part of the process. Don't skip steps to get context. |
+| "Let me explore the codebase first" | Your instructions tell you HOW to explore. Follow them. |
+| "I can check this quickly" | Quick checks miss things. Use the systematic approach. |
+| "Let me gather information first" | Your instructions tell you HOW to gather information. |
+| "This doesn't need the full process" | If the process exists, use it. |
+| "This is overkill" | Simple things become complex. The process prevents surprises. |
+| "I'll just do this one thing first" | Follow the process BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Process prevents this. |
+
+If your instructions say to do X before Y, do X before Y. No
+rationalization justifies skipping steps.
+
 ### When Is It Done?
 
 Requirements are met, tests pass, code is clean, no broken windows

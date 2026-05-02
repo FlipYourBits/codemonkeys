@@ -53,4 +53,8 @@ if __name__ == "__main__":
     from codemonkeys.runner import run_cli
     from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
-    run_cli(make_python_dep_auditor(), "Audit dependencies for vulnerabilities.", TOOL_RESULT_SCHEMA)
+    run_cli(
+        make_python_dep_auditor(),
+        "Audit dependencies for vulnerabilities.",
+        TOOL_RESULT_SCHEMA,
+    )

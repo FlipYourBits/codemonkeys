@@ -88,9 +88,15 @@ if __name__ == "__main__":
     from codemonkeys.runner import run_cli
     from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
-    parser = argparse.ArgumentParser(description="Lint and format Python code with ruff")
+    parser = argparse.ArgumentParser(
+        description="Lint and format Python code with ruff"
+    )
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="repo")
     parser.add_argument("--path", help="File or folder to lint")
     args = parser.parse_args()
 
-    run_cli(make_python_linter(scope=args.scope, path=args.path), "Lint and format the code.", TOOL_RESULT_SCHEMA)
+    run_cli(
+        make_python_linter(scope=args.scope, path=args.path),
+        "Lint and format the code.",
+        TOOL_RESULT_SCHEMA,
+    )

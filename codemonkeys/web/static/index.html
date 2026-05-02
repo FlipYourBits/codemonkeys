@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>codemonkeys</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1 id="header-title">codemonkeys</h1>
+    <div id="status-bar">
+      <span id="status-tokens"></span>
+      <span id="status-cost"></span>
+      <span id="status-state"></span>
+    </div>
+  </header>
+
+  <div id="app">
+    <aside id="sidebar">
+      <!-- Working directory -->
+      <div class="sidebar-section">
+        <h3>Project</h3>
+        <div class="cwd-picker">
+          <input type="text" id="cwd-input" placeholder="/path/to/project">
+          <button id="btn-set-cwd" class="btn btn-sm">Set</button>
+        </div>
+        <div id="cwd-display" class="cwd-display"></div>
+      </div>
+
+      <!-- Mode toggle -->
+      <div class="sidebar-section">
+        <div class="mode-toggle">
+          <button id="btn-mode-run" class="mode-btn active">Run</button>
+          <button id="btn-mode-chat" class="mode-btn">Chat</button>
+        </div>
+      </div>
+
+      <!-- Agent picker -->
+      <div class="sidebar-section">
+        <h3>Agent</h3>
+        <div id="agent-list"></div>
+      </div>
+
+      <!-- Saved outputs -->
+      <div class="sidebar-section">
+        <h3>Saved Outputs <button id="btn-refresh-outputs" class="btn-icon-sm" title="Refresh"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2v4h-4M2 14v-4h4"/><path d="M2.5 6.5A6 6 0 0 1 13.4 4.1l.6.6M13.5 9.5A6 6 0 0 1 2.6 11.9l-.6-.6"/></svg></button></h3>
+        <div id="output-list"></div>
+      </div>
+    </aside>
+
+    <main id="content">
+      <!-- Run mode -->
+      <div id="panel-run">
+        <div class="input-area">
+          <textarea id="run-prompt" rows="3" placeholder="Describe the task..."></textarea>
+          <div class="input-actions">
+            <button id="btn-run" class="btn btn-primary" disabled>Run</button>
+            <button id="btn-cancel-run" class="btn btn-danger hidden">Cancel</button>
+            <span class="hint">Ctrl+Enter to run</span>
+          </div>
+        </div>
+        <div id="run-log" class="log-area"></div>
+      </div>
+
+      <!-- Chat mode -->
+      <div id="panel-chat" class="hidden">
+        <div id="chat-log" class="log-area"></div>
+        <div class="input-area">
+          <textarea id="chat-input" rows="2" placeholder="Type a message..."></textarea>
+          <div class="input-actions">
+            <button id="btn-send" class="btn btn-primary" disabled>Send</button>
+            <button id="btn-end-chat" class="btn hidden">End &amp; Save</button>
+            <button id="btn-cancel-chat" class="btn btn-danger hidden">Cancel</button>
+            <span class="hint">Ctrl+Enter to send</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

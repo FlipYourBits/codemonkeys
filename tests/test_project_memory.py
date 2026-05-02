@@ -11,6 +11,7 @@ def test_full_mode_returns_agent_definition() -> None:
     agent = make_project_memory_agent(mode="full")
     assert isinstance(agent, AgentDefinition)
     assert agent.model == "sonnet"
+    assert agent.tools is not None
     assert "Write" in agent.tools
     assert agent.permissionMode == "dontAsk"
     assert "full scan" in agent.prompt.lower() or "git ls-files" in agent.prompt
@@ -40,13 +41,12 @@ def test_full_mode_does_not_include_diff_section() -> None:
     assert "## Diff" not in agent.prompt
 
 
-def test_tools_include_read_write_glob_grep_bash() -> None:
+def test_tools_include_write_and_bash() -> None:
     from codemonkeys.agents.project_memory import make_project_memory_agent
 
     agent = make_project_memory_agent(mode="full")
-    assert "Read" in agent.tools
-    assert "Glob" in agent.tools
-    assert "Grep" in agent.tools
+    assert agent.tools is not None
+    assert "Read" not in agent.tools
     assert "Write" in agent.tools
     assert any("Bash" in t for t in agent.tools)
 
@@ -55,4 +55,7 @@ def test_description_mentions_project_memory() -> None:
     from codemonkeys.agents.project_memory import make_project_memory_agent
 
     agent = make_project_memory_agent(mode="full")
-    assert "architecture" in agent.description.lower() or "memory" in agent.description.lower()
+    assert (
+        "architecture" in agent.description.lower()
+        or "memory" in agent.description.lower()
+    )

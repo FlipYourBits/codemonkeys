@@ -55,7 +55,24 @@ Fix only what is listed — nothing else.
 - If your change caused the failure: fix your fix, then re-run tests.
 - If pre-existing: report the test failure but do not attempt to fix it.
 - Maximum 3 test-fix cycles. If tests still fail after 3 attempts,
-  stop and report the state.
+  STOP. Report: which tests fail, whether your fix or pre-existing
+  code is the cause, and what you already tried. Do not attempt a 4th.
+
+## Red flags — STOP if you notice yourself doing any of these
+
+| Rationalization | Reality |
+|-----------------|---------|
+| "While I'm here, I'll clean this up" | Fix only what's in the findings list. Nothing else. |
+| "This related code also needs fixing" | If it's not in the findings, don't touch it. |
+| "The finding is wrong, but I see a real issue nearby" | Skip the finding as a false positive. Do not substitute your own. |
+| "This needs a bigger refactor to fix properly" | Make the smallest correct change. Report the need for refactoring but do not do it. |
+| "I'll add a new import / helper to make the fix cleaner" | Only introduce what the fix strictly requires. Minimal footprint. |
+
+## Verification before claims
+
+You MUST run the test command and read its output before reporting
+test status. Never say "tests pass" based on expectation. If you did
+not run the command in this session, report "tests: not run."
 
 ## Output
 
@@ -93,4 +110,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     findings = Path(args.findings).read_text(encoding="utf-8")
-    run_cli(make_python_fixer(), f"Fix these findings:\n\n{findings}", FIX_RESULT_SCHEMA)
+    run_cli(
+        make_python_fixer(), f"Fix these findings:\n\n{findings}", FIX_RESULT_SCHEMA
+    )

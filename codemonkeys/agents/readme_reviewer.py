@@ -41,6 +41,10 @@ Report findings only — do not fix issues.
 
 {start_by}
 
+When discovering project files, use `git ls-files` instead of Glob —
+this automatically excludes `.venv/`, `node_modules/`, `dist/`, and
+anything in `.gitignore`.
+
 1. Read the README and all project doc files (CONTRIBUTING.md,
    docs/*.md if they exist).
 2. Read the project metadata file for name, version, dependencies,
@@ -161,8 +165,14 @@ if __name__ == "__main__":
     from codemonkeys.runner import run_cli
     from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
-    parser = argparse.ArgumentParser(description="README review — accuracy, completeness, quality")
+    parser = argparse.ArgumentParser(
+        description="README review — accuracy, completeness, quality"
+    )
     parser.add_argument("--path", help="Path to README or docs directory")
     args = parser.parse_args()
 
-    run_cli(make_readme_reviewer(path=args.path), "Review the README and project documentation for accuracy and completeness.", REVIEW_RESULT_SCHEMA)
+    run_cli(
+        make_readme_reviewer(path=args.path),
+        "Review the README and project documentation for accuracy and completeness.",
+        REVIEW_RESULT_SCHEMA,
+    )

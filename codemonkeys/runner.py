@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import time
 from typing import Any
 
 from claude_agent_sdk import (
@@ -15,38 +18,24 @@ from claude_agent_sdk import (
     ToolUseBlock,
     query,
 )
-from rich.console import Console, Group
+from rich.console import Console
 from rich.live import Live
-from rich.table import Table
 from rich.text import Text
 
-
-def _tool_detail(block: ToolUseBlock) -> str:
-    name = block.name
-    inp = block.input or {}
-    if name in ("Read", "Edit", "Write"):
-        path = inp.get("file_path", "?")
-        return f"{name}({path})"
-    if name == "Grep":
-        return f"Grep('{inp.get('pattern', '?')}')"
-    if name == "Glob":
-        return f"Glob({inp.get('pattern', inp.get('path', '?'))})"
-    if name == "Bash":
-        cmd = inp.get("command", "")
-        return f"Bash($ {cmd[:80]})" if cmd else "Bash"
-    return name
+from codemonkeys.ui import AgentState, render_agent_table, summarize_tool
 
 
 class _Display:
+    _TOP_LEVEL_ID = "__top__"
 
-    def __init__(self) -> None:
-        self.agents: dict[str, dict] = {}
-        self.status = "running"
-        self.activity = ""
-        self.tool_calls = 0
+    def __init__(self, label: str = "Agent") -> None:
+        self.label = label
+        self.agents: dict[str, AgentState] = {
+            self._TOP_LEVEL_ID: AgentState(name=label, started=time.monotonic()),
+        }
         self.total_tokens = 0
-        self.cost: float | None = None
         self._has_subagents = False
+        self._spinner_idx = 0
 
     def add_usage(self, usage: dict | None) -> None:
         if not usage:
@@ -55,6 +44,7 @@ class _Display:
             usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         )
         self.total_tokens += turn_tokens
+        self.agents[self._TOP_LEVEL_ID].tokens = self.total_tokens
 
     def set_usage(self, usage: dict | None) -> None:
         if not usage:
@@ -62,84 +52,51 @@ class _Display:
         self.total_tokens = usage.get("total_tokens", 0) or (
             usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
         )
+        self.agents[self._TOP_LEVEL_ID].tokens = self.total_tokens
 
     def tool_used(self, detail: str) -> None:
-        self.activity = detail
-        self.tool_calls += 1
+        self.agents[self._TOP_LEVEL_ID].last_tool = detail
 
     def start_agent(self, task_id: str, description: str) -> None:
         self._has_subagents = True
-        self.agents[task_id] = {
-            "name": description,
-            "status": "running",
-            "activity": "starting...",
-            "calls": 0,
-            "tokens": 0,
-        }
-        self._update_status()
+        self.agents[task_id] = AgentState(name=description, started=time.monotonic())
 
     def progress_agent(self, task_id: str, tokens: int, tool_uses: int = 0) -> None:
         if task_id in self.agents:
-            self.agents[task_id]["tokens"] = tokens
-            self.agents[task_id]["calls"] = tool_uses
-            self.total_tokens = sum(a["tokens"] for a in self.agents.values())
+            self.agents[task_id].tokens = tokens
+            self.total_tokens = sum(a.tokens for a in self.agents.values())
 
     def done_agent(self, task_id: str, tokens: int | None = None) -> None:
         if task_id in self.agents:
-            self.agents[task_id]["status"] = "done"
-            self.agents[task_id]["activity"] = "complete"
+            self.agents[task_id].status = "complete"
+            self.agents[task_id].end_time = time.monotonic()
             if tokens is not None:
-                self.agents[task_id]["tokens"] = tokens
-                self.total_tokens = sum(a["tokens"] for a in self.agents.values())
-        self._update_status()
+                self.agents[task_id].tokens = tokens
+                self.total_tokens = sum(a.tokens for a in self.agents.values())
+
+    def finish_top_level(self) -> None:
+        top = self.agents[self._TOP_LEVEL_ID]
+        top.status = "complete"
+        top.end_time = time.monotonic()
 
     def agent_activity(self, task_id: str, detail: str) -> None:
-        if task_id in self.agents and self.agents[task_id]["status"] == "running":
-            self.agents[task_id]["activity"] = detail
+        if task_id in self.agents and self.agents[task_id].status == "running":
+            self.agents[task_id].last_tool = detail
 
-    def _update_status(self) -> None:
-        running = sum(1 for a in self.agents.values() if a["status"] == "running")
-        if running == 0:
-            self.status = "summarizing..."
-        else:
-            self.status = f"waiting for {running} agent{'s' if running != 1 else ''}..."
+    def render(self) -> Text:
+        self._spinner_idx += 1
+        cols = os.get_terminal_size().columns
+        table = render_agent_table(
+            self.agents,
+            time.monotonic(),
+            self._spinner_idx,
+            cols,
+        )
+        return Text(table)
 
-    def render(self) -> Group | Text:
-        cost_str = f"  ${self.cost:.4f}" if self.cost else ""
 
-        if self._has_subagents:
-            header = Text(
-                f"Coordinator: {self.status}  [{self.total_tokens:,} tokens{cost_str}]",
-                style="bold",
-            )
-            table = Table(show_header=True, expand=True, padding=(0, 1))
-            table.add_column("Agent", style="bold cyan", no_wrap=True)
-            table.add_column("Status", width=8)
-            table.add_column("Activity", style="dim")
-            table.add_column("Tokens", justify="right", width=10)
-            table.add_column("Tools", justify="right", width=5)
-
-            for info in self.agents.values():
-                status = (
-                    Text("running", style="yellow")
-                    if info["status"] == "running"
-                    else Text("done", style="green")
-                )
-                table.add_row(
-                    info["name"],
-                    status,
-                    info["activity"][:50],
-                    f"{info['tokens']:,}",
-                    str(info["calls"]),
-                )
-            return Group(header, table)
-
-        parts = [self.status]
-        if self.activity:
-            parts.append(self.activity)
-        tokens_str = f"  {self.total_tokens:,} tokens" if self.total_tokens else ""
-        parts.append(f"[{self.tool_calls} tool{'s' if self.tool_calls != 1 else ''}{tokens_str}{cost_str}]")
-        return Text("  ".join(parts), style="bold")
+def _tool_detail(block: ToolUseBlock) -> str:
+    return summarize_tool(block.name, block.input or {})
 
 
 class AgentRunner:
@@ -162,8 +119,9 @@ class AgentRunner:
         msg = runner.last_result
     """
 
-    def __init__(self, cwd: str = ".") -> None:
+    def __init__(self, cwd: str = ".", label: str = "Agent") -> None:
         self.cwd = cwd
+        self.label = label
         self.last_result: ResultMessage | None = None
         self._console = Console(stderr=True)
 
@@ -172,7 +130,7 @@ class AgentRunner:
 
         restrict(self.cwd)
 
-        display = _Display()
+        display = _Display(label=self.label)
         last_active_tid: str | None = None
         result_text = ""
 
@@ -182,64 +140,98 @@ class AgentRunner:
                 "message": {"role": "user", "content": prompt},
             }
 
-        with Live(display.render(), console=self._console, refresh_per_second=4) as live:
-            async for message in query(prompt=_prompt(), options=options):
-                if isinstance(message, AssistantMessage):
-                    if not display._has_subagents:
-                        display.add_usage(message.usage)
-                    for block in message.content:
-                        if isinstance(block, ToolUseBlock) and block.name != "Agent":
-                            detail = _tool_detail(block)
-                            if display._has_subagents and last_active_tid:
-                                display.agent_activity(last_active_tid, detail)
-                            else:
-                                display.tool_used(detail)
-                    live.update(display.render())
+        async def _refresh(live: Live) -> None:
+            while True:
+                await asyncio.sleep(0.1)
+                live.update(display.render())
 
-                elif isinstance(message, TaskStartedMessage):
-                    display.start_agent(message.task_id, message.description)
-                    last_active_tid = message.task_id
-                    live.update(display.render())
-
-                elif isinstance(message, TaskProgressMessage):
-                    last_active_tid = message.task_id
-                    u = message.usage
-                    tokens = (
-                        u["total_tokens"]
-                        if isinstance(u, dict)
-                        else getattr(u, "total_tokens", 0)
+        with Live(
+            display.render(), console=self._console, refresh_per_second=10
+        ) as live:
+            refresh_task = asyncio.create_task(_refresh(live))
+            try:
+                async for message in query(prompt=_prompt(), options=options):
+                    last_active_tid = self._handle_message(
+                        message, display, last_active_tid
                     )
-                    tools = (
-                        u.get("tool_uses", 0)
-                        if isinstance(u, dict)
-                        else getattr(u, "tool_uses", 0)
-                    )
-                    display.progress_agent(
-                        message.task_id, tokens=tokens, tool_uses=tools,
-                    )
-                    live.update(display.render())
-
-                elif isinstance(message, TaskNotificationMessage):
-                    u = message.usage
-                    final_tokens = None
-                    if u:
-                        final_tokens = (
-                            u["total_tokens"]
-                            if isinstance(u, dict)
-                            else getattr(u, "total_tokens", 0)
-                        )
-                    display.done_agent(message.task_id, tokens=final_tokens)
-                    live.update(display.render())
-
-                elif isinstance(message, ResultMessage):
-                    result_text = getattr(message, "result", "") or ""
-                    display.set_usage(message.usage)
-                    display.cost = getattr(message, "total_cost_usd", None)
-                    display.status = "done"
-                    self.last_result = message
-                    live.update(display.render())
+                    if isinstance(message, ResultMessage):
+                        result_text = getattr(message, "result", "") or ""
+                        display.set_usage(message.usage)
+                        display.finish_top_level()
+                        self.last_result = message
+            finally:
+                refresh_task.cancel()
+                try:
+                    await refresh_task
+                except asyncio.CancelledError:
+                    pass
+                live.update(display.render())
 
         return result_text
+
+    def _handle_message(
+        self,
+        message: Any,
+        display: _Display,
+        last_active_tid: str | None,
+    ) -> str | None:
+        if isinstance(message, AssistantMessage):
+            if not display._has_subagents:
+                display.add_usage(message.usage)
+            for block in message.content:
+                if isinstance(block, ToolUseBlock) and block.name != "Agent":
+                    detail = _tool_detail(block)
+                    if display._has_subagents and last_active_tid:
+                        display.agent_activity(last_active_tid, detail)
+                    else:
+                        display.tool_used(detail)
+            return last_active_tid
+
+        if isinstance(message, TaskStartedMessage):
+            display.start_agent(message.task_id, message.description)
+            return message.task_id
+
+        if isinstance(message, TaskProgressMessage):
+            usage = message.usage
+            if usage is None:
+                tokens = 0
+                tools = 0
+            else:
+                tokens = (
+                    usage["total_tokens"]
+                    if isinstance(usage, dict)
+                    else getattr(usage, "total_tokens", 0)
+                )
+                tools = (
+                    usage.get("tool_uses", 0)
+                    if isinstance(usage, dict)
+                    else getattr(usage, "tool_uses", 0)
+                )
+            display.progress_agent(
+                message.task_id,
+                tokens=tokens,
+                tool_uses=tools,
+            )
+            if message.last_tool_name:
+                if display._has_subagents:
+                    display.agent_activity(message.task_id, message.last_tool_name)
+                else:
+                    display.tool_used(message.last_tool_name)
+            return message.task_id
+
+        if isinstance(message, TaskNotificationMessage):
+            final_usage = message.usage
+            final_tokens = None
+            if final_usage:
+                final_tokens = (
+                    final_usage["total_tokens"]
+                    if isinstance(final_usage, dict)
+                    else getattr(final_usage, "total_tokens", 0)
+                )
+            display.done_agent(message.task_id, tokens=final_tokens)
+            return last_active_tid
+
+        return last_active_tid
 
     async def run_agent(
         self,
@@ -253,7 +245,7 @@ class AgentRunner:
             model=agent.model or "sonnet",
             cwd=self.cwd,
             permission_mode=agent.permissionMode or "dontAsk",
-            allowed_tools=agent.tools,
+            allowed_tools=agent.tools or [],
             disallowed_tools=agent.disallowedTools or [],
             output_format=output_format,
         )
@@ -266,7 +258,6 @@ def run_cli(
     output_format: dict[str, Any] | None = None,
 ) -> None:
     """Run an agent from the command line and print the result."""
-    import asyncio
 
     async def _main() -> None:
         runner = AgentRunner()

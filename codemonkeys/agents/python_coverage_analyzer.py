@@ -107,9 +107,15 @@ if __name__ == "__main__":
     from codemonkeys.runner import run_cli
     from codemonkeys.schemas import TOOL_RESULT_SCHEMA
 
-    parser = argparse.ArgumentParser(description="Coverage analyzer — run pytest with coverage")
+    parser = argparse.ArgumentParser(
+        description="Coverage analyzer — run pytest with coverage"
+    )
     parser.add_argument("--scope", choices=["file", "diff", "repo"], default="repo")
     parser.add_argument("--path", help="File or folder to analyze")
     args = parser.parse_args()
 
-    run_cli(make_python_coverage_analyzer(scope=args.scope, path=args.path), "Generate a test coverage report.", TOOL_RESULT_SCHEMA)
+    run_cli(
+        make_python_coverage_analyzer(scope=args.scope, path=args.path),
+        "Generate a test coverage report.",
+        TOOL_RESULT_SCHEMA,
+    )

@@ -7,7 +7,6 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import sys
 from pathlib import Path
 
 from claude_agent_sdk import (
@@ -40,7 +39,9 @@ async def main() -> None:
     )
 
     client = ClaudeSDKClient(options)
-    await client.connect("Greet the user. Mention you're sandboxed to the project directory.")
+    await client.connect(
+        "Greet the user. Mention you're sandboxed to the project directory."
+    )
 
     async for msg in client.receive_response():
         if isinstance(msg, AssistantMessage):

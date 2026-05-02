@@ -91,4 +91,8 @@ if __name__ == "__main__":
     parser.add_argument("--path", help="File or folder to check")
     args = parser.parse_args()
 
-    run_cli(make_python_type_checker(scope=args.scope, path=args.path), "Run mypy type checking.", TOOL_RESULT_SCHEMA)
+    run_cli(
+        make_python_type_checker(scope=args.scope, path=args.path),
+        "Run mypy type checking.",
+        TOOL_RESULT_SCHEMA,
+    )

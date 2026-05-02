@@ -127,4 +127,8 @@ if __name__ == "__main__":
     from codemonkeys.runner import run_cli
     from codemonkeys.schemas import REVIEW_RESULT_SCHEMA
 
-    run_cli(make_changelog_reviewer(), "Review CHANGELOG.md for missing or stale entries.", REVIEW_RESULT_SCHEMA)
+    run_cli(
+        make_changelog_reviewer(),
+        "Review CHANGELOG.md for missing or stale entries.",
+        REVIEW_RESULT_SCHEMA,
+    )
