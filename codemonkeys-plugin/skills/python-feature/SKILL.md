@@ -61,21 +61,13 @@ Do NOT write any code or dispatch any agent until the user has approved the plan
 - The implementer reads the file and implements with TDD.
 - Do NOT pass additional context — the plan file is the complete contract.
 
-## Step 8 — Verify
+## Step 8 — Fix if needed
 
-After the implementer finishes, run verification inline:
+After the implementer finishes, the PostToolUse hook has been auto-formatting files with ruff throughout implementation. The Stop hook will gate completion if tests are failing.
 
-- `python -m ruff check --fix .` then `python -m ruff format .`
-- `python -m mypy .`
-- `python -m pytest -x -q --tb=short --no-header`
+If the Stop hook blocks completion, read the failure output and fix directly (smallest correct change). The Stop hook enforces max 2 attempts — if tests still fail after 2 cycles, it will allow completion and report remaining failures.
 
-## Step 9 — Fix if needed
-
-- If verification fails, fix directly (smallest correct change).
-- Run verification again.
-- Max 2 cycles. If still failing, STOP and report what fails and why.
-
-## Step 10 — Report
+## Step 9 — Report
 
 - Files created/modified
 - Tests pass/fail

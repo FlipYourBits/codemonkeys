@@ -1,13 +1,16 @@
 ---
 name: python-review
 description: "Full Python code review: mechanical checks (mypy, pytest, ruff, coverage, pip-audit) plus quality, security, changelog, and README review. Presents findings and fixes on approval."
+allowed-tools: Bash(python -m *) Bash(git diff *) Bash(git ls-files *) Bash(git log *)
 ---
 
 Read and follow `shared/engineering-mindset.md` and `shared/python-guidelines.md` before proceeding.
 
-## Step 1 — Ask scope
+## Step 1 — Determine scope
 
-Present these three options to the user:
+If the user passed files or directories in the prompt (e.g., `/codemonkeys:python-review src/auth.py src/models.py`), use those as scope — skip the scope question.
+
+If no files were specified, present these three options to the user:
 
 1. **Diff** (changes vs main) — will use `git diff main...HEAD`
 2. **Entire repo** — will review all Python source files
@@ -24,8 +27,7 @@ Present all review categories with descriptions:
 | Quality review | Naming, design, complexity, patterns |
 | Security audit | Injection, auth, secrets, deserialization |
 | Type checking | mypy |
-| Test runner | pytest |
-| Test coverage | pytest --cov |
+| Tests & coverage | pytest with coverage |
 | Lint & format check | ruff |
 | Dependency audit | pip-audit |
 | Changelog review | Compare CHANGELOG.md vs git history |
@@ -45,17 +47,25 @@ Based on the scope chosen in Step 1:
 
 Only read git-tracked files. Skip `.venv/`, `__pycache__/`, `*.pyc`, `*.egg-info/`.
 
-## Step 4 — Run mechanical checks
+## Step 4 — Read mechanical check results
 
-Run each check as a **separate** Bash call. Do not chain commands with `&&`, `||`, `|`, or `;`. Collect all output.
+Read check results from `.codemonkeys/check-results/`. For each non-excluded category:
 
+- `ruff.json` — lint findings
+- `mypy.json` — type errors
+- `pytest.json` — test results and coverage
+- `pip-audit.json` — dependency vulnerabilities
+
+If a result file is missing, the tool is not installed — note it and continue with the remaining categories.
+
+If no result files exist (hook didn't run, e.g., skill was invoked without the slash command), fall back to running commands directly:
+
+- `python -m ruff check --output-format json .` (if not excluded)
 - `python -m mypy --output json .` (if not excluded)
-- `python -m pytest -x -q --tb=short --no-header` (if not excluded)
-- `python -m pytest --cov --cov-report=json --cov-report=term -q --no-header` (if not excluded)
-- `python -m ruff check .` (report-only, no `--fix`) (if not excluded)
+- `python -m pytest --cov --cov-report=json --cov-report=term -x -q --tb=short --no-header` (if not excluded)
 - `python -m pip_audit --format json --strict --desc` (if not excluded)
 
-Handle missing tools gracefully — if a tool is not installed, note it and continue with the remaining checks.
+Handle missing tools gracefully — if a tool is not installed, note it and continue.
 
 ## Step 5 — Apply review checklists
 
@@ -294,7 +304,7 @@ For each approved finding:
 
 ## Step 9 — Verify-fix loop
 
-Run `ruff check --fix` + `ruff format`, then `mypy`, then `pytest`. If failures were caused by the fixes, fix and verify again.
+After applying fixes, the PostToolUse hook auto-formats changed files with ruff. For remaining verification, read the latest check results or run `python -m mypy .` and `python -m pytest -x -q --tb=short --no-header` to confirm fixes didn't introduce new issues.
 
 Maximum 2 cycles. If still failing after cycle 2, **STOP** and report:
 
