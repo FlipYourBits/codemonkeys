@@ -13,10 +13,10 @@ Skills run these tools as part of their workflows. Missing tools are skipped gra
 
 | Tool | Used by | Install |
 |------|---------|---------|
-| ruff | python-review, python-feature | `pip install ruff` |
-| pyright | python-review | `pip install pyright` |
-| pytest | python-review, python-feature | `pip install pytest` |
-| pip-audit | python-review | `pip install pip-audit` |
+| ruff | codemonkeys-python-review, codemonkeys-python-feature | `pip install ruff` |
+| pyright | codemonkeys-python-review | `pip install pyright` |
+| pytest | codemonkeys-python-review, codemonkeys-python-feature | `pip install pytest` |
+| pip-audit | codemonkeys-python-review | `pip install pip-audit` |
 
 To install everything:
 
@@ -26,45 +26,36 @@ pip install ruff pyright pytest pip-audit
 
 ## Installation
 
-1. Copy the `codemonkeys` directory into your project's `.claude/` directory:
+Copy the skills and agents into your project's `.claude/` directory:
 
 ```bash
-cp -r path/to/codemonkeys .claude/codemonkeys
+cp -r path/to/codemonkeys/.claude/skills/codemonkeys-* your-project/.claude/skills/
+cp -r path/to/codemonkeys/.claude/agents/codemonkeys-* your-project/.claude/agents/
 ```
 
-2. Add the plugin reference to `.claude/settings.json`:
+Create the directories first if they don't exist:
 
-```json
-{
-  "extraKnownMarketplaces": {
-    "local": {
-      "source": { "source": "directory", "path": "./.claude/codemonkeys" }
-    }
-  },
-  "enabledPlugins": {
-    "codemonkeys@local": true
-  }
-}
+```bash
+mkdir -p your-project/.claude/skills your-project/.claude/agents
 ```
 
-If you already have a `.claude/settings.json`, merge these two keys into it.
-
-3. Start Claude Code and run `/codemonkeys:python-feature` to get started.
+Start Claude Code and run `/codemonkeys-python-feature` to get started.
 
 ## Uninstall
 
-1. Delete `.claude/codemonkeys/`
-2. Remove `codemonkeys@local` from `enabledPlugins` and `local` from `extraKnownMarketplaces` in `.claude/settings.json`
+```bash
+rm -rf .claude/skills/codemonkeys-* .claude/agents/codemonkeys-*
+```
 
 ## Skills
 
-### python-feature
+### codemonkeys-python-feature
 
-Design-to-implementation workflow for Python features. Walks you from idea to working code through a structured planning process, then dispatches the `python-implementer` agent to build it with TDD.
+Design-to-implementation workflow for Python features. Walks you from idea to working code through a structured planning process, then dispatches the `codemonkeys-python-implementer` agent to build it with TDD.
 
 ```
-/codemonkeys:python-feature
-/codemonkeys:python-feature add JWT authentication to the API
+/codemonkeys-python-feature
+/codemonkeys-python-feature add JWT authentication to the API
 ```
 
 **Workflow:**
@@ -77,19 +68,19 @@ Design-to-implementation workflow for Python features. Walks you from idea to wo
 6. **Present design** — walks through architecture, components, data flow, and error handling section by section with approval at each step.
 7. **Finalize plan** — rewrites the plan into its final form. Waits for explicit user approval before proceeding.
 8. **Branch check** — if on main/master, suggests a feature branch name and offers to create it.
-9. **Dispatch implementer** — spawns the `python-implementer` agent with only the plan file as context.
+9. **Dispatch implementer** — spawns the `codemonkeys-python-implementer` agent with only the plan file as context.
 10. **Verify and format** — runs ruff and pytest after implementation. Fixes test failures (max 2 cycles).
 11. **Report** — summarizes files changed, test results, and anything skipped.
 
 The plan file survives context compaction — if Claude loses the skill context mid-workflow, re-invoking the skill picks up where it left off.
 
-### python-review
+### codemonkeys-python-review
 
 Full Python code review combining automated mechanical checks with manual review checklists. Does not spawn any agents.
 
 ```
-/codemonkeys:python-review
-/codemonkeys:python-review src/auth.py src/models.py
+/codemonkeys-python-review
+/codemonkeys-python-review src/auth.py src/models.py
 ```
 
 **Workflow:**
@@ -105,12 +96,12 @@ Full Python code review combining automated mechanical checks with manual review
 9. **Verify-fix loop** — runs ruff and pytest to confirm fixes didn't introduce new issues. Max 2 cycles.
 10. **Report** — summarizes what was fixed, what still fails, and what was skipped.
 
-### project-architecture
+### codemonkeys-project-architecture
 
 Builds and maintains `docs/codemonkeys/architecture.md` — a comprehensive snapshot of the project. Does not spawn any agents.
 
 ```
-/codemonkeys:project-architecture
+/codemonkeys-project-architecture
 ```
 
 **Workflow:**
@@ -122,13 +113,13 @@ Builds and maintains `docs/codemonkeys/architecture.md` — a comprehensive snap
 
 The generated document always contains: Project Overview, Architecture, File Index, Key Abstractions, and Conventions. It describes what IS, not what should be.
 
-### python-guidelines
+### codemonkeys-python-guidelines
 
 Python code conventions loaded automatically by other skills. Not user-invocable.
 
 Covers: `from __future__ import annotations`, type hints on all public functions, Pydantic BaseModel for structured data, pathlib over os.path, f-strings, context managers, short single-purpose functions, no dead code.
 
-### engineering-mindset
+### codemonkeys-engineering-mindset
 
 Core engineering principles loaded automatically by other skills. Not user-invocable.
 
@@ -136,9 +127,9 @@ Covers: understand before acting, plan first, architecture-first debugging, TDD 
 
 ## Agent
 
-### python-implementer
+### codemonkeys-python-implementer
 
-Implements features, updates, and bug fixes from an approved plan file using TDD. Dispatched by `python-feature` — not invoked directly.
+Implements features, updates, and bug fixes from an approved plan file using TDD. Dispatched by `codemonkeys-python-feature` — not invoked directly.
 
 **Method:**
 

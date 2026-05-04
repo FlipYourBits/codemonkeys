@@ -46,7 +46,7 @@ Before any planning, ensure the codebase map is current:
 - Run `git rev-parse HEAD` and read `.architecture-hash`.
 - If `docs/codemonkeys/architecture.md` does not exist or the hash does not match HEAD:
   - Ask: "Architecture docs are missing/outdated — want me to update them first? This gives me a better map of the codebase before planning."
-  - If yes: read and follow `skills/project-architecture/SKILL.md` to generate or update the architecture docs. Then continue to Step 2.
+  - If yes: read and follow `project-architecture` to generate or update the architecture docs. Then continue to Step 2.
   - If no: continue to Step 2 without them.
 - If the hash matches HEAD: continue silently to Step 2.
 
@@ -211,8 +211,8 @@ When cancelled:
 
 After context compaction, the skill instructions may be compressed away. If this happens:
 
-- The user can re-invoke `/codemonkeys:python-feature` to trigger Step 0, which scans `docs/codemonkeys/plans/` and finds the active plan by its status.
-- If you notice a plan reference in the conversation but don't have the skill instructions loaded, tell the user: "There's an active plan but I've lost the skill context — run `/codemonkeys:python-feature` to resume."
+- The user can re-invoke `/python-feature` to trigger Step 0, which scans `docs/codemonkeys/plans/` and finds the active plan by its status.
+- If you notice a plan reference in the conversation but don't have the skill instructions loaded, tell the user: "There's an active plan but I've lost the skill context — run `/python-feature` to resume."
 
 ## Rules
 
