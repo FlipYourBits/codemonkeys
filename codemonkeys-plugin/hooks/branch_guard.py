@@ -56,3 +56,18 @@ def _infer_branch_name(prompt: str) -> str:
         slug = slug[: cut if cut > 0 else 50]
 
     return f"{prefix}{slug}"
+
+
+def _get_protected_branches(cwd: Path) -> set[str]:
+    protected = set(DEFAULT_PROTECTED)
+    config_path = cwd / ".codemonkeys" / "config.json"
+    if not config_path.exists():
+        return protected
+    try:
+        config = json.loads(config_path.read_text())
+        extras = config.get("protected_branches", [])
+        if isinstance(extras, list):
+            protected.update(str(b) for b in extras)
+    except (json.JSONDecodeError, OSError):
+        pass
+    return protected

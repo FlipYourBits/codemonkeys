@@ -84,3 +84,52 @@ class TestInferBranchName:
 
     def test_build_maps_to_chore(self):
         assert self.mod._infer_branch_name("build update webpack config") == "chore/update-webpack-config"
+
+
+class TestGetProtectedBranches:
+    @pytest.fixture(autouse=True)
+    def _import_module(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("branch_guard", HOOK)
+        self.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.mod)
+
+    def test_defaults_always_present(self, tmp_path):
+        result = self.mod._get_protected_branches(tmp_path)
+        assert "main" in result
+        assert "master" in result
+
+    def test_config_adds_extras(self, tmp_path):
+        config_dir = tmp_path / ".codemonkeys"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(json.dumps({"protected_branches": ["develop", "release"]}))
+        result = self.mod._get_protected_branches(tmp_path)
+        assert "main" in result
+        assert "master" in result
+        assert "develop" in result
+        assert "release" in result
+
+    def test_config_missing_key(self, tmp_path):
+        config_dir = tmp_path / ".codemonkeys"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(json.dumps({"sandbox": True}))
+        result = self.mod._get_protected_branches(tmp_path)
+        assert result == {"main", "master"}
+
+    def test_config_file_missing(self, tmp_path):
+        result = self.mod._get_protected_branches(tmp_path)
+        assert result == {"main", "master"}
+
+    def test_config_malformed_json(self, tmp_path):
+        config_dir = tmp_path / ".codemonkeys"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text("not json{{{")
+        result = self.mod._get_protected_branches(tmp_path)
+        assert result == {"main", "master"}
+
+    def test_config_protected_branches_not_list(self, tmp_path):
+        config_dir = tmp_path / ".codemonkeys"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(json.dumps({"protected_branches": "develop"}))
+        result = self.mod._get_protected_branches(tmp_path)
+        assert result == {"main", "master"}
