@@ -38,17 +38,18 @@ def _is_git_repo(cwd: Path) -> bool:
         cwd=cwd,
         capture_output=True,
         text=True,
+        timeout=10,
     )
     return result.returncode == 0
 
 
 def _run_git(cmd: list[str], cwd: Path) -> str:
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=10)
-    return result.stdout
+    return result.stdout or ""
 
 
 def _cleanup(codemonkeys_dir: Path) -> None:
-    for marker in [".ruff-warned", ".mypy-warned", ".pytest-warned", ".active-skill"]:
+    for marker in [".ruff-warned", ".pyright-warned", ".pytest-warned", ".active-skill"]:
         (codemonkeys_dir / marker).unlink(missing_ok=True)
 
     attempt_file = codemonkeys_dir / "stop-gate" / "attempt-count"

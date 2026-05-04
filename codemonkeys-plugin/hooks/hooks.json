@@ -4,13 +4,19 @@
       {
         "hooks": [{
           "type": "command",
+          "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/branch_guard.py"
+        }]
+      },
+      {
+        "hooks": [{
+          "type": "command",
           "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/user_prompt_submit.py"
         }]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|Edit|Write",
+        "matcher": "Bash|Edit|Write|Read",
         "hooks": [{
           "type": "command",
           "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/pre_tool_use.py"
@@ -37,10 +43,16 @@
     ],
     "Stop": [
       {
-        "hooks": [{
-          "type": "command",
-          "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/stop.py"
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/stop.py"
+          },
+          {
+            "type": "command",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/stop_memory.py"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -48,6 +60,38 @@
         "hooks": [{
           "type": "command",
           "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py"
+        }]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/permission_request.py"
+        }]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/notification.py"
+        }]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_start.py"
+        }]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_stop.py"
         }]
       }
     ]

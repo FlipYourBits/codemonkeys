@@ -34,12 +34,14 @@ def main() -> None:
         cwd=cwd,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     format_result = subprocess.run(
         [sys.executable, "-m", "ruff", "format", file_str],
         cwd=cwd,
         capture_output=True,
         text=True,
+        timeout=120,
     )
 
     changed = "1 file reformatted" in format_result.stderr or "Fixed" in check_result.stdout

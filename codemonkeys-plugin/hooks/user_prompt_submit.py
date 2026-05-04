@@ -31,7 +31,7 @@ def main() -> None:
 
     checks = {
         "ruff": (_run_ruff, file_args, results_dir, cwd),
-        "mypy": (_run_mypy, file_args, results_dir, cwd),
+        "pyright": (_run_pyright, file_args, results_dir, cwd),
         "pytest": (_run_pytest, results_dir, cwd),
         "pip-audit": (_run_pip_audit, results_dir, cwd),
     }
@@ -100,22 +100,25 @@ def _run_ruff(file_args: list[str], results_dir: Path, cwd: Path) -> str:
     return f"{count} errors" if count > 0 else "clean"
 
 
-def _run_mypy(file_args: list[str], results_dir: Path, cwd: Path) -> str:
-    if not _tool_available("mypy"):
+def _run_pyright(file_args: list[str], results_dir: Path, cwd: Path) -> str:
+    if not _tool_available("pyright"):
         return "not installed"
 
     targets = file_args if file_args else ["."]
     result = subprocess.run(
-        [sys.executable, "-m", "mypy", "--output", "json", *targets],
+        [sys.executable, "-m", "pyright", "--outputjson", *targets],
         cwd=cwd,
         capture_output=True,
         text=True,
         timeout=120,
     )
-    (results_dir / "mypy.json").write_text(result.stdout or "[]")
+    (results_dir / "pyright.json").write_text(result.stdout or "{}")
 
-    error_lines = [l for l in (result.stdout or "").strip().splitlines() if l.strip()]
-    count = len(error_lines)
+    try:
+        data = json.loads(result.stdout or "{}")
+        count = data.get("summary", {}).get("errorCount", 0)
+    except json.JSONDecodeError:
+        return "parse error"
     return f"{count} errors" if count > 0 else "clean"
 
 

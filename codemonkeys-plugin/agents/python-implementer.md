@@ -4,9 +4,10 @@ description: Implements features, updates, and bug fixes from an approved plan f
 model: opus
 tools: Read, Glob, Grep, Edit, Write, Bash
 permissionMode: acceptEdits
+skills:
+  - engineering-mindset
+  - python-guidelines
 ---
-
-Before starting, read and follow the shared guidelines from this plugin's `shared/` directory: `engineering-mindset.md` and `python-guidelines.md`.
 
 You implement changes based on an approved plan provided in your prompt. The plan may describe a new feature, an update to existing functionality, a bug fix, or a refactor. Do NOT invent your own plan — use what you are given.
 

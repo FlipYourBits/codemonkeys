@@ -1,6 +1,6 @@
 ---
 name: python-review
-description: "Full Python code review: mechanical checks (mypy, pytest, ruff, coverage, pip-audit) plus quality, security, changelog, and README review. Presents findings and fixes on approval."
+description: "Full Python code review: mechanical checks (pyright, pytest, ruff, coverage, pip-audit) plus quality, security, changelog, and README review. Presents findings and fixes on approval."
 allowed-tools: Bash(python -m *) Bash(git diff *) Bash(git ls-files *) Bash(git log *)
 ---
 
@@ -26,7 +26,7 @@ Present all review categories with descriptions:
 |----------|-------------|
 | Quality review | Naming, design, complexity, patterns |
 | Security audit | Injection, auth, secrets, deserialization |
-| Type checking | mypy |
+| Type checking | pyright |
 | Tests & coverage | pytest with coverage |
 | Lint & format check | ruff |
 | Dependency audit | pip-audit |
@@ -52,7 +52,7 @@ Only read git-tracked files. Skip `.venv/`, `__pycache__/`, `*.pyc`, `*.egg-info
 Read check results from `.codemonkeys/check-results/`. For each non-excluded category:
 
 - `ruff.json` — lint findings
-- `mypy.json` — type errors
+- `pyright.json` — type errors
 - `pytest.json` — test results and coverage
 - `pip-audit.json` — dependency vulnerabilities
 
@@ -61,7 +61,7 @@ If a result file is missing, the tool is not installed — note it and continue 
 If no result files exist (hook didn't run, e.g., skill was invoked without the slash command), fall back to running commands directly:
 
 - `python -m ruff check --output-format json .` (if not excluded)
-- `python -m mypy --output json .` (if not excluded)
+- `python -m pyright --outputjson .` (if not excluded)
 - `python -m pytest --cov --cov-report=json --cov-report=term -x -q --tb=short --no-header` (if not excluded)
 - `python -m pip_audit --format json --strict --desc` (if not excluded)
 
@@ -304,7 +304,7 @@ For each approved finding:
 
 ## Step 9 — Verify-fix loop
 
-After applying fixes, the PostToolUse hook auto-formats changed files with ruff. For remaining verification, read the latest check results or run `python -m mypy .` and `python -m pytest -x -q --tb=short --no-header` to confirm fixes didn't introduce new issues.
+After applying fixes, the PostToolUse hook auto-formats changed files with ruff. For remaining verification, read the latest check results or run `python -m pyright .` and `python -m pytest -x -q --tb=short --no-header` to confirm fixes didn't introduce new issues.
 
 Maximum 2 cycles. If still failing after cycle 2, **STOP** and report:
 

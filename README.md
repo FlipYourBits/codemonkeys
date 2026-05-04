@@ -26,7 +26,7 @@ Full Python code review with mechanical checks and manual review checklists.
 /codemonkeys:python-review
 ```
 
-Runs up to 9 review categories: quality, security, type checking (mypy), tests (pytest), coverage, linting (ruff), dependency audit (pip-audit), changelog review, and README review. Presents findings with severity and recommendations, then fixes approved issues.
+Runs up to 9 review categories: quality, security, type checking (pyright), tests (pytest), coverage, linting (ruff), dependency audit (pip-audit), changelog review, and README review. Presents findings with severity and recommendations, then fixes approved issues.
 
 ### python-feature
 
@@ -36,7 +36,7 @@ Design-to-implementation workflow for new Python features.
 /codemonkeys:python-feature
 ```
 
-Walks through clarifying questions, design approaches, and a plan document. Once the plan is approved, dispatches the `python-implementer` agent to implement with TDD, then verifies with ruff, mypy, and pytest.
+Walks through clarifying questions, design approaches, and a plan document. Once the plan is approved, dispatches the `python-implementer` agent to implement with TDD, then verifies with ruff, pyright, and pytest.
 
 ### project-architecture
 
@@ -78,7 +78,7 @@ The plugin includes 6 Claude Code hooks that automate deterministic checks. Thes
 
 | Hook | Event | What it does |
 |------|-------|-------------|
-| Check runner | UserPromptSubmit | Runs ruff, mypy, pytest, pip-audit before code review |
+| Check runner | UserPromptSubmit | Runs ruff, pyright, pytest, pip-audit before code review |
 | Command guard | PreToolUse | Blocks destructive commands (rm -rf, force push, etc.) |
 | Auto-formatter | PostToolUse | Runs ruff fix + format on Python files after each edit |
 | Quality gate | Stop | Blocks completion if tests are failing (max 2 attempts) |

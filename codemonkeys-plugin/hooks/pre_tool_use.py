@@ -1,4 +1,4 @@
-"""PreToolUse hook — block destructive commands, opt-in write sandbox."""
+"""PreToolUse hook — block destructive commands, .env access, opt-in write sandbox."""
 from __future__ import annotations
 
 import json
@@ -16,6 +16,8 @@ DESTRUCTIVE_PATTERNS = [
     (r"chmod\s+777", "Use more restrictive permissions (644 or 755)"),
 ]
 
+ENV_SAFE_SUFFIXES = {".sample", ".example", ".template", ".test", ".ci"}
+
 
 def main() -> None:
     data = json.loads(sys.stdin.read())
@@ -29,6 +31,10 @@ def main() -> None:
             if re.search(pattern, command, re.IGNORECASE):
                 _deny(f"Blocked destructive command: `{pattern}`. {suggestion}.")
                 return
+
+    if _is_env_file_access(tool_name, tool_input):
+        _deny("Blocked: .env file access. Use .env.sample or .env.example instead.")
+        return
 
     if tool_name in ("Edit", "Write"):
         if not _sandbox_enabled(cwd):
@@ -44,12 +50,27 @@ def main() -> None:
             return
 
 
+def _is_env_file_access(tool_name: str, tool_input: dict[str, str]) -> bool:
+    if tool_name in ("Read", "Edit", "Write"):
+        file_path = tool_input.get("file_path", "")
+        name = Path(file_path).name
+        if name.startswith(".env") and not any(name.endswith(s) for s in ENV_SAFE_SUFFIXES):
+            return True
+
+    if tool_name == "Bash":
+        command = tool_input.get("command", "")
+        if re.search(r"\.env\b(?!\.(?:sample|example|template|test|ci))", command):
+            return True
+
+    return False
+
+
 def _sandbox_enabled(cwd: Path) -> bool:
     config_path = cwd / ".codemonkeys" / "config.json"
     if not config_path.exists():
         return False
     try:
-        config = json.loads(config_path.read_text())
+        config: dict[str, object] = json.loads(config_path.read_text())
         return config.get("sandbox", False) is True
     except (json.JSONDecodeError, OSError):
         return False
