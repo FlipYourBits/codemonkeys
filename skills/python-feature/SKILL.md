@@ -1,6 +1,6 @@
 ---
 name: python-feature
-description: "Design-to-implementation workflow for Python features. Architecture check, incremental planning with compaction resilience, branch management, then TDD implementation via python-implementer agent."
+description: "Design-to-implementation workflow for Python features. Incremental planning with compaction resilience, branch management, then TDD implementation via python-implementer agent."
 skills:
   - engineering-mindset
   - python-guidelines
@@ -31,38 +31,26 @@ Before starting anything, scan for in-progress plans in `docs/codemonkeys/plans/
 
 | Plan status | Resume from |
 |-------------|-------------|
-| `exploring` | Step 2 — re-read context, then continue to questions |
-| `questions` | Step 3 — find unanswered questions (marked `*pending*`), continue asking |
-| `approaches` | Step 4 — check if an approach was selected, present options if not |
-| `design` | Step 5 — find empty Design subsections, continue from the next one |
-| `ready` | Step 6 — present plan for approval |
-| `approved` | Step 7 — branch check, then dispatch |
-| `implementing` | Step 8 — check if implementer finished, report results |
+| `exploring` | Step 1 — re-read context, then continue to questions |
+| `questions` | Step 2 — find unanswered questions (marked `*pending*`), continue asking |
+| `approaches` | Step 3 — check if an approach was selected, present options if not |
+| `design` | Step 4 — find empty Design subsections, continue from the next one |
+| `ready` | Step 5 — present plan for approval |
+| `approved` | Step 6 — branch check, then dispatch |
+| `implementing` | Step 7 — check if implementer finished, report results |
 
-## Step 1 — Architecture check
-
-Before any planning, ensure the codebase map is current:
-
-- Run `git rev-parse HEAD` and read `.architecture-hash`.
-- If `docs/codemonkeys/architecture.md` does not exist or the hash does not match HEAD:
-  - Ask: "Architecture docs are missing/outdated — want me to update them first? This gives me a better map of the codebase before planning."
-  - If yes: read and follow `project-architecture` to generate or update the architecture docs. Then continue to Step 2.
-  - If no: continue to Step 2 without them.
-- If the hash matches HEAD: continue silently to Step 2.
-
-## Step 2 — Create plan file and explore context
+## Step 1 — Create plan file and explore context
 
 Create the plan file immediately. It is the persistent state for the entire workflow — every decision, question, and answer gets written here so the workflow survives context compaction.
 
 - If the user included a feature description with the command, use it. Otherwise ask: "What do you want to build?" and wait for a response.
 - Generate plan filename: `docs/codemonkeys/plans/YYYY-MM-DD-<feature-slug>.md`
 - Write the initial plan file (see Plan file format below).
-- Read `docs/codemonkeys/architecture.md` if it exists.
 - Read recent commits: `git log --oneline -10`
 - Read relevant source files based on what the user described.
 - Update the plan file: fill in the **Context** section with what you learned about the codebase and the user's intent. Set status to `exploring`.
 
-## Step 3 — Clarifying questions
+## Step 2 — Clarifying questions
 
 - Update plan status to `questions`.
 - Ask one question at a time. Do NOT combine multiple questions into one message.
@@ -71,7 +59,7 @@ Create the plan file immediately. It is the persistent state for the entire work
 - **After each answer**: update the plan file — add the Q&A pair to the **Questions & Decisions** section. Mark unanswered questions as `*pending*`.
 - Keep going until you have a clear picture of what to build.
 
-## Step 4 — Propose 2-3 approaches
+## Step 3 — Propose 2-3 approaches
 
 - Update plan status to `approaches`.
 - Present approaches conversationally with tradeoffs.
@@ -79,7 +67,7 @@ Create the plan file immediately. It is the persistent state for the entire work
 - Each approach should name: key files affected, main tradeoff, rough complexity.
 - **After the user picks**: update the plan file — write all approaches to the **Approaches** section with the selected one marked.
 
-## Step 5 — Present design
+## Step 4 — Present design
 
 - Update plan status to `design`.
 - Present section by section, scaled to complexity.
@@ -88,7 +76,7 @@ Create the plan file immediately. It is the persistent state for the entire work
 - **After each subsection is confirmed**: update the plan file — write that subsection under **Design** and update **Acceptance Criteria**.
 - Be ready to revise and go back. If the user changes their mind, update the plan file to reflect the change.
 
-## Step 6 — Finalize and review plan
+## Step 5 — Finalize and review plan
 
 - Update plan status to `ready`.
 - Rewrite the plan file into its final form. The finalized plan must include:
@@ -101,7 +89,7 @@ Create the plan file immediately. It is the persistent state for the entire work
 - Wait for explicit approval. Do NOT proceed until user says yes.
 - If changes requested: update the plan, re-present, and ask again.
 
-## Step 7 — Branch check
+## Step 6 — Branch check
 
 - Update plan status to `approved`.
 - Run `git branch --show-current` to get the current branch.
@@ -113,7 +101,7 @@ Create the plan file immediately. It is the persistent state for the entire work
   - If no: proceed (the user knows what they're doing).
 - If already on a feature branch: proceed silently.
 
-## Step 8 — Dispatch python-implementer
+## Step 7 — Dispatch python-implementer
 
 - Update plan status to `implementing`.
 - Dispatch the `python-implementer` agent.
@@ -121,7 +109,7 @@ Create the plan file immediately. It is the persistent state for the entire work
 - The implementer reads the file and implements with TDD.
 - Do NOT pass additional context — the plan file is the complete contract.
 
-## Step 9 — Verify and format
+## Step 8 — Verify and format
 
 After the implementer finishes:
 
@@ -129,7 +117,7 @@ After the implementer finishes:
 2. Run `pytest -x -q --tb=short --no-header` to verify all tests pass.
 3. If tests fail, read the failure output and fix directly (smallest correct change). Maximum 2 fix cycles — if tests still fail after 2 attempts, report the remaining failures and move on.
 
-## Step 10 — Report and clean up
+## Step 9 — Report and clean up
 
 - Update the plan file status to `complete`.
 - Report:

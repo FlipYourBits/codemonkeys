@@ -41,7 +41,6 @@ pyright .
 **User-invocable skills:**
 - `python-review` — orchestrates parallel code review via agents
 - `python-feature` — design-to-implementation workflow
-- `project-architecture` — generates/updates architecture docs
 
 **Dependency skills (non-invocable, loaded by agents):**
 - `engineering-mindset` — core engineering principles
