@@ -1,0 +1,9 @@
+{
+  "name": "codemonkeys",
+  "description": "Skill-driven workflows for Python development: code review, feature implementation, and architecture documentation",
+  "version": "0.2.0",
+  "author": {
+    "name": "James Whiteley IV"
+  },
+  "license": "MIT"
+}

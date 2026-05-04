@@ -47,25 +47,18 @@ Based on the scope chosen in Step 1:
 
 Only read git-tracked files. Skip `.venv/`, `__pycache__/`, `*.pyc`, `*.egg-info/`.
 
-## Step 4 — Read mechanical check results
+## Step 4 — Run mechanical checks
 
-Read check results from `.codemonkeys/check-results/`. For each non-excluded category:
+Run these checks directly. For each non-excluded category:
 
-- `ruff.json` — lint findings
-- `pyright.json` — type errors
-- `pytest.json` — test results and coverage
-- `pip-audit.json` — dependency vulnerabilities
+- `python -m ruff check --output-format json <scope>` (lint)
+- `python -m pyright --outputjson <scope>` (type checking)
+- `python -m pytest --cov --cov-report=json --cov-report=term -x -q --tb=short --no-header` (tests & coverage)
+- `python -m pip_audit --format json --strict --desc` (dependency audit)
 
-If a result file is missing, the tool is not installed — note it and continue with the remaining categories.
+Where `<scope>` is the files/directories from Step 1 (or `.` for full repo).
 
-If no result files exist (hook didn't run, e.g., skill was invoked without the slash command), fall back to running commands directly:
-
-- `python -m ruff check --output-format json .` (if not excluded)
-- `python -m pyright --outputjson .` (if not excluded)
-- `python -m pytest --cov --cov-report=json --cov-report=term -x -q --tb=short --no-header` (if not excluded)
-- `python -m pip_audit --format json --strict --desc` (if not excluded)
-
-Handle missing tools gracefully — if a tool is not installed, note it and continue.
+Handle missing tools gracefully — if a tool is not installed, note it and continue with the remaining categories.
 
 ## Step 5 — Apply review checklists
 
@@ -304,7 +297,10 @@ For each approved finding:
 
 ## Step 9 — Verify-fix loop
 
-After applying fixes, the PostToolUse hook auto-formats changed files with ruff. For remaining verification, read the latest check results or run `python -m pyright .` and `python -m pytest -x -q --tb=short --no-header` to confirm fixes didn't introduce new issues.
+After applying fixes:
+
+1. Run `ruff check --fix .` and `ruff format .` on changed files. If ruff is not installed, skip.
+2. Run `python -m pyright .` and `python -m pytest -x -q --tb=short --no-header` to confirm fixes didn't introduce new issues.
 
 Maximum 2 cycles. If still failing after cycle 2, **STOP** and report:
 

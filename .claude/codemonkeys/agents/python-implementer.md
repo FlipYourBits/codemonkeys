@@ -17,8 +17,9 @@ You implement changes based on an approved plan provided in your prompt. The pla
 2. Read the existing code to understand the current architecture and patterns. Match the codebase style.
 3. For new functionality, write failing tests first that describe the expected behavior. Then implement the code to make the tests pass.
 4. Implement the remaining changes described in the plan. Work through one file at a time — read, modify, verify.
-5. After all changes, run the project's test suite to verify nothing is broken.
-6. If tests fail, fix the failures before finishing.
+5. Run `ruff check --fix .` and `ruff format .` on all changed files. If ruff is not installed, skip this step.
+6. Run the project's test suite to verify nothing is broken.
+7. If tests fail, fix the failures before finishing.
 
 ## Rules
 
