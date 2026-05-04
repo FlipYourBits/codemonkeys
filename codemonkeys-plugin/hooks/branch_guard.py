@@ -71,3 +71,54 @@ def _get_protected_branches(cwd: Path) -> set[str]:
     except (json.JSONDecodeError, OSError):
         pass
     return protected
+
+
+def _is_git_repo(cwd: Path) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return result.returncode == 0
+
+
+def _current_branch(cwd: Path) -> str:
+    result = subprocess.run(
+        ["git", "branch", "--show-current"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return result.stdout.strip()
+
+
+def main() -> None:
+    data = json.loads(sys.stdin.read())
+    prompt = data.get("prompt", "")
+    cwd = Path(data.get("cwd", ".")).resolve()
+
+    if not _is_git_repo(cwd):
+        sys.exit(0)
+
+    branch = _current_branch(cwd)
+    if not branch:
+        sys.exit(0)
+
+    protected = _get_protected_branches(cwd)
+    if branch not in protected:
+        sys.exit(0)
+
+    suggested = _infer_branch_name(prompt)
+    print(
+        f"[codemonkeys] You're on '{branch}' (protected branch).\n"
+        f"Suggested branch: git checkout -b {suggested}\n"
+        f"Create the branch and resubmit, or switch to an existing feature branch."
+    )
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

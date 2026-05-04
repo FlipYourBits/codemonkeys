@@ -133,3 +133,58 @@ class TestGetProtectedBranches:
         (config_dir / "config.json").write_text(json.dumps({"protected_branches": "develop"}))
         result = self.mod._get_protected_branches(tmp_path)
         assert result == {"main", "master"}
+
+
+def _init_git_repo(path: Path, branch: str = "main") -> None:
+    subprocess.run(["git", "init", "-b", branch], cwd=path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=path, capture_output=True, check=True)
+    (path / "README.md").write_text("init")
+    subprocess.run(["git", "add", "."], cwd=path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=path, capture_output=True, check=True)
+
+
+class TestHookFlow:
+    def test_blocks_on_main(self, tmp_path):
+        _init_git_repo(tmp_path, "main")
+        result = run_hook({"prompt": "add a new feature", "cwd": str(tmp_path)})
+        assert result.returncode != 0
+        assert "protected branch" in result.stdout.lower()
+        assert "git checkout -b" in result.stdout
+
+    def test_blocks_on_master(self, tmp_path):
+        _init_git_repo(tmp_path, "master")
+        result = run_hook({"prompt": "fix something", "cwd": str(tmp_path)})
+        assert result.returncode != 0
+        assert "git checkout -b fix/" in result.stdout
+
+    def test_allows_feature_branch(self, tmp_path):
+        _init_git_repo(tmp_path, "main")
+        subprocess.run(["git", "checkout", "-b", "feat/my-feature"], cwd=tmp_path, capture_output=True, check=True)
+        result = run_hook({"prompt": "add a new feature", "cwd": str(tmp_path)})
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
+    def test_allows_non_git_dir(self, tmp_path):
+        result = run_hook({"prompt": "add a new feature", "cwd": str(tmp_path)})
+        assert result.returncode == 0
+
+    def test_blocks_custom_protected_branch(self, tmp_path):
+        _init_git_repo(tmp_path, "develop")
+        config_dir = tmp_path / ".codemonkeys"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(json.dumps({"protected_branches": ["develop"]}))
+        result = run_hook({"prompt": "add a feature", "cwd": str(tmp_path)})
+        assert result.returncode != 0
+        assert "protected branch" in result.stdout.lower()
+
+    def test_suggested_branch_in_output(self, tmp_path):
+        _init_git_repo(tmp_path, "main")
+        result = run_hook({"prompt": "fix the login bug", "cwd": str(tmp_path)})
+        assert "git checkout -b fix/login-bug" in result.stdout
+
+    def test_detached_head_allowed(self, tmp_path):
+        _init_git_repo(tmp_path, "main")
+        subprocess.run(["git", "checkout", "--detach"], cwd=tmp_path, capture_output=True, check=True)
+        result = run_hook({"prompt": "add something", "cwd": str(tmp_path)})
+        assert result.returncode == 0
