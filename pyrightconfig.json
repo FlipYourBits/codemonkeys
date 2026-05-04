@@ -1,7 +1,0 @@
-{
-  "include": ["codemonkeys-plugin", "tests"],
-  "pythonVersion": "3.10",
-  "typeCheckingMode": "basic",
-  "venvPath": ".",
-  "venv": ".venv"
-}

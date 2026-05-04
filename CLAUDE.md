@@ -9,8 +9,7 @@ Claude Code plugin providing skill-driven workflows for Python development. Skil
   codemonkeys/                # The Claude Code plugin
     skills/                   # Slash-command workflows (/codemonkeys:*)
     agents/                   # Subagents dispatched by skills
-    shared/                   # Shared guidelines referenced by skills/agents
-docs/plans/                   # Approved feature plans (committed)
+docs/codemonkeys/plans/                   # Approved feature plans (committed)
 ```
 
 ## How to Work Here
@@ -33,8 +32,6 @@ pyright .
 
 ## Detailed Docs (Read When Relevant)
 
-- `.claude/codemonkeys/shared/engineering-mindset.md` — core philosophy: simplicity, correctness, fail-loud boundaries
-- `.claude/codemonkeys/shared/python-guidelines.md` — Python conventions: type hints, dataclasses, pure functions, pathlib
-- `.claude/codemonkeys/skills/*/SKILL.md` — full skill specifications
+- `.claude/codemonkeys/skills/*/SKILL.md` — full skill specifications (includes `engineering-mindset` and `python-guidelines` as non-invocable dependency skills)
 - `.claude/codemonkeys/agents/python-implementer.md` — TDD agent spec
 - `README.md` — installation, usage

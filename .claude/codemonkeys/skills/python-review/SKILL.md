@@ -2,9 +2,10 @@
 name: python-review
 description: "Full Python code review: mechanical checks (pyright, pytest, ruff, coverage, pip-audit) plus quality, security, changelog, and README review. Presents findings and fixes on approval."
 allowed-tools: Bash(python -m *) Bash(git diff *) Bash(git ls-files *) Bash(git log *)
+skills:
+  - engineering-mindset
+  - python-guidelines
 ---
-
-Read and follow `shared/engineering-mindset.md` and `shared/python-guidelines.md` before proceeding.
 
 ## Step 1 — Determine scope
 

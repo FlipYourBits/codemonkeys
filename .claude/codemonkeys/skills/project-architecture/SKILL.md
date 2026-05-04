@@ -1,9 +1,10 @@
 ---
 name: project-architecture
-description: "Builds and maintains docs/architecture.md — a comprehensive project snapshot. Checks commit hash for freshness, updates incrementally or from scratch."
+description: "Builds and maintains docs/codemonkeys/architecture.md — a comprehensive project snapshot. Checks commit hash for freshness, updates incrementally or from scratch."
+skills:
+  - engineering-mindset
+  - python-guidelines
 ---
-
-Read and follow `shared/engineering-mindset.md` and `shared/python-guidelines.md` before proceeding.
 
 ## Step 1 — Check freshness
 
@@ -16,16 +17,16 @@ Read and follow `shared/engineering-mindset.md` and `shared/python-guidelines.md
 ## Step 2 — Incremental update
 
 - Run `git diff <stored_hash>..HEAD` to see what changed since the last update.
-- Read the current `docs/architecture.md`.
+- Read the current `docs/codemonkeys/architecture.md`.
 - Read the changed files to understand them in context.
-- Rewrite `docs/architecture.md` in full incorporating the changes — do not patch individual sections, rewrite the whole document.
+- Rewrite `docs/codemonkeys/architecture.md` in full incorporating the changes — do not patch individual sections, rewrite the whole document.
 - Proceed to Step 4.
 
 ## Step 3 — First run (from scratch)
 
 - Run `git ls-files` to discover all tracked source files.
 - Read source files to understand the project structure, purpose, and patterns.
-- Write `docs/architecture.md` from scratch following the document sections below.
+- Write `docs/codemonkeys/architecture.md` from scratch following the document sections below.
 - Proceed to Step 4.
 
 ## Step 4 — Write hash
@@ -34,7 +35,7 @@ Read and follow `shared/engineering-mindset.md` and `shared/python-guidelines.md
 
 ## Document sections (all required)
 
-Every version of `docs/architecture.md` must contain exactly these five sections:
+Every version of `docs/codemonkeys/architecture.md` must contain exactly these five sections:
 
 ### 1. Project Overview
 
@@ -65,7 +66,7 @@ Every version of `docs/architecture.md` must contain exactly these five sections
 
 ## Rules
 
-- Never modify source code — only write to `docs/` and `.architecture-hash`.
+- Never modify source code — only write to `docs/codemonkeys/` and `.architecture-hash`.
 - Describe what IS, not what SHOULD BE. No recommendations.
-- Keep `docs/architecture.md` under 500 lines.
+- Keep `docs/codemonkeys/architecture.md` under 500 lines.
 - Only analyze files tracked by git. Skip `.venv/`, `node_modules/`, etc.

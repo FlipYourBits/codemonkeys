@@ -1,9 +1,10 @@
 ---
 name: python-feature
 description: "Design-to-implementation workflow for Python features. Architecture check, incremental planning with compaction resilience, branch management, then TDD implementation via python-implementer agent."
+skills:
+  - engineering-mindset
+  - python-guidelines
 ---
-
-Read and follow `shared/engineering-mindset.md` and `shared/python-guidelines.md` before proceeding.
 
 ## Hard gate
 
@@ -11,11 +12,11 @@ Do NOT write any code or dispatch any agent until the user has approved the plan
 
 ## Step 0 — Resume check
 
-Before starting anything, scan for in-progress plans in `docs/plans/`.
+Before starting anything, scan for in-progress plans in `docs/codemonkeys/plans/`.
 
 ### Scan for active plans
 
-- List all `.md` files in `docs/plans/`.
+- List all `.md` files in `docs/codemonkeys/plans/`.
 - For each file, read the frontmatter `status` field.
 - Collect any plans where status is not `complete`, `cancelled`, `abandoned`, or absent.
 
@@ -43,7 +44,7 @@ Before starting anything, scan for in-progress plans in `docs/plans/`.
 Before any planning, ensure the codebase map is current:
 
 - Run `git rev-parse HEAD` and read `.architecture-hash`.
-- If `docs/architecture.md` does not exist or the hash does not match HEAD:
+- If `docs/codemonkeys/architecture.md` does not exist or the hash does not match HEAD:
   - Ask: "Architecture docs are missing/outdated — want me to update them first? This gives me a better map of the codebase before planning."
   - If yes: read and follow `skills/project-architecture/SKILL.md` to generate or update the architecture docs. Then continue to Step 2.
   - If no: continue to Step 2 without them.
@@ -54,9 +55,9 @@ Before any planning, ensure the codebase map is current:
 Create the plan file immediately. It is the persistent state for the entire workflow — every decision, question, and answer gets written here so the workflow survives context compaction.
 
 - If the user included a feature description with the command, use it. Otherwise ask: "What do you want to build?" and wait for a response.
-- Generate plan filename: `docs/plans/YYYY-MM-DD-<feature-slug>.md`
+- Generate plan filename: `docs/codemonkeys/plans/YYYY-MM-DD-<feature-slug>.md`
 - Write the initial plan file (see Plan file format below).
-- Read `docs/architecture.md` if it exists.
+- Read `docs/codemonkeys/architecture.md` if it exists.
 - Read recent commits: `git log --oneline -10`
 - Read relevant source files based on what the user described.
 - Update the plan file: fill in the **Context** section with what you learned about the codebase and the user's intent. Set status to `exploring`.
@@ -96,7 +97,7 @@ Create the plan file immediately. It is the persistent state for the entire work
   - Key design decisions and rationale
   - Expected behavior and acceptance criteria
 - The plan describes *what* to build, not line-by-line code.
-- Present: "Plan finalized at `docs/plans/<filename>.md`. Please review and let me know if you want changes before I start implementation."
+- Present: "Plan finalized at `docs/codemonkeys/plans/<filename>.md`. Please review and let me know if you want changes before I start implementation."
 - Wait for explicit approval. Do NOT proceed until user says yes.
 - If changes requested: update the plan, re-present, and ask again.
 
@@ -116,7 +117,7 @@ Create the plan file immediately. It is the persistent state for the entire work
 
 - Update plan status to `implementing`.
 - Dispatch the `python-implementer` agent.
-- Pass the plan file path as the prompt: "Implement the plan in `docs/plans/<filename>.md`."
+- Pass the plan file path as the prompt: "Implement the plan in `docs/codemonkeys/plans/<filename>.md`."
 - The implementer reads the file and implements with TDD.
 - Do NOT pass additional context — the plan file is the complete contract.
 
@@ -210,7 +211,7 @@ When cancelled:
 
 After context compaction, the skill instructions may be compressed away. If this happens:
 
-- The user can re-invoke `/codemonkeys:python-feature` to trigger Step 0, which scans `docs/plans/` and finds the active plan by its status.
+- The user can re-invoke `/codemonkeys:python-feature` to trigger Step 0, which scans `docs/codemonkeys/plans/` and finds the active plan by its status.
 - If you notice a plan reference in the conversation but don't have the skill instructions loaded, tell the user: "There's an active plan but I've lost the skill context — run `/codemonkeys:python-feature` to resume."
 
 ## Rules
