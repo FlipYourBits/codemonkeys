@@ -38,7 +38,6 @@ def _tool_detail(block: ToolUseBlock) -> str:
 
 
 class _Display:
-
     def __init__(self) -> None:
         self.agents: dict[str, dict[str, Any]] = {}
         self.status = "running"
@@ -160,7 +159,7 @@ class AgentRunner:
         self._console = Console(stderr=True)
 
     async def run(self, options: ClaudeAgentOptions, prompt: str) -> str:
-        from codemonkeys.sandbox import restrict
+        from codemonkeys.core.sandbox import restrict
 
         restrict(self.cwd)
 
@@ -174,7 +173,9 @@ class AgentRunner:
                 "message": {"role": "user", "content": prompt},
             }
 
-        with Live(display.render(), console=self._console, refresh_per_second=4) as live:
+        with Live(
+            display.render(), console=self._console, refresh_per_second=4
+        ) as live:
             async for message in query(prompt=_prompt(), options=options):
                 if isinstance(message, AssistantMessage):
                     if not display._has_subagents:
@@ -207,7 +208,9 @@ class AgentRunner:
                         else getattr(u, "tool_uses", 0)
                     )
                     display.progress_agent(
-                        message.task_id, tokens=tokens, tool_uses=tools,
+                        message.task_id,
+                        tokens=tokens,
+                        tool_uses=tools,
                     )
                     live.update(display.render())
 

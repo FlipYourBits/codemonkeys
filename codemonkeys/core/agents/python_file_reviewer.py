@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
 
-from codemonkeys.prompts import CODE_QUALITY, PYTHON_GUIDELINES, SECURITY_OBSERVATIONS
+from codemonkeys.core.prompts import (
+    CODE_QUALITY,
+    PYTHON_GUIDELINES,
+    SECURITY_OBSERVATIONS,
+)
 
 
 def make_python_file_reviewer(file_path: str) -> AgentDefinition:

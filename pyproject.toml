@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codemonkeys"
-version = "0.2.0"
+version = "0.3.0"
 description = "AI agent workflows powered by the Claude Agent SDK."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,7 +21,9 @@ classifiers = [
 ]
 dependencies = [
     "claude-agent-sdk>=0.1.0,<1.0",
-    "rich>=13.0,<14",
+    "rich>=14.2.0",
+    "textual>=8.0",
+    "pydantic>=2.0,<3",
 ]
 
 [project.optional-dependencies]
@@ -36,14 +38,14 @@ dev = [
     "pytest-asyncio>=0.23",
 ]
 
+[project.scripts]
+codemonkeys = "codemonkeys.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/FlipYourBits/codemonkeys"
 
 [tool.hatch.build.targets.wheel]
 packages = ["codemonkeys"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"codemonkeys_reference" = "codemonkeys_reference"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

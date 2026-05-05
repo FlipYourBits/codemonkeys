@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from claude_agent_sdk import AgentDefinition
 
-from codemonkeys.prompts import ENGINEERING_MINDSET, PYTHON_CMD, PYTHON_GUIDELINES
+from codemonkeys.core.prompts import ENGINEERING_MINDSET, PYTHON_CMD, PYTHON_GUIDELINES
 
 
 def make_python_implementer() -> AgentDefinition:

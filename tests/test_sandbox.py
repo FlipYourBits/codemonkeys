@@ -1,4 +1,4 @@
-"""Tests for codemonkeys.sandbox — runs in subprocesses since Landlock is irrevocable."""
+"""Tests for codemonkeys.core.sandbox — runs in subprocesses since Landlock is irrevocable."""
 
 from __future__ import annotations
 
@@ -22,11 +22,10 @@ def _run_sandboxed(code: str) -> subprocess.CompletedProcess[str]:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Landlock is Linux-only")
 class TestLandlockSandbox:
-
     def test_blocks_writes_outside_project(self) -> None:
         r = _run_sandboxed("""\
             from pathlib import Path
-            from codemonkeys.sandbox import restrict
+            from codemonkeys.core.sandbox import restrict
             project = Path("/tmp/sandbox_test_block")
             project.mkdir(exist_ok=True)
             restrict(project)
@@ -42,7 +41,7 @@ class TestLandlockSandbox:
     def test_allows_writes_inside_project(self) -> None:
         r = _run_sandboxed("""\
             from pathlib import Path
-            from codemonkeys.sandbox import restrict
+            from codemonkeys.core.sandbox import restrict
             project = Path("/tmp/sandbox_test_allow")
             project.mkdir(exist_ok=True)
             restrict(project)
@@ -59,7 +58,7 @@ class TestLandlockSandbox:
         r = _run_sandboxed("""\
             import tempfile
             from pathlib import Path
-            from codemonkeys.sandbox import restrict
+            from codemonkeys.core.sandbox import restrict
             project = Path("/tmp/sandbox_test_tmp")
             project.mkdir(exist_ok=True)
             restrict(project)
@@ -75,7 +74,7 @@ class TestLandlockSandbox:
         r = _run_sandboxed("""\
             import subprocess, sys
             from pathlib import Path
-            from codemonkeys.sandbox import restrict
+            from codemonkeys.core.sandbox import restrict
             project = Path("/tmp/sandbox_test_inherit")
             project.mkdir(exist_ok=True)
             restrict(project)
@@ -97,7 +96,7 @@ class TestLandlockSandbox:
     def test_idempotent(self) -> None:
         r = _run_sandboxed("""\
             from pathlib import Path
-            from codemonkeys.sandbox import restrict, is_restricted
+            from codemonkeys.core.sandbox import restrict, is_restricted
             project = Path("/tmp/sandbox_test_idempotent")
             project.mkdir(exist_ok=True)
             restrict(project)
@@ -112,7 +111,7 @@ class TestLandlockSandbox:
     def test_reads_unrestricted(self) -> None:
         r = _run_sandboxed("""\
             from pathlib import Path
-            from codemonkeys.sandbox import restrict
+            from codemonkeys.core.sandbox import restrict
             project = Path("/tmp/sandbox_test_read")
             project.mkdir(exist_ok=True)
             restrict(project)
@@ -127,7 +126,7 @@ class TestLandlockSandbox:
 
     def test_rejects_nonexistent_dir(self) -> None:
         r = _run_sandboxed("""\
-            from codemonkeys.sandbox import restrict
+            from codemonkeys.core.sandbox import restrict
             try:
                 restrict("/nonexistent/path/that/does/not/exist")
                 print("FAIL")
