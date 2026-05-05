@@ -1,4 +1,4 @@
-"""Review workflow — discover, review, triage, fix, verify."""
+"""Review workflow — discover, review, architecture, triage, fix, verify."""
 
 from __future__ import annotations
 
@@ -8,21 +8,29 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from codemonkeys.artifacts.schemas.architecture import ArchitectureFindings
 from codemonkeys.artifacts.schemas.findings import FileFindings, FixRequest
 from codemonkeys.artifacts.schemas.results import FixResult, VerificationResult
 from codemonkeys.artifacts.store import ArtifactStore
+from codemonkeys.core.agents.architecture_reviewer import make_architecture_reviewer
 from codemonkeys.core.agents.python_code_fixer import make_python_code_fixer
 from codemonkeys.core.agents.python_file_reviewer import make_python_file_reviewer
 from codemonkeys.workflows.phases import Phase, PhaseType, Workflow, WorkflowContext
 
 
-def make_review_workflow() -> Workflow:
+def make_review_workflow(*, auto_fix: bool = False) -> Workflow:
+    triage_type = PhaseType.AUTOMATED if auto_fix else PhaseType.GATE
     return Workflow(
         name="review",
         phases=[
             Phase(name="discover", phase_type=PhaseType.AUTOMATED, execute=_discover),
             Phase(name="review", phase_type=PhaseType.AUTOMATED, execute=_review),
-            Phase(name="triage", phase_type=PhaseType.GATE, execute=_triage),
+            Phase(
+                name="architecture",
+                phase_type=PhaseType.AUTOMATED,
+                execute=_architecture,
+            ),
+            Phase(name="triage", phase_type=triage_type, execute=_triage),
             Phase(name="fix", phase_type=PhaseType.AUTOMATED, execute=_fix),
             Phase(name="verify", phase_type=PhaseType.AUTOMATED, execute=_verify),
             Phase(name="report", phase_type=PhaseType.AUTOMATED, execute=_report),
@@ -106,8 +114,53 @@ async def _review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     return {"findings": all_findings}
 
 
+async def _architecture(ctx: WorkflowContext) -> dict[str, ArchitectureFindings]:
+    from codemonkeys.core.runner import AgentRunner
+
+    files: list[str] = ctx.phase_results["discover"]["files"]
+    per_file_findings: list[FileFindings] = ctx.phase_results["review"]["findings"]
+
+    file_summaries = [{"file": f.file, "summary": f.summary} for f in per_file_findings]
+
+    agent = make_architecture_reviewer(files=files, file_summaries=file_summaries)
+    runner = AgentRunner(cwd=ctx.cwd)
+    store = ArtifactStore(Path(ctx.cwd) / ".codemonkeys")
+
+    output_format = {
+        "type": "json_schema",
+        "schema": ArchitectureFindings.model_json_schema(),
+    }
+    raw = await runner.run_agent(
+        agent,
+        "Review the codebase for cross-file design issues.",
+        output_format=output_format,
+    )
+
+    structured = getattr(runner.last_result, "structured_output", None)
+    if structured:
+        if isinstance(structured, str):
+            structured = json.loads(structured)
+        findings = ArchitectureFindings.model_validate(structured)
+    else:
+        try:
+            findings = ArchitectureFindings.model_validate_json(raw)
+        except Exception:
+            findings = ArchitectureFindings(files_reviewed=files, findings=[])
+
+    store.save(ctx.run_id, "architecture-findings", findings)
+    return {"architecture_findings": findings}
+
+
 async def _triage(ctx: WorkflowContext) -> dict[str, list[FixRequest]]:
-    return {"fix_requests": ctx.user_input}
+    if ctx.user_input is not None:
+        return {"fix_requests": ctx.user_input}
+
+    per_file_findings: list[FileFindings] = ctx.phase_results["review"]["findings"]
+    fix_requests = []
+    for ff in per_file_findings:
+        if ff.findings:
+            fix_requests.append(FixRequest(file=ff.file, findings=ff.findings))
+    return {"fix_requests": fix_requests}
 
 
 async def _fix(ctx: WorkflowContext) -> dict[str, list[FixResult]]:
