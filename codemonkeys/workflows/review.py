@@ -15,6 +15,7 @@ from codemonkeys.artifacts.store import ArtifactStore
 from codemonkeys.core.agents.architecture_reviewer import make_architecture_reviewer
 from codemonkeys.core.agents.python_code_fixer import make_python_code_fixer
 from codemonkeys.core.agents.python_file_reviewer import make_python_file_reviewer
+from codemonkeys.core.analysis import analyze_files, format_analysis
 from codemonkeys.workflows.phases import Phase, PhaseType, Workflow, WorkflowContext
 
 
@@ -73,7 +74,10 @@ async def _discover(ctx: WorkflowContext) -> dict[str, Any]:
             "stderr": r.stderr[:500],
         }
 
-    return {"files": files, "mechanical": mechanical}
+    analyses = analyze_files(files, root=cwd)
+    structural_metadata = format_analysis(analyses)
+
+    return {"files": files, "mechanical": mechanical, "structural_metadata": structural_metadata}
 
 
 async def _review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
@@ -85,7 +89,7 @@ async def _review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     all_findings: list[FileFindings] = []
 
     for file_path in files:
-        agent = make_python_file_reviewer(file_path)
+        agent = make_python_file_reviewer([file_path])
         output_format = {
             "type": "json_schema",
             "schema": FileFindings.model_json_schema(),
@@ -118,11 +122,16 @@ async def _architecture(ctx: WorkflowContext) -> dict[str, ArchitectureFindings]
     from codemonkeys.core.runner import AgentRunner
 
     files: list[str] = ctx.phase_results["discover"]["files"]
+    structural_metadata: str = ctx.phase_results["discover"]["structural_metadata"]
     per_file_findings: list[FileFindings] = ctx.phase_results["review"]["findings"]
 
     file_summaries = [{"file": f.file, "summary": f.summary} for f in per_file_findings]
 
-    agent = make_architecture_reviewer(files=files, file_summaries=file_summaries)
+    agent = make_architecture_reviewer(
+        files=files,
+        file_summaries=file_summaries,
+        structural_metadata=structural_metadata,
+    )
     runner = AgentRunner(cwd=ctx.cwd)
     store = ArtifactStore(Path(ctx.cwd) / ".codemonkeys")
 

@@ -1,24 +1,24 @@
 /* codemonkeys — main application stylesheet */
 
 Screen {
-    background: #282a36;
-    color: #f8f8f2;
+    background: $bg;
+    color: $text;
 }
 
 Header {
-    background: #1e1f29;
-    color: #bd93f9;
+    background: $bg-dark;
+    color: $accent;
     text-style: bold;
 }
 
 Footer {
-    background: #1e1f29;
+    background: $bg-dark;
 }
 
 #sidebar {
     width: 28;
-    background: #1e1f29;
-    border-right: solid #44475a;
+    background: $bg-dark;
+    border-right: solid $surface-light;
     padding: 1 0;
 }
 
@@ -26,7 +26,7 @@ Footer {
     width: 100%;
     margin: 0 1;
     background: transparent;
-    color: #f8f8f2;
+    color: $text;
     border: none;
     text-align: left;
     padding: 0 2;
@@ -34,17 +34,17 @@ Footer {
 }
 
 #sidebar .nav-button:hover {
-    background: #44475a;
+    background: $surface-light;
 }
 
 #sidebar .nav-button:focus {
-    background: #6272a4;
-    color: #f8f8f2;
+    background: $text-dim;
+    color: $text;
 }
 
 #sidebar .nav-button.-active {
-    background: #bd93f9;
-    color: #282a36;
+    background: $accent;
+    color: $bg;
     text-style: bold;
 }
 
@@ -55,8 +55,8 @@ Footer {
 #agent-dashboard {
     height: auto;
     max-height: 16;
-    background: #1e1f29;
-    border-top: solid #44475a;
+    background: $bg-dark;
+    border-top: solid $surface-light;
     padding: 0 1;
 }
 
@@ -68,24 +68,24 @@ Footer {
     height: 3;
     margin: 0 0 0 0;
     padding: 0 1;
-    background: #282a36;
-    border: round #44475a;
+    background: $bg;
+    border: round $surface-light;
 }
 
 .agent-card.-running {
-    border: round #f1fa8c;
+    border: round $yellow;
 }
 
 .agent-card.-done {
-    border: round #50fa7b;
+    border: round $green;
 }
 
 .agent-card.-failed {
-    border: round #ff5555;
+    border: round $red;
 }
 
 .agent-card .agent-name {
-    color: #8be9fd;
+    color: $cyan;
     text-style: bold;
     width: 1fr;
 }
@@ -97,31 +97,31 @@ Footer {
 .agent-card .agent-tokens {
     width: 14;
     text-align: right;
-    color: #6272a4;
+    color: $text-dim;
 }
 
 .severity-high {
-    color: #ff5555;
+    color: $red;
     text-style: bold;
 }
 
 .severity-medium {
-    color: #ffb86c;
+    color: $orange;
 }
 
 .severity-low {
-    color: #8be9fd;
+    color: $cyan;
 }
 
 .severity-info {
-    color: #6272a4;
+    color: $text-dim;
 }
 
 .finding {
     margin: 0 0 1 0;
     padding: 1;
-    background: #1e1f29;
-    border: round #44475a;
+    background: $bg-dark;
+    border: round $surface-light;
 }
 
 .finding .finding-header {
@@ -130,94 +130,94 @@ Footer {
 
 .finding .finding-description {
     margin: 1 0 0 0;
-    color: #f8f8f2;
+    color: $text;
 }
 
 .finding .finding-suggestion {
     margin: 1 0 0 0;
-    color: #50fa7b;
+    color: $green;
 }
 
 .welcome-panel {
     padding: 2 4;
     margin: 1;
-    background: #1e1f29;
-    border: round #bd93f9;
+    background: $bg-dark;
+    border: round $accent;
     text-align: center;
 }
 
 .action-card {
     padding: 1 2;
     margin: 1;
-    background: #1e1f29;
-    border: round #44475a;
+    background: $bg-dark;
+    border: round $surface-light;
     height: 5;
 }
 
 .action-card:hover {
-    border: round #bd93f9;
+    border: round $accent;
 }
 
 .action-card:focus {
-    border: round #bd93f9;
-    background: #44475a;
+    border: round $accent;
+    background: $surface-light;
 }
 
 .action-card .action-title {
     text-style: bold;
-    color: #8be9fd;
+    color: $cyan;
 }
 
 .action-card .action-desc {
-    color: #6272a4;
+    color: $text-dim;
 }
 
 ProgressBar Bar {
-    color: #bd93f9;
-    background: #44475a;
+    color: $accent;
+    background: $surface-light;
 }
 
 Button {
-    background: #44475a;
-    color: #f8f8f2;
+    background: $surface-light;
+    color: $text;
     border: none;
 }
 
 Button:hover {
-    background: #6272a4;
+    background: $text-dim;
 }
 
 Button.-primary {
-    background: #bd93f9;
-    color: #282a36;
+    background: $accent;
+    color: $bg;
     text-style: bold;
 }
 
 Button.-primary:hover {
-    background: #ff79c6;
+    background: $accent-hover;
 }
 
 Button.-success {
-    background: #50fa7b;
-    color: #282a36;
+    background: $green;
+    color: $bg;
 }
 
 Button.-danger {
-    background: #ff5555;
-    color: #282a36;
+    background: $red;
+    color: $bg;
 }
 
 DataTable {
-    background: #282a36;
+    background: $bg;
 }
 
 DataTable > .datatable--header {
-    background: #1e1f29;
-    color: #bd93f9;
+    background: $bg-dark;
+    color: $accent;
     text-style: bold;
 }
 
 DataTable > .datatable--cursor {
-    background: #44475a;
-    color: #f8f8f2;
+    background: $surface-light;
+    color: $text;
 }

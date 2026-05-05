@@ -23,16 +23,16 @@ from rich.text import Text
 
 def _tool_detail(block: ToolUseBlock) -> str:
     name = block.name
-    inp = block.input or {}
+    tool_input = block.input or {}
     if name in ("Read", "Edit", "Write"):
-        path = inp.get("file_path", "?")
+        path = tool_input.get("file_path", "?")
         return f"{name}({path})"
     if name == "Grep":
-        return f"Grep('{inp.get('pattern', '?')}')"
+        return f"Grep('{tool_input.get('pattern', '?')}')"
     if name == "Glob":
-        return f"Glob({inp.get('pattern', inp.get('path', '?'))})"
+        return f"Glob({tool_input.get('pattern', tool_input.get('path', '?'))})"
     if name == "Bash":
-        cmd = inp.get("command", "")
+        cmd = tool_input.get("command", "")
         return f"Bash($ {cmd[:80]})" if cmd else "Bash"
     return name
 
@@ -150,7 +150,7 @@ class AgentRunner:
     Usage::
 
         runner = AgentRunner(cwd="/path/to/project")
-        result = await runner.run_agent(make_python_file_reviewer("src/main.py"), "Review: src/main.py")
+        result = await runner.run_agent(make_python_file_reviewer(["src/main.py"]), "Review: src/main.py")
     """
 
     def __init__(self, cwd: str = ".") -> None:

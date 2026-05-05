@@ -29,6 +29,10 @@ class Finding(BaseModel):
         default=None,
         description="Concrete suggestion for how to fix the issue, with example code if applicable",
     )
+    source: str = Field(
+        default="",
+        description="Which agent produced this finding (set by the pipeline, not the agent)",
+    )
 
 
 class FileFindings(BaseModel):
@@ -37,6 +41,12 @@ class FileFindings(BaseModel):
     findings: list[Finding] = Field(
         default_factory=list,
         description="List of issues found in this file, empty if the file is clean",
+    )
+
+
+class BatchFindings(BaseModel):
+    results: list[FileFindings] = Field(
+        description="Review results for each file in the batch"
     )
 
 

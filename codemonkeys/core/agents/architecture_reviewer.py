@@ -1,8 +1,8 @@
 """Architecture reviewer — cross-file design analysis.
 
-Dispatched once per review after per-file agents complete. Receives file
-summaries from per-file agents and reads all source files to find
-cross-file design issues. Has read-only access to the project.
+Dispatched once per review after per-file agents complete. Receives
+structural metadata (from ast) and per-file summaries so it can
+reason about cross-file design issues without reading source files.
 """
 
 from __future__ import annotations
@@ -16,45 +16,52 @@ def make_architecture_reviewer(
     *,
     files: list[str],
     file_summaries: list[dict[str, str]],
+    structural_metadata: str,
 ) -> AgentDefinition:
-    """Create an architecture reviewer scoped to the given files."""
+    """Create an architecture reviewer scoped to the given files.
+
+    ``structural_metadata`` is pre-formatted text from ``format_analysis()``
+    containing imports, function signatures, and class hierarchies extracted
+    via ast.  The agent reasons over this metadata instead of reading files.
+    """
     summaries_text = "\n".join(
         f"- `{s['file']}`: {s['summary']}" for s in file_summaries
     )
-    files_text = "\n".join(f"- `{f}`" for f in files)
 
     return AgentDefinition(
         description="Cross-file architecture and design review",
         prompt=f"""\
-You review a codebase for cross-file design issues. You have already received
-summaries from per-file reviewers. Now read the actual source files and look
-for design problems that span multiple files.
+You review a codebase for cross-file design issues. You have been given:
 
-## Files in Scope
+1. **Structural metadata** — imports, function signatures, class hierarchies,
+   and decorators extracted via static analysis (ast). This is deterministic
+   and complete.
+2. **Per-file summaries** — one-sentence descriptions from per-file reviewers
+   who already read the source code.
 
-{files_text}
+Use these to identify cross-file design problems. You should NOT need to read
+source files — the metadata and summaries give you everything for design analysis.
+If you need to verify a specific detail, you may read a single file, but do not
+read all files.
 
-## Per-File Summaries (from previous review phase)
+## Structural Metadata
+
+{structural_metadata}
+
+## Per-File Summaries
 
 {summaries_text}
 
 ## Method
 
-1. Read every file listed above.
-2. As you read, track: paradigms used, communication patterns, dependency
-   directions, layer boundaries, interface signatures, and cross-cutting concerns.
-3. After reading all files, compare your observations across files using the
-   design review checklist below.
-4. Report only genuine cross-file issues — not per-file quality or security
-   problems (those were already caught by per-file reviewers).
-
-## Compaction Resilience
-
-If you notice your context is getting large, write your observations to memory:
-- Write a `progress.json` listing which files you've read so far.
-- Write an `architecture_notes.json` with your accumulated observations.
-If you find these files already exist in memory when you start, you've been
-through a compaction — read them back and continue from where you left off.
+1. Analyze the import graph for dependency direction, coupling, and cycles.
+2. Compare function signatures and class interfaces across files for consistency.
+3. Check whether files doing similar work use the same paradigm (async/sync,
+   classes/functions, similar patterns).
+4. Cross-reference summaries to find duplicated responsibilities or communication
+   mismatches.
+5. Report only genuine cross-file issues — per-file quality and security problems
+   were already caught by per-file reviewers.
 
 ## Output Format
 
@@ -88,6 +95,6 @@ Return ONLY a JSON object. No prose, no explanation, no markdown wrapping:
 
 {DESIGN_REVIEW}""",
         model="opus",
-        tools=["Read", "Grep"],
+        tools=["Read"],
         permissionMode="dontAsk",
     )
