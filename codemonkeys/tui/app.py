@@ -9,6 +9,10 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.widgets import Button, Footer, Header, Static
 
+from codemonkeys.tui.screens.analyzer import AnalyzerScreen
+from codemonkeys.tui.screens.dashboard import DashboardScreen
+from codemonkeys.tui.screens.queue import QueueScreen
+
 
 class Sidebar(Container):
     DEFAULT_CSS = """
@@ -68,29 +72,49 @@ class CodemonkeysApp(App[None]):
     def __init__(self, cwd: Path | None = None) -> None:
         super().__init__()
         self.cwd = cwd or Path.cwd()
+        self._current_view = "home"
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
             yield Sidebar()
             with Container(id="main-content"):
-                yield HomeContent(id="home-content")
+                yield HomeContent(id="view-home")
+                yield AnalyzerScreen(id="view-analyze")
+                yield DashboardScreen(id="view-dashboard")
+                yield QueueScreen(id="view-queue")
         yield Footer()
 
+    def on_mount(self) -> None:
+        self.query_one("#view-analyze").display = False
+        self.query_one("#view-dashboard").display = False
+        self.query_one("#view-queue").display = False
+
     def action_go_home(self) -> None:
-        self._switch_content("home")
+        self._switch_view("home")
 
     def action_go_analyze(self) -> None:
-        self._switch_content("analyze")
+        self._switch_view("analyze")
 
     def action_go_queue(self) -> None:
-        self._switch_content("queue")
+        self._switch_view("queue")
 
     def action_go_dashboard(self) -> None:
-        self._switch_content("dashboard")
+        self._switch_view("dashboard")
 
-    def _switch_content(self, screen_id: str) -> None:
+    def _switch_view(self, view_id: str) -> None:
+        for vid in ("home", "analyze", "dashboard", "queue"):
+            widget = self.query_one(f"#view-{vid}")
+            widget.display = vid == view_id
+
         for btn in self.query(".nav-button"):
             btn.remove_class("-active")
-        nav_btn = self.query_one(f"#nav-{screen_id}", Button)
-        nav_btn.add_class("-active")
+        self.query_one(f"#nav-{view_id}", Button).add_class("-active")
+        self._current_view = view_id
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id and event.button.id.startswith("nav-"):
+            view = event.button.id.removeprefix("nav-")
+            self._switch_view(view)
+        elif event.button.id == "action-review":
+            self._switch_view("analyze")
