@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from codemonkeys.workflows.phase_library.action import fix, report, triage, verify
 from codemonkeys.workflows.phase_library.discovery import (
     discover_all_files,
     discover_diff,
@@ -24,6 +25,10 @@ __all__ = [
     "discover_from_spec",
     "doc_review",
     "file_review",
+    "fix",
     "mechanical_audit",
+    "report",
     "spec_compliance_review",
+    "triage",
+    "verify",
 ]
