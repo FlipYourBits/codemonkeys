@@ -15,6 +15,10 @@ from codemonkeys.artifacts.schemas.mechanical import (
 )
 from codemonkeys.artifacts.schemas.plans import FeaturePlan, PlanStep
 from codemonkeys.artifacts.schemas.results import FixResult, VerificationResult
+from codemonkeys.artifacts.schemas.spec_compliance import (
+    SpecComplianceFinding,
+    SpecComplianceFindings,
+)
 
 __all__ = [
     "CoverageMap",
@@ -31,5 +35,7 @@ __all__ = [
     "PytestResult",
     "RuffFinding",
     "SecretsFinding",
+    "SpecComplianceFinding",
+    "SpecComplianceFindings",
     "VerificationResult",
 ]
