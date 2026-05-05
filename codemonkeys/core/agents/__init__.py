@@ -24,6 +24,9 @@ if TYPE_CHECKING:
         make_readme_reviewer as make_readme_reviewer,
     )
     from codemonkeys.core.agents.registry import AgentRegistry as AgentRegistry
+    from codemonkeys.core.agents.spec_compliance_reviewer import (
+        make_spec_compliance_reviewer as make_spec_compliance_reviewer,
+    )
 
 __all__ = [
     "default_registry",
@@ -33,6 +36,7 @@ __all__ = [
     "make_python_file_reviewer",
     "make_python_implementer",
     "make_readme_reviewer",
+    "make_spec_compliance_reviewer",
 ]
 
 
@@ -65,6 +69,12 @@ def __getattr__(name: str) -> object:
         from codemonkeys.core.agents.readme_reviewer import make_readme_reviewer
 
         return make_readme_reviewer
+    if name == "make_spec_compliance_reviewer":
+        from codemonkeys.core.agents.spec_compliance_reviewer import (
+            make_spec_compliance_reviewer,
+        )
+
+        return make_spec_compliance_reviewer
     if name == "default_registry":
         return default_registry
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -149,6 +159,22 @@ def default_registry() -> "AgentRegistry":
             produces=ArchitectureFindings,
             consumes=FileFindings,
             make=make_architecture_reviewer,
+        )
+    )
+    from codemonkeys.core.agents.spec_compliance_reviewer import (
+        make_spec_compliance_reviewer,
+    )
+    from codemonkeys.artifacts.schemas.spec_compliance import SpecComplianceFindings
+
+    registry.register(
+        AgentSpec(
+            name="spec-compliance-reviewer",
+            role=AgentRole.ANALYZER,
+            description="Compare implementation against spec/plan for completeness and fidelity",
+            scope="project",
+            produces=SpecComplianceFindings,
+            consumes=FeaturePlan,
+            make=make_spec_compliance_reviewer,
         )
     )
     return registry
