@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from codemonkeys.workflows.compositions import ReviewConfig
+from codemonkeys.workflows.compositions import (
+    ReviewConfig,
+    make_diff_workflow,
+    make_files_workflow,
+    make_full_repo_workflow,
+    make_post_feature_workflow,
+)
+from codemonkeys.workflows.phases import PhaseType
 
 
 class TestReviewConfig:
@@ -63,3 +70,95 @@ class TestReviewConfig:
     def test_custom_audit_tools(self) -> None:
         config = ReviewConfig(mode="diff", audit_tools={"ruff"})
         assert config.audit_tools == {"ruff"}
+
+
+class TestFullRepoWorkflow:
+    def test_has_expected_phases(self) -> None:
+        workflow = make_full_repo_workflow()
+        names = [p.name for p in workflow.phases]
+        assert names == [
+            "discover",
+            "mechanical_audit",
+            "file_review",
+            "architecture_review",
+            "doc_review",
+            "triage",
+            "fix",
+            "verify",
+            "report",
+        ]
+
+    def test_triage_is_gate(self) -> None:
+        workflow = make_full_repo_workflow()
+        triage = next(p for p in workflow.phases if p.name == "triage")
+        assert triage.phase_type == PhaseType.GATE
+
+    def test_auto_fix_triage_is_automated(self) -> None:
+        workflow = make_full_repo_workflow(auto_fix=True)
+        triage = next(p for p in workflow.phases if p.name == "triage")
+        assert triage.phase_type == PhaseType.AUTOMATED
+
+
+class TestDiffWorkflow:
+    def test_has_expected_phases(self) -> None:
+        workflow = make_diff_workflow()
+        names = [p.name for p in workflow.phases]
+        assert names == [
+            "discover",
+            "mechanical_audit",
+            "file_review",
+            "architecture_review",
+            "triage",
+            "fix",
+            "verify",
+            "report",
+        ]
+
+    def test_no_doc_review(self) -> None:
+        workflow = make_diff_workflow()
+        names = [p.name for p in workflow.phases]
+        assert "doc_review" not in names
+
+
+class TestFilesWorkflow:
+    def test_has_expected_phases(self) -> None:
+        workflow = make_files_workflow()
+        names = [p.name for p in workflow.phases]
+        assert names == [
+            "discover",
+            "mechanical_audit",
+            "file_review",
+            "triage",
+            "fix",
+            "verify",
+            "report",
+        ]
+
+    def test_no_architecture_or_doc_review(self) -> None:
+        workflow = make_files_workflow()
+        names = [p.name for p in workflow.phases]
+        assert "architecture_review" not in names
+        assert "doc_review" not in names
+
+
+class TestPostFeatureWorkflow:
+    def test_has_expected_phases(self) -> None:
+        workflow = make_post_feature_workflow()
+        names = [p.name for p in workflow.phases]
+        assert names == [
+            "discover",
+            "mechanical_audit",
+            "spec_compliance_review",
+            "file_review",
+            "architecture_review",
+            "doc_review",
+            "triage",
+            "fix",
+            "verify",
+            "report",
+        ]
+
+    def test_spec_compliance_before_file_review(self) -> None:
+        workflow = make_post_feature_workflow()
+        names = [p.name for p in workflow.phases]
+        assert names.index("spec_compliance_review") < names.index("file_review")
