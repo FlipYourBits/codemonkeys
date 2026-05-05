@@ -1,4 +1,4 @@
-"""Implement workflow — plan, approve, implement, verify."""
+"""Implement workflow — plan, approve, implement, review, verify."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ def make_implement_workflow() -> Workflow:
             Phase(name="plan", phase_type=PhaseType.INTERACTIVE, execute=_plan),
             Phase(name="approve", phase_type=PhaseType.GATE, execute=_approve),
             Phase(name="implement", phase_type=PhaseType.AUTOMATED, execute=_implement),
+            Phase(name="review", phase_type=PhaseType.AUTOMATED, execute=_auto_review),
             Phase(name="verify", phase_type=PhaseType.AUTOMATED, execute=_verify),
         ],
     )
@@ -55,6 +56,51 @@ async def _implement(ctx: WorkflowContext) -> dict[str, str]:
     prompt = f"Implement this plan:\n\n{plan.model_dump_json(indent=2)}"
     result = await runner.run_agent(agent, prompt)
     return {"result": result}
+
+
+async def _auto_review(ctx: WorkflowContext) -> dict[str, Any]:
+    from codemonkeys.workflows.review import (
+        _architecture,
+        _discover,
+        _fix,
+        _review,
+        _triage,
+    )
+
+    discover_result = await _discover(ctx)
+
+    review_ctx = WorkflowContext(
+        cwd=ctx.cwd,
+        run_id=ctx.run_id,
+        phase_results={"discover": discover_result},
+    )
+    review_result = await _review(review_ctx)
+    review_ctx.phase_results["review"] = review_result
+
+    arch_result = await _architecture(review_ctx)
+    review_ctx.phase_results["architecture"] = arch_result
+
+    triage_result = await _triage(review_ctx)
+    review_ctx.phase_results["triage"] = triage_result
+
+    if triage_result["fix_requests"]:
+        fix_ctx = WorkflowContext(
+            cwd=ctx.cwd,
+            run_id=ctx.run_id,
+            phase_results={**review_ctx.phase_results},
+        )
+        fix_result = await _fix(fix_ctx)
+        return {
+            "findings": review_result["findings"],
+            "architecture_findings": arch_result.get("architecture_findings"),
+            "fix_results": fix_result.get("fix_results", []),
+        }
+
+    return {
+        "findings": review_result["findings"],
+        "architecture_findings": arch_result.get("architecture_findings"),
+        "fix_results": [],
+    }
 
 
 async def _verify(ctx: WorkflowContext) -> dict[str, VerificationResult]:
