@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Callable
+from typing import Callable, Literal
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,11 @@ class EventType(Enum):
     WAITING_FOR_USER = "waiting_for_user"
     WORKFLOW_COMPLETED = "workflow_completed"
     WORKFLOW_ERROR = "workflow_error"
+    MECHANICAL_TOOL_STARTED = "mechanical_tool_started"
+    MECHANICAL_TOOL_COMPLETED = "mechanical_tool_completed"
+    FINDINGS_SUMMARY = "findings_summary"
+    TRIAGE_READY = "triage_ready"
+    FIX_PROGRESS = "fix_progress"
 
 
 class PhaseStartedPayload(BaseModel):
@@ -68,6 +73,35 @@ class WorkflowCompletedPayload(BaseModel):
 class WorkflowErrorPayload(BaseModel):
     workflow: str = Field(description="Name of the workflow that errored")
     error: str = Field(description="Error message")
+
+
+class MechanicalToolStartedPayload(BaseModel):
+    tool: str = Field(description="Name of the mechanical tool starting")
+    files_count: int = Field(description="Number of files being checked")
+
+
+class MechanicalToolCompletedPayload(BaseModel):
+    tool: str = Field(description="Name of the mechanical tool that finished")
+    findings_count: int = Field(description="Number of findings produced")
+    duration_ms: int = Field(description="Wall-clock time in milliseconds")
+
+
+class FindingsSummaryPayload(BaseModel):
+    total: int = Field(description="Total number of findings across all sources")
+    by_severity: dict[str, int] = Field(description="Count per severity level")
+    by_category: dict[str, int] = Field(description="Count per category")
+
+
+class TriageReadyPayload(BaseModel):
+    findings_count: int = Field(description="Total findings available for triage")
+    fixable_count: int = Field(description="Findings that can be auto-fixed")
+
+
+class FixProgressPayload(BaseModel):
+    file: str = Field(description="File being fixed")
+    status: Literal["started", "completed", "failed"] = Field(
+        description="Current fix status"
+    )
 
 
 EventCallback = Callable[[EventType, BaseModel], None]
