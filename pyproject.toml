@@ -47,6 +47,9 @@ Homepage = "https://github.com/FlipYourBits/codemonkeys"
 [tool.hatch.build.targets.wheel]
 packages = ["codemonkeys"]
 
+[tool.ruff]
+exclude = ["codemonkeys_reference/"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
