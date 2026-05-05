@@ -93,3 +93,22 @@ class TestAgentRegistry:
     def test_get_nonexistent_returns_none(self) -> None:
         registry = AgentRegistry()
         assert registry.get("nonexistent") is None
+
+
+class TestDefaultRegistry:
+    def test_architecture_reviewer_registered(self) -> None:
+        from codemonkeys.core.agents import default_registry
+
+        registry = default_registry()
+        spec = registry.get("architecture-reviewer")
+        assert spec is not None
+        assert spec.scope == "project"
+        assert spec.role == AgentRole.ANALYZER
+
+    def test_architecture_reviewer_consumes_file_findings(self) -> None:
+        from codemonkeys.core.agents import default_registry
+
+        registry = default_registry()
+        spec = registry.get("architecture-reviewer")
+        assert spec is not None
+        assert spec.consumes is FileFindings

@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from codemonkeys.core.agents.architecture_reviewer import (
+        make_architecture_reviewer as make_architecture_reviewer,
+    )
     from codemonkeys.core.agents.changelog_reviewer import (
         make_changelog_reviewer as make_changelog_reviewer,
     )
@@ -24,6 +27,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "default_registry",
+    "make_architecture_reviewer",
     "make_changelog_reviewer",
     "make_python_code_fixer",
     "make_python_file_reviewer",
@@ -33,6 +37,12 @@ __all__ = [
 
 
 def __getattr__(name: str) -> object:
+    if name == "make_architecture_reviewer":
+        from codemonkeys.core.agents.architecture_reviewer import (
+            make_architecture_reviewer,
+        )
+
+        return make_architecture_reviewer
     if name == "make_changelog_reviewer":
         from codemonkeys.core.agents.changelog_reviewer import make_changelog_reviewer
 
@@ -125,6 +135,20 @@ def default_registry() -> "AgentRegistry":
             produces=None,
             consumes=FeaturePlan,
             make=make_python_implementer,
+        )
+    )
+    from codemonkeys.core.agents.architecture_reviewer import make_architecture_reviewer
+    from codemonkeys.artifacts.schemas.architecture import ArchitectureFindings
+
+    registry.register(
+        AgentSpec(
+            name="architecture-reviewer",
+            role=AgentRole.ANALYZER,
+            description="Review codebase for cross-file design issues",
+            scope="project",
+            produces=ArchitectureFindings,
+            consumes=FileFindings,
+            make=make_architecture_reviewer,
         )
     )
     return registry
