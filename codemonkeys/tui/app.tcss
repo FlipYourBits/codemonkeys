@@ -1,0 +1,223 @@
+/* codemonkeys — main application stylesheet */
+
+Screen {
+    background: #282a36;
+    color: #f8f8f2;
+}
+
+Header {
+    background: #1e1f29;
+    color: #bd93f9;
+    text-style: bold;
+}
+
+Footer {
+    background: #1e1f29;
+}
+
+#sidebar {
+    width: 28;
+    background: #1e1f29;
+    border-right: solid #44475a;
+    padding: 1 0;
+}
+
+#sidebar .nav-button {
+    width: 100%;
+    margin: 0 1;
+    background: transparent;
+    color: #f8f8f2;
+    border: none;
+    text-align: left;
+    padding: 0 2;
+    height: 3;
+}
+
+#sidebar .nav-button:hover {
+    background: #44475a;
+}
+
+#sidebar .nav-button:focus {
+    background: #6272a4;
+    color: #f8f8f2;
+}
+
+#sidebar .nav-button.-active {
+    background: #bd93f9;
+    color: #282a36;
+    text-style: bold;
+}
+
+#main-content {
+    padding: 1 2;
+}
+
+#agent-dashboard {
+    height: auto;
+    max-height: 16;
+    background: #1e1f29;
+    border-top: solid #44475a;
+    padding: 0 1;
+}
+
+#agent-dashboard.hidden {
+    display: none;
+}
+
+.agent-card {
+    height: 3;
+    margin: 0 0 0 0;
+    padding: 0 1;
+    background: #282a36;
+    border: round #44475a;
+}
+
+.agent-card.-running {
+    border: round #f1fa8c;
+}
+
+.agent-card.-done {
+    border: round #50fa7b;
+}
+
+.agent-card.-failed {
+    border: round #ff5555;
+}
+
+.agent-card .agent-name {
+    color: #8be9fd;
+    text-style: bold;
+    width: 1fr;
+}
+
+.agent-card .agent-status {
+    width: 10;
+}
+
+.agent-card .agent-tokens {
+    width: 14;
+    text-align: right;
+    color: #6272a4;
+}
+
+.severity-high {
+    color: #ff5555;
+    text-style: bold;
+}
+
+.severity-medium {
+    color: #ffb86c;
+}
+
+.severity-low {
+    color: #8be9fd;
+}
+
+.severity-info {
+    color: #6272a4;
+}
+
+.finding {
+    margin: 0 0 1 0;
+    padding: 1;
+    background: #1e1f29;
+    border: round #44475a;
+}
+
+.finding .finding-header {
+    text-style: bold;
+}
+
+.finding .finding-description {
+    margin: 1 0 0 0;
+    color: #f8f8f2;
+}
+
+.finding .finding-suggestion {
+    margin: 1 0 0 0;
+    color: #50fa7b;
+}
+
+.welcome-panel {
+    padding: 2 4;
+    margin: 1;
+    background: #1e1f29;
+    border: round #bd93f9;
+    text-align: center;
+}
+
+.action-card {
+    padding: 1 2;
+    margin: 1;
+    background: #1e1f29;
+    border: round #44475a;
+    height: 5;
+}
+
+.action-card:hover {
+    border: round #bd93f9;
+}
+
+.action-card:focus {
+    border: round #bd93f9;
+    background: #44475a;
+}
+
+.action-card .action-title {
+    text-style: bold;
+    color: #8be9fd;
+}
+
+.action-card .action-desc {
+    color: #6272a4;
+}
+
+ProgressBar Bar {
+    color: #bd93f9;
+    background: #44475a;
+}
+
+Button {
+    background: #44475a;
+    color: #f8f8f2;
+    border: none;
+}
+
+Button:hover {
+    background: #6272a4;
+}
+
+Button.-primary {
+    background: #bd93f9;
+    color: #282a36;
+    text-style: bold;
+}
+
+Button.-primary:hover {
+    background: #ff79c6;
+}
+
+Button.-success {
+    background: #50fa7b;
+    color: #282a36;
+}
+
+Button.-danger {
+    background: #ff5555;
+    color: #282a36;
+}
+
+DataTable {
+    background: #282a36;
+}
+
+DataTable > .datatable--header {
+    background: #1e1f29;
+    color: #bd93f9;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #44475a;
+    color: #f8f8f2;
+}
