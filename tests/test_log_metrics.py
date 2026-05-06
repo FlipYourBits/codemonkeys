@@ -365,3 +365,17 @@ class TestSerialization:
         assert data["agent_name"] == "test_agent"
         assert isinstance(data["turns"], list)
         assert isinstance(data["tool_calls"], list)
+
+
+class TestRunAgentAuditFlag:
+    def test_audit_flag_is_accepted(self):
+        import codemonkeys.run_agent as ra
+        parser = ra._build_parser()
+        args = parser.parse_args(["changelog_reviewer", "--audit"])
+        assert args.audit is True
+
+    def test_no_audit_by_default(self):
+        import codemonkeys.run_agent as ra
+        parser = ra._build_parser()
+        args = parser.parse_args(["changelog_reviewer"])
+        assert args.audit is False
