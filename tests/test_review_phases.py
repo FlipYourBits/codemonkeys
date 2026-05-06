@@ -13,7 +13,7 @@ from codemonkeys.workflows.phases import WorkflowContext
 
 
 def _make_ctx(
-    tmp_path: Path, mode: str = "full_repo", phase_results: dict | None = None, **kwargs
+    tmp_path: Path, mode: str = "repo", phase_results: dict | None = None, **kwargs
 ) -> WorkflowContext:
     return WorkflowContext(
         cwd=str(tmp_path),
@@ -56,7 +56,7 @@ class TestFileReview:
         assert mock_runner.run_agent.call_count >= 1
 
     @pytest.mark.asyncio
-    async def test_passes_resilience_in_full_repo_mode(self, tmp_path: Path) -> None:
+    async def test_passes_resilience_in_repo_mode(self, tmp_path: Path) -> None:
         from codemonkeys.workflows.phase_library.review import file_review
 
         mock_runner = MagicMock()
@@ -74,7 +74,7 @@ class TestFileReview:
 
         ctx = _make_ctx(
             tmp_path,
-            mode="full_repo",
+            mode="repo",
             phase_results={
                 "discover": {"files": ["app.py"], "structural_metadata": ""}
             },

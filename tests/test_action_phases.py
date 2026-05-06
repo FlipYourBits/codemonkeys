@@ -29,7 +29,7 @@ def _make_ctx(tmp_path: Path, phase_results: dict, **kwargs) -> WorkflowContext:
     return WorkflowContext(
         cwd=str(tmp_path),
         run_id="test/run1",
-        config=ReviewConfig(mode="full_repo", **kwargs),
+        config=ReviewConfig(mode="repo", **kwargs),
         phase_results=phase_results,
     )
 

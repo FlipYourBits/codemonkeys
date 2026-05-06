@@ -4,15 +4,15 @@ from codemonkeys.workflows.compositions import (
     ReviewConfig,
     make_diff_workflow,
     make_files_workflow,
-    make_full_repo_workflow,
+    make_repo_workflow,
     make_post_feature_workflow,
 )
 from codemonkeys.workflows.phases import PhaseType
 
 
 class TestReviewConfig:
-    def test_full_repo_config(self) -> None:
-        config = ReviewConfig(mode="full_repo")
+    def test_repo_config(self) -> None:
+        config = ReviewConfig(mode="repo")
         assert config.audit_tools == {
             "ruff",
             "pyright",
@@ -79,8 +79,8 @@ class TestReviewConfig:
         config = ReviewConfig(mode="diff", audit_tools={"ruff"})
         assert config.audit_tools == {"ruff"}
 
-    def test_full_repo_includes_new_tools(self) -> None:
-        config = ReviewConfig(mode="full_repo")
+    def test_repo_includes_new_tools(self) -> None:
+        config = ReviewConfig(mode="repo")
         assert "license_compliance" in config.audit_tools
         assert "release_hygiene" in config.audit_tools
 
@@ -90,9 +90,9 @@ class TestReviewConfig:
         assert "release_hygiene" in config.audit_tools
 
 
-class TestFullRepoWorkflow:
+class TestRepoWorkflow:
     def test_has_expected_phases(self) -> None:
-        workflow = make_full_repo_workflow()
+        workflow = make_repo_workflow()
         names = [p.name for p in workflow.phases]
         assert names == [
             "discover",
@@ -107,12 +107,12 @@ class TestFullRepoWorkflow:
         ]
 
     def test_triage_is_gate(self) -> None:
-        workflow = make_full_repo_workflow()
+        workflow = make_repo_workflow()
         triage = next(p for p in workflow.phases if p.name == "triage")
         assert triage.phase_type == PhaseType.GATE
 
     def test_auto_fix_triage_is_automated(self) -> None:
-        workflow = make_full_repo_workflow(auto_fix=True)
+        workflow = make_repo_workflow(auto_fix=True)
         triage = next(p for p in workflow.phases if p.name == "triage")
         assert triage.phase_type == PhaseType.AUTOMATED
 

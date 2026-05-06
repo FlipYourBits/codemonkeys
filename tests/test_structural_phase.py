@@ -21,7 +21,7 @@ class TestStructuralAnalysis:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={
                 "discover": {"files": ["a.py", "b.py", "c.py"]},
                 "coverage": {"coverage": MagicMock(per_file={}, uncovered_files=[])},
@@ -46,7 +46,7 @@ class TestStructuralAnalysis:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={
                 "discover": {"files": ["a.py", "b.py"]},
                 "coverage": {"coverage": MagicMock(per_file={}, uncovered_files=[])},
@@ -71,7 +71,7 @@ class TestStructuralAnalysis:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={
                 "discover": {"files": ["mod.py"]},
                 "coverage": {"coverage": MagicMock(per_file={}, uncovered_files=[])},
@@ -108,7 +108,7 @@ class TestCharacterizationTests:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             log_dir=tmp_path / "logs",
             phase_results={
                 "discover": {"files": ["foo.py", "bar.py"]},
@@ -155,7 +155,7 @@ class TestCharacterizationTests:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={
                 "discover": {"files": []},
                 "coverage": {"coverage": coverage},

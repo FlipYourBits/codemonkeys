@@ -94,7 +94,7 @@ async def file_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     files: list[str] = ctx.phase_results["discover"]["files"]
     config = ctx.config
 
-    resilience = config.mode in ("full_repo", "repo", "post_feature")
+    resilience = config.mode in ("repo", "post_feature")
 
     # Batch: up to 3 files per agent, test files on haiku, prod on sonnet
     batches: list[tuple[list[str], str, bool]] = []  # (files, model, is_test)
@@ -155,7 +155,7 @@ async def architecture_review(ctx: WorkflowContext) -> dict[str, ArchitectureFin
     prompt = "Review the codebase for cross-file design issues."
     if config.mode == "post_feature":
         prompt += f"\n\n{HARDENING_CHECKLIST}"
-    elif config.mode == "full_repo":
+    elif config.mode == "repo":
         hot_files = ctx.phase_results["discover"].get("hot_files", [])
         if hot_files:
             hot_text = "\n".join(

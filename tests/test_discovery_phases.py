@@ -31,7 +31,7 @@ class TestDiscoverAllFiles:
             ctx = WorkflowContext(
                 cwd=str(tmp_path),
                 run_id="test/run1",
-                config=ReviewConfig(mode="full_repo"),
+                config=ReviewConfig(mode="repo"),
             )
             result = await discover_all_files(ctx)
 
@@ -54,7 +54,7 @@ class TestDiscoverAllFiles:
             ctx = WorkflowContext(
                 cwd=str(tmp_path),
                 run_id="test/run1",
-                config=ReviewConfig(mode="full_repo"),
+                config=ReviewConfig(mode="repo"),
             )
             result = await discover_all_files(ctx)
 

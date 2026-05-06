@@ -21,7 +21,7 @@ from codemonkeys.workflows.compositions import (
     ReviewConfig,
     make_diff_workflow,
     make_files_workflow,
-    make_full_repo_workflow,
+    make_repo_workflow,
     make_post_feature_workflow,
 )
 from codemonkeys.workflows.display import WorkflowDisplay
@@ -78,7 +78,7 @@ def _pick_workflow(config: ReviewConfig):
         from codemonkeys.workflows.compositions import make_deep_clean_workflow
 
         return make_deep_clean_workflow()
-    return make_full_repo_workflow(auto_fix=config.auto_fix)
+    return make_repo_workflow(auto_fix=config.auto_fix)
 
 
 def _handle_refactor_gate(

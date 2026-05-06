@@ -32,7 +32,7 @@ class TestRefactorStep:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={
                 "structural_analysis": {"structural_report": _make_structural_report()},
             },
@@ -52,7 +52,7 @@ class TestRefactorStep:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             log_dir=tmp_path / "logs",
             phase_results={
                 "structural_analysis": {"structural_report": report},
@@ -87,7 +87,7 @@ class TestFinalVerify:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": ["foo.py"]}},
         )
 

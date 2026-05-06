@@ -56,7 +56,6 @@ SCOPED_TOOLS = frozenset(
 )
 
 _MODE_TOOLS: dict[str, frozenset[str]] = {
-    "full_repo": ALL_TOOLS,
     "repo": ALL_TOOLS,
     "diff": SCOPED_TOOLS,
     "files": SCOPED_TOOLS,
@@ -67,7 +66,7 @@ _MODE_TOOLS: dict[str, frozenset[str]] = {
 
 @dataclass
 class ReviewConfig:
-    mode: Literal["full_repo", "repo", "diff", "files", "post_feature", "deep_clean"]
+    mode: Literal["repo", "diff", "files", "post_feature", "deep_clean"]
     target_files: list[str] | None = None
     spec_path: str | None = None
     auto_fix: bool = False
@@ -83,11 +82,11 @@ class ReviewConfig:
             self.audit_tools = set(_MODE_TOOLS[self.mode])
 
 
-def make_full_repo_workflow(*, auto_fix: bool = False) -> Workflow:
+def make_repo_workflow(*, auto_fix: bool = False) -> Workflow:
     """Full repository review — all files, all tools, all reviewers."""
     triage_type = PhaseType.AUTOMATED if auto_fix else PhaseType.GATE
     return Workflow(
-        name="full_repo_review",
+        name="repo_review",
         phases=[
             Phase(
                 name="discover",

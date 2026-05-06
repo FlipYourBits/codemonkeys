@@ -23,7 +23,7 @@ class TestBuildCheck:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={
                 "discover": {"files": ["mypackage/__init__.py", "mypackage/core.py"]}
             },
@@ -49,7 +49,7 @@ class TestBuildCheck:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": ["broken/__init__.py"]}},
         )
         with patch(
@@ -82,7 +82,7 @@ class TestBuildCheck:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": ["pkg/__init__.py"]}},
             emitter=emitter,
         )
@@ -105,7 +105,7 @@ class TestDependencyHealth:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": []}},
         )
         with patch(
@@ -125,7 +125,7 @@ class TestDependencyHealth:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": []}},
         )
         with patch(
@@ -149,7 +149,7 @@ class TestDependencyHealth:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": ["app.py"]}},
         )
         with patch(
@@ -194,7 +194,7 @@ class TestCoverageMeasurement:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": ["foo.py", "bar.py"]}},
         )
         with patch(
@@ -216,7 +216,7 @@ class TestCoverageMeasurement:
         ctx = WorkflowContext(
             cwd=str(tmp_path),
             run_id="test/run1",
-            config=ReviewConfig(mode="full_repo"),
+            config=ReviewConfig(mode="repo"),
             phase_results={"discover": {"files": ["foo.py"]}},
         )
         with patch(
