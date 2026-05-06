@@ -18,7 +18,7 @@ class TestAnalyzeFile:
         result = analyze_file("codemonkeys/core/runner.py", root=ROOT)
         modules = [i["module"] for i in result.imports]
         assert "claude_agent_sdk" in modules
-        assert "rich.console" in modules
+        assert "codemonkeys.core.run_result" in modules
 
     def test_extracts_top_level_functions(self) -> None:
         result = analyze_file("codemonkeys/workflows/review.py", root=ROOT)
@@ -44,7 +44,7 @@ class TestAnalyzeFile:
         runner = next(c for c in result.classes if c.name == "AgentRunner")
         method_names = [m.name for m in runner.methods]
         assert "run_agent" in method_names
-        assert "run" in method_names
+        assert "_emit" in method_names
 
     def test_extracts_class_bases(self) -> None:
         result = analyze_file("codemonkeys/artifacts/schemas/findings.py", root=ROOT)

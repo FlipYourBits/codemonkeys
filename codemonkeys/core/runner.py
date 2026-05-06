@@ -1,7 +1,11 @@
-"""Reusable agent runner with Rich live display and filesystem sandboxing."""
+"""Reusable agent runner with event emission, debug logging, and filesystem sandboxing."""
 
 from __future__ import annotations
 
+import json
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
@@ -15,10 +19,16 @@ from claude_agent_sdk import (
     ToolUseBlock,
     query,
 )
-from rich.console import Console, Group
-from rich.live import Live
-from rich.table import Table
-from rich.text import Text
+
+from codemonkeys.core.run_result import RunResult
+from codemonkeys.core.sandbox import restrict
+from codemonkeys.workflows.events import (
+    AgentCompletedPayload,
+    AgentProgressPayload,
+    AgentStartedPayload,
+    EventEmitter,
+    EventType,
+)
 
 
 def _tool_detail(block: ToolUseBlock) -> str:
@@ -37,214 +47,68 @@ def _tool_detail(block: ToolUseBlock) -> str:
     return name
 
 
-class _Display:
-    def __init__(self) -> None:
-        self.agents: dict[str, dict[str, Any]] = {}
-        self.status = "running"
-        self.activity = ""
-        self.tool_calls = 0
-        self.total_tokens = 0
-        self.cost: float | None = None
-        self._has_subagents = False
-
-    def add_usage(self, usage: dict[str, Any] | None) -> None:
-        """Accumulate token counts from one agent turn into the running total."""
-        if not usage:
-            return
-        turn_tokens = usage.get("total_tokens", 0) or (
-            usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        )
-        self.total_tokens += turn_tokens
-
-    def set_usage(self, usage: dict[str, Any] | None) -> None:
-        """Replace the running total with a final authoritative usage snapshot."""
-        if not usage:
-            return
-        self.total_tokens = usage.get("total_tokens", 0) or (
-            usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-        )
-
-    def tool_used(self, detail: str) -> None:
-        self.activity = detail
-        self.tool_calls += 1
-
-    def start_agent(self, task_id: str, description: str) -> None:
-        self._has_subagents = True
-        self.agents[task_id] = {
-            "name": description,
-            "status": "running",
-            "activity": "starting...",
-            "calls": 0,
-            "tokens": 0,
+def _serialize_message(message: Any) -> dict[str, Any]:
+    """Serialize an SDK message to a JSON-safe dict for logging."""
+    entry: dict[str, Any] = {"type": type(message).__name__}
+    if isinstance(message, AssistantMessage):
+        entry["usage"] = message.usage
+        blocks = []
+        for b in message.content:
+            if isinstance(b, ToolUseBlock):
+                blocks.append({"type": "tool_use", "name": b.name, "input": b.input})
+            elif hasattr(b, "text"):
+                blocks.append({"type": "text", "text": b.text[:500]})
+            elif hasattr(b, "thinking"):
+                blocks.append({"type": "thinking", "thinking": b.thinking[:500]})
+        entry["content"] = blocks
+    elif isinstance(message, ResultMessage):
+        entry["result"] = (getattr(message, "result", "") or "")[:500]
+        entry["usage"] = message.usage
+        entry["cost"] = getattr(message, "total_cost_usd", None)
+        entry["duration_ms"] = getattr(message, "duration_ms", 0)
+    elif isinstance(message, TaskStartedMessage):
+        entry["task_id"] = message.task_id
+        entry["description"] = message.description
+    elif isinstance(message, TaskProgressMessage):
+        usage = message.usage
+        entry["task_id"] = message.task_id
+        entry["usage"] = dict(usage) if isinstance(usage, dict) else {
+            "total_tokens": getattr(usage, "total_tokens", 0),
+            "tool_uses": getattr(usage, "tool_uses", 0),
         }
-        self._update_status()
-
-    def progress_agent(self, task_id: str, tokens: int, tool_uses: int = 0) -> None:
-        if task_id in self.agents:
-            self.agents[task_id]["tokens"] = tokens
-            self.agents[task_id]["calls"] = tool_uses
-            self.total_tokens = sum(a["tokens"] for a in self.agents.values())
-
-    def done_agent(self, task_id: str, tokens: int | None = None) -> None:
-        if task_id in self.agents:
-            self.agents[task_id]["status"] = "done"
-            self.agents[task_id]["activity"] = "complete"
-            if tokens is not None:
-                self.agents[task_id]["tokens"] = tokens
-                self.total_tokens = sum(a["tokens"] for a in self.agents.values())
-        self._update_status()
-
-    def agent_activity(self, task_id: str, detail: str) -> None:
-        if task_id in self.agents and self.agents[task_id]["status"] == "running":
-            self.agents[task_id]["activity"] = detail
-
-    def _update_status(self) -> None:
-        running = sum(1 for a in self.agents.values() if a["status"] == "running")
-        if running == 0:
-            self.status = "summarizing..."
-        else:
-            self.status = f"waiting for {running} agent{'s' if running != 1 else ''}..."
-
-    def render(self) -> Group | Text:
-        cost_str = f"  ${self.cost:.4f}" if self.cost else ""
-
-        if self._has_subagents:
-            header = Text(
-                f"Coordinator: {self.status}  [{self.total_tokens:,} tokens{cost_str}]",
-                style="bold",
-            )
-            table = Table(show_header=True, expand=True, padding=(0, 1))
-            table.add_column("Agent", style="bold cyan", no_wrap=True)
-            table.add_column("Status", width=8)
-            table.add_column("Activity", style="dim")
-            table.add_column("Tokens", justify="right", width=10)
-            table.add_column("Tools", justify="right", width=5)
-
-            for info in self.agents.values():
-                status = (
-                    Text("running", style="yellow")
-                    if info["status"] == "running"
-                    else Text("done", style="green")
-                )
-                table.add_row(
-                    info["name"],
-                    status,
-                    info["activity"][:50],
-                    f"{info['tokens']:,}",
-                    str(info["calls"]),
-                )
-            return Group(header, table)
-
-        parts = [self.status]
-        if self.activity:
-            parts.append(self.activity)
-        tokens_str = f"  {self.total_tokens:,} tokens" if self.total_tokens else ""
-        parts.append(
-            f"[{self.tool_calls} tool{'s' if self.tool_calls != 1 else ''}"
-            f"{tokens_str}{cost_str}]"
-        )
-        return Text("  ".join(parts), style="bold")
+    elif isinstance(message, TaskNotificationMessage):
+        entry["task_id"] = message.task_id
+        usage = message.usage
+        if usage:
+            entry["usage"] = dict(usage) if isinstance(usage, dict) else {
+                "total_tokens": getattr(usage, "total_tokens", 0),
+            }
+    return entry
 
 
 class AgentRunner:
-    """Runs agents with a Rich live display and filesystem sandboxing.
+    """Runs agents with event emission, debug logging, and filesystem sandboxing."""
 
-    Usage::
-
-        runner = AgentRunner(cwd="/path/to/project")
-        result = await runner.run_agent(make_python_file_reviewer(["src/main.py"]), "Review: src/main.py")
-    """
-
-    def __init__(self, cwd: str = ".") -> None:
-        self.cwd = cwd
-        self.last_result: ResultMessage | None = None
-        self._console = Console(stderr=True)
-
-    def _handle_message(
+    def __init__(
         self,
-        message: Any,
-        display: _Display,
-        live: Live,
-        last_active_tid: str | None,
-    ) -> str | None:
-        """Dispatch one SDK message to the appropriate display update.
+        cwd: str = ".",
+        emitter: EventEmitter | None = None,
+        log_dir: Path | None = None,
+    ) -> None:
+        self.cwd = cwd
+        self._emitter = emitter
+        self._log_dir = log_dir
 
-        Returns the updated last_active_tid.
-        """
-        if isinstance(message, AssistantMessage):
-            if not display._has_subagents:
-                display.add_usage(message.usage)
-            for block in message.content:
-                if isinstance(block, ToolUseBlock) and block.name != "Agent":
-                    detail = _tool_detail(block)
-                    if display._has_subagents and last_active_tid:
-                        display.agent_activity(last_active_tid, detail)
-                    else:
-                        display.tool_used(detail)
+    def _emit(self, event_type: EventType, payload: Any) -> None:
+        if self._emitter:
+            self._emitter.emit(event_type, payload)
 
-        elif isinstance(message, TaskStartedMessage):
-            display.start_agent(message.task_id, message.description)
-            last_active_tid = message.task_id
-
-        elif isinstance(message, TaskProgressMessage):
-            last_active_tid = message.task_id
-            usage = message.usage
-            tokens = (
-                usage["total_tokens"]
-                if isinstance(usage, dict)
-                else getattr(usage, "total_tokens", 0)
-            )
-            tools = (
-                usage.get("tool_uses", 0)
-                if isinstance(usage, dict)
-                else getattr(usage, "tool_uses", 0)
-            )
-            display.progress_agent(message.task_id, tokens=tokens, tool_uses=tools)
-
-        elif isinstance(message, TaskNotificationMessage):
-            usage = message.usage
-            final_tokens = None
-            if usage:
-                final_tokens = (
-                    usage["total_tokens"]
-                    if isinstance(usage, dict)
-                    else getattr(usage, "total_tokens", 0)
-                )
-            display.done_agent(message.task_id, tokens=final_tokens)
-
-        elif isinstance(message, ResultMessage):
-            display.set_usage(message.usage)
-            display.cost = getattr(message, "total_cost_usd", None)
-            display.status = "done"
-            self.last_result = message
-
-        live.update(display.render())
-        return last_active_tid
-
-    async def run(self, options: ClaudeAgentOptions, prompt: str) -> str:
-        from codemonkeys.core.sandbox import restrict
-
-        restrict(self.cwd)
-
-        self.last_result = None
-        display = _Display()
-        last_active_tid: str | None = None
-
-        async def _prompt():
-            yield {
-                "type": "user",
-                "message": {"role": "user", "content": prompt},
-            }
-
-        with Live(
-            display.render(), console=self._console, refresh_per_second=4
-        ) as live:
-            async for message in query(prompt=_prompt(), options=options):
-                last_active_tid = self._handle_message(
-                    message, display, live, last_active_tid
-                )
-
-        return getattr(self.last_result, "result", "") or "" if self.last_result else ""
+    def _log_path(self, log_name: str) -> Path | None:
+        if not self._log_dir:
+            return None
+        safe = log_name.replace("/", "__").replace("\\", "__").replace(" ", "_")
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        return self._log_dir / f"{safe}_{ts}.log"
 
     async def run_agent(
         self,
@@ -252,14 +116,186 @@ class AgentRunner:
         prompt: str,
         *,
         output_format: dict[str, Any] | None = None,
-    ) -> str:
+        log_name: str = "agent",
+    ) -> RunResult:
+        restrict(self.cwd)
+
         options = ClaudeAgentOptions(
             system_prompt=agent.prompt,
             model=agent.model or "sonnet",
             cwd=self.cwd,
             permission_mode=agent.permissionMode or "dontAsk",
-            allowed_tools=agent.tools,
+            allowed_tools=agent.tools or [],
             disallowed_tools=agent.disallowedTools or [],
             output_format=output_format,
         )
-        return await self.run(options, prompt)
+
+        self._emit(
+            EventType.AGENT_STARTED,
+            AgentStartedPayload(
+                agent_name=log_name,
+                task_id=log_name,
+                model=agent.model or "sonnet",
+                files_label="",
+            ),
+        )
+
+        log_file = self._log_path(log_name)
+        total_tokens = 0
+        tool_calls = 0
+        current_tool = ""
+        last_result: ResultMessage | None = None
+        subagent_tokens: dict[str, int] = {}
+        has_subagents = False
+        start_time = time.monotonic()
+
+        def _log(entry: dict[str, Any]) -> None:
+            if not log_file:
+                return
+            entry["ts"] = datetime.now(timezone.utc).isoformat()
+            with open(log_file, "a") as f:
+                f.write(json.dumps(entry, default=repr) + "\n")
+
+        _log({
+            "event": "agent_start",
+            "name": log_name,
+            "description": agent.description,
+            "model": agent.model,
+            "tools": agent.tools,
+            "prompt_length": len(agent.prompt),
+            "user_prompt": prompt,
+        })
+
+        async def _prompt_gen():
+            yield {"type": "user", "message": {"role": "user", "content": prompt}}
+
+        async for message in query(prompt=_prompt_gen(), options=options):
+            _log(_serialize_message(message))
+
+            if isinstance(message, AssistantMessage):
+                if not has_subagents:
+                    usage = message.usage or {}
+                    turn_tokens = usage.get("total_tokens", 0) or (
+                        usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                    )
+                    total_tokens += turn_tokens
+
+                for block in message.content:
+                    if isinstance(block, ToolUseBlock) and block.name != "Agent":
+                        tool_calls += 1
+                        current_tool = _tool_detail(block)
+
+                self._emit(
+                    EventType.AGENT_PROGRESS,
+                    AgentProgressPayload(
+                        agent_name=log_name,
+                        task_id=log_name,
+                        tokens=total_tokens,
+                        tool_calls=tool_calls,
+                        current_tool=current_tool,
+                    ),
+                )
+
+            elif isinstance(message, TaskStartedMessage):
+                has_subagents = True
+                subagent_tokens[message.task_id] = 0
+
+            elif isinstance(message, TaskProgressMessage):
+                usage = message.usage
+                tokens = (
+                    usage["total_tokens"]
+                    if isinstance(usage, dict)
+                    else getattr(usage, "total_tokens", 0)
+                )
+                subagent_tokens[message.task_id] = tokens
+                total_tokens = sum(subagent_tokens.values())
+                tools = (
+                    usage.get("tool_uses", 0)
+                    if isinstance(usage, dict)
+                    else getattr(usage, "tool_uses", 0)
+                )
+                self._emit(
+                    EventType.AGENT_PROGRESS,
+                    AgentProgressPayload(
+                        agent_name=log_name,
+                        task_id=log_name,
+                        tokens=total_tokens,
+                        tool_calls=tools,
+                        current_tool="",
+                    ),
+                )
+
+            elif isinstance(message, TaskNotificationMessage):
+                usage = message.usage
+                if usage:
+                    final = (
+                        usage["total_tokens"]
+                        if isinstance(usage, dict)
+                        else getattr(usage, "total_tokens", 0)
+                    )
+                    subagent_tokens[message.task_id] = final
+                    total_tokens = sum(subagent_tokens.values())
+
+            elif isinstance(message, ResultMessage):
+                last_result = message
+                usage = message.usage or {}
+                total_tokens = usage.get("total_tokens", 0) or (
+                    usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                )
+
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+        # Extract structured output
+        structured: dict[str, Any] | None = None
+        if last_result:
+            raw = getattr(last_result, "structured_output", None)
+            if raw is not None:
+                if isinstance(raw, str):
+                    try:
+                        structured = json.loads(raw)
+                    except json.JSONDecodeError:
+                        structured = None
+                elif isinstance(raw, dict):
+                    structured = raw
+
+        result = RunResult(
+            text=getattr(last_result, "result", "") or "" if last_result else "",
+            structured=structured,
+            usage=last_result.usage or {} if last_result else {},
+            cost=getattr(last_result, "total_cost_usd", None) if last_result else None,
+            duration_ms=getattr(last_result, "duration_ms", elapsed_ms)
+            if last_result
+            else elapsed_ms,
+        )
+
+        self._emit(
+            EventType.AGENT_COMPLETED,
+            AgentCompletedPayload(
+                agent_name=log_name,
+                task_id=log_name,
+                tokens=total_tokens,
+            ),
+        )
+
+        # Write debug markdown
+        if log_file:
+            structured_out = ""
+            if structured:
+                structured_out = json.dumps(structured, indent=2, default=repr)
+            elif result.text:
+                structured_out = result.text
+
+            debug_path = log_file.with_suffix(".md")
+            with open(debug_path, "w") as f:
+                f.write(f"# Agent: {log_name}\n\n")
+                f.write(f"**Model:** {agent.model or 'sonnet'}\n")
+                f.write(f"**Tools:** {', '.join(agent.tools or [])}\n\n")
+                f.write("## System Prompt\n\n```\n")
+                f.write(agent.prompt)
+                f.write("\n```\n\n## User Prompt\n\n```\n")
+                f.write(prompt)
+                f.write("\n```\n\n## Structured Output\n\n```json\n")
+                f.write(structured_out or "(no output)")
+                f.write("\n```\n")
+
+        return result
