@@ -53,3 +53,20 @@ class TestEventEmitter:
             agent_name="reviewer", task_id="abc", tokens=1500
         )
         assert completed.tokens == 1500
+
+
+class TestAgentStartedPayloadExtended:
+    def test_model_and_files_label_fields(self) -> None:
+        payload = AgentStartedPayload(
+            agent_name="reviewer",
+            task_id="abc",
+            model="sonnet",
+            files_label="a.py, b.py",
+        )
+        assert payload.model == "sonnet"
+        assert payload.files_label == "a.py, b.py"
+
+    def test_model_and_files_label_default_empty(self) -> None:
+        payload = AgentStartedPayload(agent_name="reviewer", task_id="abc")
+        assert payload.model == ""
+        assert payload.files_label == ""

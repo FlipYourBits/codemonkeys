@@ -38,6 +38,8 @@ class PhaseCompletedPayload(BaseModel):
 class AgentStartedPayload(BaseModel):
     agent_name: str = Field(description="Name of the agent that started")
     task_id: str = Field(description="Unique ID for this agent task")
+    model: str = Field(default="", description="Model used by this agent")
+    files_label: str = Field(default="", description="Files being processed")
 
 
 class AgentProgressPayload(BaseModel):
