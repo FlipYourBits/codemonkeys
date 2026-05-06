@@ -70,7 +70,12 @@ class WorkflowDisplay:
         emitter.on(EventType.WORKFLOW_ERROR, self._on_error)
 
     def start(self) -> None:
-        self._live = Live(self._render(), console=self._console, refresh_per_second=4)
+        self._live = Live(
+            self._render(),
+            console=self._console,
+            refresh_per_second=4,
+            vertical_overflow="visible",
+        )
         self._live.start()
 
     def stop(self) -> None:
@@ -159,7 +164,7 @@ class WorkflowDisplay:
                         info["name"],
                         info.get("model", ""),
                         status_text,
-                        info.get("current_tool", "")[:50],
+                        info.get("current_tool", ""),
                         f"{info.get('tokens', 0):,}",
                         str(info.get("tool_calls", 0)),
                     )

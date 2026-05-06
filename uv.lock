@@ -303,6 +303,7 @@ version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
+    { name = "landlock", marker = "sys_platform == 'linux'" },
     { name = "pydantic" },
     { name = "rich" },
     { name = "textual" },
@@ -329,6 +330,7 @@ python = [
 requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.1.0,<1.0" },
     { name = "codemonkeys", extras = ["python"], marker = "extra == 'dev'" },
+    { name = "landlock", marker = "sys_platform == 'linux'", specifier = ">=1.0.0.dev5" },
     { name = "pip-audit", marker = "extra == 'python'", specifier = ">=2.7" },
     { name = "pip-licenses", marker = "extra == 'python'", specifier = ">=5.0" },
     { name = "pydantic", specifier = ">=2.0,<3" },
@@ -663,6 +665,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/19/74/a633ee74eb36c44aa6d1095e7cc5569bebf04342ee146178e2d36600708b/jsonschema_specifications-2025.9.1.tar.gz", hash = "sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d", size = 32855, upload-time = "2025-09-08T01:34:59.186Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl", hash = "sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe", size = 18437, upload-time = "2025-09-08T01:34:57.871Z" },
+]
+
+[[package]]
+name = "landlock"
+version = "1.0.0.dev5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/e2/ad65eb9afcde46eb055dce9b7003b372b1de19da94acf800a2e352ba5ae1/landlock-1.0.0.dev5.tar.gz", hash = "sha256:e82d511992be24986c51e3c9d2bfcc956833c2f82f95004216262aa4e2d50a2e", size = 7115, upload-time = "2025-05-03T16:51:57.738Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/c0/5cff902d2ff3df3db965e0b36208017569abf4a93ed30fe9ffafbf171c95/landlock-1.0.0.dev5-py3-none-any.whl", hash = "sha256:6d72357f5dc23d64b3b3d976672b61af736281b8d34a5825c1a61b602f2df815", size = 7969, upload-time = "2025-05-03T16:51:56.798Z" },
 ]
 
 [[package]]

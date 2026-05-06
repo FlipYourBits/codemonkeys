@@ -1,0 +1,3 @@
+- does our code review use pyright for proper type hint checking? do we have anything for code coverage in tests? and do we have anything that ensures our tests are QUALITY tests that actually test the code rather than mocking a bunch of stuff to just make the test pass?
+- make a cli interface around our workflows 
+- is there anything our python code reviewer might miss? what can we add for creating perfect code?
