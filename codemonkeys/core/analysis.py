@@ -80,7 +80,11 @@ def format_analysis(analyses: list[FileAnalysis]) -> str:
                 module = imp["module"] or ""
                 names = imp["names"]
                 label = f"{module}({', '.join(names)})" if names else module
-                (internal if "." in module and not module.startswith(("os.", "json.", "sys.")) else external).append(label)
+                (
+                    internal
+                    if "." in module and not module.startswith(("os.", "json.", "sys."))
+                    else external
+                ).append(label)
             if internal:
                 lines.append(f"  Internal imports: {', '.join(internal)}")
             if external:

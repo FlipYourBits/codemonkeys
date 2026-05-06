@@ -120,6 +120,9 @@ async def discover_from_spec(ctx: WorkflowContext) -> dict[str, Any]:
     """Post-feature mode — read spec, find implementation files, detect unplanned changes."""
     cwd = Path(ctx.cwd)
 
+    if not ctx.config.spec_path:
+        raise ValueError("spec_path is required for post_feature mode")
+
     spec_path = Path(ctx.config.spec_path)
     if not spec_path.is_absolute():
         spec_path = cwd / spec_path
@@ -127,7 +130,7 @@ async def discover_from_spec(ctx: WorkflowContext) -> dict[str, Any]:
 
     spec_files: set[str] = set()
     for step in spec.steps:
-        spec_files.update(step.files)
+        spec_files.update(f for f in step.files if f.endswith(".py"))
 
     diff_result = subprocess.run(
         [

@@ -77,7 +77,11 @@ async def _discover(ctx: WorkflowContext) -> dict[str, Any]:
     analyses = analyze_files(files, root=cwd)
     structural_metadata = format_analysis(analyses)
 
-    return {"files": files, "mechanical": mechanical, "structural_metadata": structural_metadata}
+    return {
+        "files": files,
+        "mechanical": mechanical,
+        "structural_metadata": structural_metadata,
+    }
 
 
 async def _review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:

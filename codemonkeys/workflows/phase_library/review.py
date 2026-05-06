@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 from typing import Any
 
 from codemonkeys.artifacts.schemas.architecture import ArchitectureFindings
@@ -20,11 +22,71 @@ from codemonkeys.core.runner import AgentRunner
 from codemonkeys.workflows.phases import WorkflowContext
 
 
+def _extract_hunks_for_files(full_diff: str, target_files: list[str]) -> str:
+    """Extract diff hunks only for the specified files from a unified diff."""
+    if not full_diff or not target_files:
+        return ""
+
+    target_set = set(target_files)
+    chunks: list[str] = re.split(r"(?=^diff --git )", full_diff, flags=re.MULTILINE)
+    relevant: list[str] = []
+
+    for chunk in chunks:
+        if not chunk.strip():
+            continue
+        for f in target_set:
+            if f"a/{f}" in chunk or f"b/{f}" in chunk:
+                relevant.append(chunk)
+                break
+
+    return "".join(relevant)
+
+
+async def _run_file_batch(
+    batch_files: list[str],
+    model: str,
+    ctx: WorkflowContext,
+    semaphore: asyncio.Semaphore,
+) -> FileFindings:
+    """Run a single file review batch under the concurrency semaphore."""
+    async with semaphore:
+        config = ctx.config
+        runner = AgentRunner(cwd=ctx.cwd)
+        agent = make_python_file_reviewer(batch_files, model=model)
+
+        prompt = f"Review: {', '.join(batch_files)}"
+        if config.mode == "diff":
+            full_diff = ctx.phase_results["discover"].get("diff_hunks", "")
+            hunks = _extract_hunks_for_files(full_diff, batch_files)
+            call_graph = ctx.phase_results["discover"].get("call_graph", "")
+            prompt = (
+                DIFF_CONTEXT_TEMPLATE.format(diff_hunks=hunks, call_graph=call_graph)
+                + f"\n\nReview: {', '.join(batch_files)}"
+            )
+
+        output_format: dict[str, Any] = {
+            "type": "json_schema",
+            "schema": FileFindings.model_json_schema(),
+        }
+        raw = await runner.run_agent(agent, prompt, output_format=output_format)
+
+        structured = getattr(runner.last_result, "structured_output", None)
+        if structured:
+            if isinstance(structured, str):
+                structured = json.loads(structured)
+            return FileFindings.model_validate(structured)
+        try:
+            return FileFindings.model_validate_json(raw)
+        except Exception:
+            return FileFindings(
+                file=batch_files[0], summary="Could not parse output", findings=[]
+            )
+
+
 async def file_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
-    """Batch files, dispatch per-file reviewers (haiku for tests, sonnet for prod)."""
+    """Batch files, dispatch per-file reviewers in parallel (haiku for tests, sonnet for prod)."""
     files: list[str] = ctx.phase_results["discover"]["files"]
     config = ctx.config
-    runner = AgentRunner(cwd=ctx.cwd)
 
     # Batch: up to 3 files per agent, test files on haiku, prod on sonnet
     batches: list[tuple[list[str], str]] = []
@@ -48,43 +110,14 @@ async def file_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     if prod_batch:
         batches.append((prod_batch, "sonnet"))
 
-    all_findings: list[FileFindings] = []
+    semaphore = asyncio.Semaphore(config.max_concurrent)
+    tasks = [
+        _run_file_batch(batch_files, model, ctx, semaphore)
+        for batch_files, model in batches
+    ]
+    all_findings = await asyncio.gather(*tasks)
 
-    for batch_files, model in batches:
-        agent = make_python_file_reviewer(batch_files, model=model)
-
-        prompt = f"Review: {', '.join(batch_files)}"
-        if config.mode == "diff":
-            diff_hunks = ctx.phase_results["discover"].get("diff_hunks", "")
-            call_graph = ctx.phase_results["discover"].get("call_graph", "")
-            prompt = (
-                DIFF_CONTEXT_TEMPLATE.format(
-                    diff_hunks=diff_hunks, call_graph=call_graph
-                )
-                + f"\n\nReview: {', '.join(batch_files)}"
-            )
-
-        output_format: dict[str, Any] = {
-            "type": "json_schema",
-            "schema": FileFindings.model_json_schema(),
-        }
-        raw = await runner.run_agent(agent, prompt, output_format=output_format)
-
-        structured = getattr(runner.last_result, "structured_output", None)
-        if structured:
-            if isinstance(structured, str):
-                structured = json.loads(structured)
-            findings = FileFindings.model_validate(structured)
-        else:
-            try:
-                findings = FileFindings.model_validate_json(raw)
-            except Exception:
-                findings = FileFindings(
-                    file=batch_files[0], summary="Could not parse output", findings=[]
-                )
-        all_findings.append(findings)
-
-    return {"file_findings": all_findings}
+    return {"file_findings": list(all_findings)}
 
 
 async def architecture_review(ctx: WorkflowContext) -> dict[str, ArchitectureFindings]:
@@ -139,37 +172,34 @@ async def architecture_review(ctx: WorkflowContext) -> dict[str, ArchitectureFin
     return {"architecture_findings": findings}
 
 
-async def doc_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
-    """Dispatch readme and changelog reviewers."""
-    runner = AgentRunner(cwd=ctx.cwd)
+async def _run_doc_reviewer(make_fn: Any, target: str, cwd: str) -> FileFindings:
+    """Run a single doc reviewer agent."""
+    runner = AgentRunner(cwd=cwd)
     output_format: dict[str, Any] = {
         "type": "json_schema",
         "schema": FileFindings.model_json_schema(),
     }
-    all_findings: list[FileFindings] = []
+    agent = make_fn()
+    raw = await runner.run_agent(agent, f"Review {target}", output_format=output_format)
+    structured = getattr(runner.last_result, "structured_output", None)
+    if structured:
+        if isinstance(structured, str):
+            structured = json.loads(structured)
+        return FileFindings.model_validate(structured)
+    try:
+        return FileFindings.model_validate_json(raw)
+    except Exception:
+        return FileFindings(file=target, summary="Could not parse", findings=[])
 
-    for make_fn, target in [
-        (make_readme_reviewer, "README.md"),
-        (make_changelog_reviewer, "CHANGELOG.md"),
-    ]:
-        agent = make_fn()
-        raw = await runner.run_agent(
-            agent, f"Review {target}", output_format=output_format
-        )
-        structured = getattr(runner.last_result, "structured_output", None)
-        if structured:
-            if isinstance(structured, str):
-                structured = json.loads(structured)
-            all_findings.append(FileFindings.model_validate(structured))
-        else:
-            try:
-                all_findings.append(FileFindings.model_validate_json(raw))
-            except Exception:
-                all_findings.append(
-                    FileFindings(file=target, summary="Could not parse", findings=[])
-                )
 
-    return {"doc_findings": all_findings}
+async def doc_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
+    """Dispatch readme and changelog reviewers in parallel."""
+    tasks = [
+        _run_doc_reviewer(make_readme_reviewer, "README.md", ctx.cwd),
+        _run_doc_reviewer(make_changelog_reviewer, "CHANGELOG.md", ctx.cwd),
+    ]
+    all_findings = await asyncio.gather(*tasks)
+    return {"doc_findings": list(all_findings)}
 
 
 async def spec_compliance_review(

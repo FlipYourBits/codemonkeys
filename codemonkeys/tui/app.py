@@ -190,9 +190,7 @@ class CodemonkeysApp(App[None]):
         def _serialize(obj: object) -> dict[str, object]:
             cls_name = type(obj).__name__
             if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-                fields = {
-                    f.name: getattr(obj, f.name) for f in dataclasses.fields(obj)
-                }
+                fields = {f.name: getattr(obj, f.name) for f in dataclasses.fields(obj)}
             else:
                 fields = {
                     k: getattr(obj, k)
@@ -269,9 +267,7 @@ class CodemonkeysApp(App[None]):
                 yield {"type": "user", "message": {"role": "user", "content": prompt}}
 
             try:
-                async for message in query(
-                    prompt=_prompt_gen(), options=options
-                ):
+                async for message in query(prompt=_prompt_gen(), options=options):
                     _log(type(message).__name__, file_path, message)
 
                     if isinstance(message, AssistantMessage):
@@ -284,14 +280,10 @@ class CodemonkeysApp(App[None]):
                         for block in message.content:
                             if isinstance(block, ToolUseBlock):
                                 tool_calls += 1
-                        dashboard.update_agent(
-                            task_id, tokens, tool_calls, ""
-                        )
+                        dashboard.update_agent(task_id, tokens, tool_calls, "")
 
                     elif isinstance(message, TaskStartedMessage):
-                        dashboard.update_agent(
-                            task_id, tokens, tool_calls, "started"
-                        )
+                        dashboard.update_agent(task_id, tokens, tool_calls, "started")
 
                     elif isinstance(message, TaskProgressMessage):
                         u = message.usage
@@ -299,9 +291,7 @@ class CodemonkeysApp(App[None]):
                             tokens = u.get("total_tokens", 0)
                             tool_calls = u.get("tool_uses", 0)
                         tool_name = message.last_tool_name or ""
-                        dashboard.update_agent(
-                            task_id, tokens, tool_calls, tool_name
-                        )
+                        dashboard.update_agent(task_id, tokens, tool_calls, tool_name)
 
                     elif isinstance(message, TaskNotificationMessage):
                         u = message.usage
@@ -345,9 +335,7 @@ class CodemonkeysApp(App[None]):
                 dashboard.complete_agent(task_id, tokens)
 
         total = sum(len(f.findings) for f in all_findings)
-        self.notify(
-            f"Review complete: {total} finding(s) across {len(files)} file(s)"
-        )
+        self.notify(f"Review complete: {total} finding(s) across {len(files)} file(s)")
         self.notify(f"SDK log: {log_path}")
 
     def on_click(self, event: Click) -> None:

@@ -64,12 +64,12 @@ These files changed but are NOT listed in any spec step:
 Return ONLY a JSON object. No prose, no explanation, no markdown wrapping:
 
 ```json
-{{{{
+{{
   "spec_title": "{spec.title}",
   "steps_implemented": <int>,
   "steps_total": {len(spec.steps)},
   "findings": [
-    {{{{
+    {{
       "category": "<completeness|scope_creep|contract_compliance|behavioral_fidelity|test_coverage>",
       "severity": "<high|medium|low>",
       "spec_step": "<step description or null>",
@@ -77,9 +77,9 @@ Return ONLY a JSON object. No prose, no explanation, no markdown wrapping:
       "title": "<short description>",
       "description": "<detailed explanation>",
       "suggestion": "<how to fix, or null>"
-    }}}}
+    }}
   ]
-}}}}
+}}
 ```
 
 ## Checklist

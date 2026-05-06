@@ -23,6 +23,7 @@ class WorkflowEngine:
         self._gate_future: asyncio.Future[Any] | None = None
 
     async def run(self, workflow: Workflow, context: WorkflowContext) -> None:
+        context.emitter = self._emitter
         try:
             for phase in workflow.phases:
                 self._emitter.emit(

@@ -33,3 +33,4 @@ class WorkflowContext:
     phase_results: dict[str, Any] = field(default_factory=dict)
     user_input: Any = None
     config: Any = None
+    emitter: Any = None
