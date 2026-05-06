@@ -48,6 +48,7 @@ class _Display:
         self._has_subagents = False
 
     def add_usage(self, usage: dict[str, Any] | None) -> None:
+        """Accumulate token counts from one agent turn into the running total."""
         if not usage:
             return
         turn_tokens = usage.get("total_tokens", 0) or (
@@ -56,6 +57,7 @@ class _Display:
         self.total_tokens += turn_tokens
 
     def set_usage(self, usage: dict[str, Any] | None) -> None:
+        """Replace the running total with a final authoritative usage snapshot."""
         if not usage:
             return
         self.total_tokens = usage.get("total_tokens", 0) or (
@@ -158,14 +160,75 @@ class AgentRunner:
         self.last_result: ResultMessage | None = None
         self._console = Console(stderr=True)
 
+    def _handle_message(
+        self,
+        message: Any,
+        display: _Display,
+        live: Live,
+        last_active_tid: str | None,
+    ) -> str | None:
+        """Dispatch one SDK message to the appropriate display update.
+
+        Returns the updated last_active_tid.
+        """
+        if isinstance(message, AssistantMessage):
+            if not display._has_subagents:
+                display.add_usage(message.usage)
+            for block in message.content:
+                if isinstance(block, ToolUseBlock) and block.name != "Agent":
+                    detail = _tool_detail(block)
+                    if display._has_subagents and last_active_tid:
+                        display.agent_activity(last_active_tid, detail)
+                    else:
+                        display.tool_used(detail)
+
+        elif isinstance(message, TaskStartedMessage):
+            display.start_agent(message.task_id, message.description)
+            last_active_tid = message.task_id
+
+        elif isinstance(message, TaskProgressMessage):
+            last_active_tid = message.task_id
+            usage = message.usage
+            tokens = (
+                usage["total_tokens"]
+                if isinstance(usage, dict)
+                else getattr(usage, "total_tokens", 0)
+            )
+            tools = (
+                usage.get("tool_uses", 0)
+                if isinstance(usage, dict)
+                else getattr(usage, "tool_uses", 0)
+            )
+            display.progress_agent(message.task_id, tokens=tokens, tool_uses=tools)
+
+        elif isinstance(message, TaskNotificationMessage):
+            usage = message.usage
+            final_tokens = None
+            if usage:
+                final_tokens = (
+                    usage["total_tokens"]
+                    if isinstance(usage, dict)
+                    else getattr(usage, "total_tokens", 0)
+                )
+            display.done_agent(message.task_id, tokens=final_tokens)
+
+        elif isinstance(message, ResultMessage):
+            display.set_usage(message.usage)
+            display.cost = getattr(message, "total_cost_usd", None)
+            display.status = "done"
+            self.last_result = message
+
+        live.update(display.render())
+        return last_active_tid
+
     async def run(self, options: ClaudeAgentOptions, prompt: str) -> str:
         from codemonkeys.core.sandbox import restrict
 
         restrict(self.cwd)
 
+        self.last_result = None
         display = _Display()
         last_active_tid: str | None = None
-        result_text = ""
 
         async def _prompt():
             yield {
@@ -177,64 +240,11 @@ class AgentRunner:
             display.render(), console=self._console, refresh_per_second=4
         ) as live:
             async for message in query(prompt=_prompt(), options=options):
-                if isinstance(message, AssistantMessage):
-                    if not display._has_subagents:
-                        display.add_usage(message.usage)
-                    for block in message.content:
-                        if isinstance(block, ToolUseBlock) and block.name != "Agent":
-                            detail = _tool_detail(block)
-                            if display._has_subagents and last_active_tid:
-                                display.agent_activity(last_active_tid, detail)
-                            else:
-                                display.tool_used(detail)
-                    live.update(display.render())
+                last_active_tid = self._handle_message(
+                    message, display, live, last_active_tid
+                )
 
-                elif isinstance(message, TaskStartedMessage):
-                    display.start_agent(message.task_id, message.description)
-                    last_active_tid = message.task_id
-                    live.update(display.render())
-
-                elif isinstance(message, TaskProgressMessage):
-                    last_active_tid = message.task_id
-                    u = message.usage
-                    tokens = (
-                        u["total_tokens"]
-                        if isinstance(u, dict)
-                        else getattr(u, "total_tokens", 0)
-                    )
-                    tools = (
-                        u.get("tool_uses", 0)
-                        if isinstance(u, dict)
-                        else getattr(u, "tool_uses", 0)
-                    )
-                    display.progress_agent(
-                        message.task_id,
-                        tokens=tokens,
-                        tool_uses=tools,
-                    )
-                    live.update(display.render())
-
-                elif isinstance(message, TaskNotificationMessage):
-                    u = message.usage
-                    final_tokens = None
-                    if u:
-                        final_tokens = (
-                            u["total_tokens"]
-                            if isinstance(u, dict)
-                            else getattr(u, "total_tokens", 0)
-                        )
-                    display.done_agent(message.task_id, tokens=final_tokens)
-                    live.update(display.render())
-
-                elif isinstance(message, ResultMessage):
-                    result_text = getattr(message, "result", "") or ""
-                    display.set_usage(message.usage)
-                    display.cost = getattr(message, "total_cost_usd", None)
-                    display.status = "done"
-                    self.last_result = message
-                    live.update(display.render())
-
-        return result_text
+        return getattr(self.last_result, "result", "") or "" if self.last_result else ""
 
     async def run_agent(
         self,

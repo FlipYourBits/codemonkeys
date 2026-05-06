@@ -66,71 +66,77 @@ def analyze_files(files: list[str], *, root: Path | None = None) -> list[FileAna
 def format_analysis(analyses: list[FileAnalysis]) -> str:
     """Format analyses as compact text suitable for an LLM prompt."""
     sections: list[str] = []
-    for a in analyses:
-        lines = [f"### `{a.file}`"]
-        if a.error:
-            lines.append(f"  Parse error: {a.error}")
+    for analysis in analyses:
+        lines = [f"### `{analysis.file}`"]
+        if analysis.error:
+            lines.append(f"  Parse error: {analysis.error}")
             sections.append("\n".join(lines))
             continue
 
-        if a.imports:
-            internal = []
-            external = []
-            for imp in a.imports:
-                module = imp["module"] or ""
-                names = imp["names"]
-                label = f"{module}({', '.join(names)})" if names else module
-                (
-                    internal
-                    if "." in module and not module.startswith(("os.", "json.", "sys."))
-                    else external
-                ).append(label)
-            if internal:
-                lines.append(f"  Internal imports: {', '.join(internal)}")
-            if external:
-                lines.append(f"  External imports: {', '.join(external)}")
+        if analysis.imports:
+            lines.extend(_format_imports(analysis.imports))
 
-        for fn in a.functions:
-            prefix = "async " if fn.is_async else ""
-            args = ", ".join(
-                f"{arg['name']}: {arg['type']}" if arg["type"] else arg["name"]
-                for arg in fn.args
-                if arg["name"] != "self"
-            )
-            ret = f" -> {fn.return_type}" if fn.return_type else ""
-            deco = "".join(f"@{d} " for d in fn.decorators)
-            lines.append(f"  {deco}{prefix}{fn.name}({args}){ret}")
+        for fn in analysis.functions:
+            lines.append(_format_function(fn, indent="  "))
 
-        for cls in a.classes:
-            bases = f"({', '.join(cls.bases)})" if cls.bases else ""
-            deco = "".join(f"@{d} " for d in cls.decorators)
-            lines.append(f"  {deco}class {cls.name}{bases}:")
-            for m in cls.methods:
-                if m.name == "__init__":
-                    init_args = ", ".join(
-                        f"{arg['name']}: {arg['type']}" if arg["type"] else arg["name"]
-                        for arg in m.args
-                        if arg["name"] != "self"
-                    )
-                    lines.append(f"    __init__({init_args})")
-                    continue
-                prefix = "async " if m.is_async else ""
-                args = ", ".join(
-                    f"{arg['name']}: {arg['type']}" if arg["type"] else arg["name"]
-                    for arg in m.args
-                    if arg["name"] != "self"
-                )
-                ret = f" -> {m.return_type}" if m.return_type else ""
-                deco = "".join(f"@{d} " for d in m.decorators)
-                lines.append(f"    {deco}{prefix}{m.name}({args}){ret}")
+        for cls in analysis.classes:
+            lines.extend(_format_class(cls))
 
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
 
 
+def _format_imports(imports: list[dict[str, str | list[str] | None]]) -> list[str]:
+    internal: list[str] = []
+    external: list[str] = []
+    for imp in imports:
+        module = imp["module"] or ""
+        names = imp["names"]
+        label = f"{module}({', '.join(names)})" if names else module
+        if "." in module and not module.startswith(("os.", "json.", "sys.")):
+            internal.append(label)
+        else:
+            external.append(label)
+    lines: list[str] = []
+    if internal:
+        lines.append(f"  Internal imports: {', '.join(internal)}")
+    if external:
+        lines.append(f"  External imports: {', '.join(external)}")
+    return lines
+
+
+def _format_function(fn: FunctionInfo, indent: str) -> str:
+    prefix = "async " if fn.is_async else ""
+    args = ", ".join(
+        f"{arg['name']}: {arg['type']}" if arg["type"] else arg["name"]
+        for arg in fn.args
+        if arg["name"] != "self"
+    )
+    ret = f" -> {fn.return_type}" if fn.return_type else ""
+    deco = "".join(f"@{d} " for d in fn.decorators)
+    return f"{indent}{deco}{prefix}{fn.name}({args}){ret}"
+
+
+def _format_class(cls: ClassInfo) -> list[str]:
+    bases = f"({', '.join(cls.bases)})" if cls.bases else ""
+    deco = "".join(f"@{d} " for d in cls.decorators)
+    lines = [f"  {deco}class {cls.name}{bases}:"]
+    for m in cls.methods:
+        if m.name == "__init__":
+            init_args = ", ".join(
+                f"{arg['name']}: {arg['type']}" if arg["type"] else arg["name"]
+                for arg in m.args
+                if arg["name"] != "self"
+            )
+            lines.append(f"    __init__({init_args})")
+        else:
+            lines.append(_format_function(m, indent="    "))
+    return lines
+
+
 def _extract_imports(tree: ast.Module) -> list[dict[str, str | list[str] | None]]:
     imports: list[dict[str, str | list[str] | None]] = []
-    for node in ast.walk(tree):
+    for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imports.append({"module": alias.name, "names": None})
