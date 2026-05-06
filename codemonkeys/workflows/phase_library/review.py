@@ -68,7 +68,9 @@ async def _run_file_batch(
             "schema": FileFindings.model_json_schema(),
         }
         result = await runner.run_agent(
-            agent, prompt, output_format=output_format,
+            agent,
+            prompt,
+            output_format=output_format,
             log_name=f"review_batch__{batch_files[0]}",
         )
 
@@ -156,7 +158,10 @@ async def architecture_review(ctx: WorkflowContext) -> dict[str, ArchitectureFin
         "schema": ArchitectureFindings.model_json_schema(),
     }
     result = await runner.run_agent(
-        agent, prompt, output_format=output_format, log_name="architecture_review",
+        agent,
+        prompt,
+        output_format=output_format,
+        log_name="architecture_review",
     )
 
     if result.structured:
@@ -171,8 +176,11 @@ async def architecture_review(ctx: WorkflowContext) -> dict[str, ArchitectureFin
 
 
 async def _run_doc_reviewer(
-    make_fn: Any, target: str, cwd: str,
-    emitter: Any = None, log_dir: Any = None,
+    make_fn: Any,
+    target: str,
+    cwd: str,
+    emitter: Any = None,
+    log_dir: Any = None,
 ) -> FileFindings:
     """Run a single doc reviewer agent."""
     runner = AgentRunner(cwd=cwd, emitter=emitter, log_dir=log_dir)
@@ -182,7 +190,9 @@ async def _run_doc_reviewer(
     }
     agent = make_fn()
     result = await runner.run_agent(
-        agent, f"Review {target}", output_format=output_format,
+        agent,
+        f"Review {target}",
+        output_format=output_format,
         log_name=f"doc_review__{target}",
     )
     if result.structured:
@@ -196,8 +206,12 @@ async def _run_doc_reviewer(
 async def doc_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     """Dispatch readme and changelog reviewers in parallel."""
     tasks = [
-        _run_doc_reviewer(make_readme_reviewer, "README.md", ctx.cwd, ctx.emitter, ctx.log_dir),
-        _run_doc_reviewer(make_changelog_reviewer, "CHANGELOG.md", ctx.cwd, ctx.emitter, ctx.log_dir),
+        _run_doc_reviewer(
+            make_readme_reviewer, "README.md", ctx.cwd, ctx.emitter, ctx.log_dir
+        ),
+        _run_doc_reviewer(
+            make_changelog_reviewer, "CHANGELOG.md", ctx.cwd, ctx.emitter, ctx.log_dir
+        ),
     ]
     all_findings = await asyncio.gather(*tasks)
     return {"doc_findings": list(all_findings)}

@@ -24,6 +24,12 @@ if TYPE_CHECKING:
         make_readme_reviewer as make_readme_reviewer,
     )
     from codemonkeys.core.agents.registry import AgentRegistry as AgentRegistry
+    from codemonkeys.core.agents.python_characterization_tester import (
+        make_python_characterization_tester as make_python_characterization_tester,
+    )
+    from codemonkeys.core.agents.python_structural_refactorer import (
+        make_python_structural_refactorer as make_python_structural_refactorer,
+    )
     from codemonkeys.core.agents.spec_compliance_reviewer import (
         make_spec_compliance_reviewer as make_spec_compliance_reviewer,
     )
@@ -32,9 +38,11 @@ __all__ = [
     "default_registry",
     "make_architecture_reviewer",
     "make_changelog_reviewer",
+    "make_python_characterization_tester",
     "make_python_code_fixer",
     "make_python_file_reviewer",
     "make_python_implementer",
+    "make_python_structural_refactorer",
     "make_readme_reviewer",
     "make_spec_compliance_reviewer",
 ]
@@ -51,6 +59,12 @@ def __getattr__(name: str) -> object:
         from codemonkeys.core.agents.changelog_reviewer import make_changelog_reviewer
 
         return make_changelog_reviewer
+    if name == "make_python_characterization_tester":
+        from codemonkeys.core.agents.python_characterization_tester import (
+            make_python_characterization_tester,
+        )
+
+        return make_python_characterization_tester
     if name == "make_python_code_fixer":
         from codemonkeys.core.agents.python_code_fixer import make_python_code_fixer
 
@@ -65,6 +79,12 @@ def __getattr__(name: str) -> object:
         from codemonkeys.core.agents.python_implementer import make_python_implementer
 
         return make_python_implementer
+    if name == "make_python_structural_refactorer":
+        from codemonkeys.core.agents.python_structural_refactorer import (
+            make_python_structural_refactorer,
+        )
+
+        return make_python_structural_refactorer
     if name == "make_readme_reviewer":
         from codemonkeys.core.agents.readme_reviewer import make_readme_reviewer
 
@@ -175,6 +195,42 @@ def default_registry() -> "AgentRegistry":
             produces=SpecComplianceFindings,
             consumes=FeaturePlan,
             make=make_spec_compliance_reviewer,
+        )
+    )
+    from codemonkeys.core.agents.python_characterization_tester import (
+        make_python_characterization_tester,
+    )
+    from codemonkeys.core.agents.python_structural_refactorer import (
+        make_python_structural_refactorer,
+    )
+
+    from codemonkeys.artifacts.schemas.coverage import CoverageResult
+    from codemonkeys.artifacts.schemas.refactor import (
+        CharTestResult,
+        StructuralRefactorResult,
+    )
+    from codemonkeys.artifacts.schemas.structural import StructuralReport
+
+    registry.register(
+        AgentSpec(
+            name="python-characterization-tester",
+            role=AgentRole.EXECUTOR,
+            description="Write characterization tests for uncovered source files",
+            scope="file",
+            produces=CharTestResult,
+            consumes=CoverageResult,
+            make=make_python_characterization_tester,
+        )
+    )
+    registry.register(
+        AgentSpec(
+            name="python-structural-refactorer",
+            role=AgentRole.EXECUTOR,
+            description="Execute scoped structural refactoring (cycles, layering, splitting, naming)",
+            scope="file",
+            produces=StructuralRefactorResult,
+            consumes=StructuralReport,
+            make=make_python_structural_refactorer,
         )
     )
     return registry

@@ -72,17 +72,25 @@ def _serialize_message(message: Any) -> dict[str, Any]:
     elif isinstance(message, TaskProgressMessage):
         usage = message.usage
         entry["task_id"] = message.task_id
-        entry["usage"] = dict(usage) if isinstance(usage, dict) else {
-            "total_tokens": getattr(usage, "total_tokens", 0),
-            "tool_uses": getattr(usage, "tool_uses", 0),
-        }
+        entry["usage"] = (
+            dict(usage)
+            if isinstance(usage, dict)
+            else {
+                "total_tokens": getattr(usage, "total_tokens", 0),
+                "tool_uses": getattr(usage, "tool_uses", 0),
+            }
+        )
     elif isinstance(message, TaskNotificationMessage):
         entry["task_id"] = message.task_id
         usage = message.usage
         if usage:
-            entry["usage"] = dict(usage) if isinstance(usage, dict) else {
-                "total_tokens": getattr(usage, "total_tokens", 0),
-            }
+            entry["usage"] = (
+                dict(usage)
+                if isinstance(usage, dict)
+                else {
+                    "total_tokens": getattr(usage, "total_tokens", 0),
+                }
+            )
     return entry
 
 
@@ -156,15 +164,17 @@ class AgentRunner:
             with open(log_file, "a") as f:
                 f.write(json.dumps(entry, default=repr) + "\n")
 
-        _log({
-            "event": "agent_start",
-            "name": log_name,
-            "description": agent.description,
-            "model": agent.model,
-            "tools": agent.tools,
-            "prompt_length": len(agent.prompt),
-            "user_prompt": prompt,
-        })
+        _log(
+            {
+                "event": "agent_start",
+                "name": log_name,
+                "description": agent.description,
+                "model": agent.model,
+                "tools": agent.tools,
+                "prompt_length": len(agent.prompt),
+                "user_prompt": prompt,
+            }
+        )
 
         async def _prompt_gen():
             yield {"type": "user", "message": {"role": "user", "content": prompt}}

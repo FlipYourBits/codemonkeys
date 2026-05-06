@@ -7,20 +7,28 @@ from typing import Literal
 
 from codemonkeys.workflows.phase_library import (
     architecture_review,
+    build_check,
+    characterization_tests,
+    coverage_measurement,
+    dependency_health,
     discover_all_files,
     discover_diff,
     discover_files,
     discover_from_spec,
     doc_review,
     file_review,
+    final_verify,
     fix,
     mechanical_audit,
+    refactor_step,
     report,
     spec_compliance_review,
+    structural_analysis,
     triage,
+    update_readme,
     verify,
 )
-from codemonkeys.workflows.phases import Phase, PhaseType, Workflow
+from codemonkeys.workflows.phases import Phase, PhaseType, Workflow, WorkflowContext
 
 ALL_TOOLS = frozenset(
     {"ruff", "pyright", "pytest", "pip_audit", "secrets", "coverage", "dead_code"}
@@ -32,12 +40,13 @@ _MODE_TOOLS: dict[str, frozenset[str]] = {
     "diff": SCOPED_TOOLS,
     "files": SCOPED_TOOLS,
     "post_feature": SCOPED_TOOLS,
+    "deep_clean": ALL_TOOLS,
 }
 
 
 @dataclass
 class ReviewConfig:
-    mode: Literal["full_repo", "diff", "files", "post_feature"]
+    mode: Literal["full_repo", "diff", "files", "post_feature", "deep_clean"]
     target_files: list[str] | None = None
     spec_path: str | None = None
     auto_fix: bool = False
@@ -45,6 +54,8 @@ class ReviewConfig:
     base_branch: str = "main"
     audit_tools: set[str] = field(default_factory=set)
     graph: bool = False
+    coverage_threshold: float = 40.0
+    layer_rules: dict[str, list[str]] | None = None
 
     def __post_init__(self) -> None:
         if not self.audit_tools:
@@ -176,6 +187,74 @@ def make_post_feature_workflow(*, auto_fix: bool = False) -> Workflow:
             Phase(name="triage", phase_type=triage_type, execute=triage),
             Phase(name="fix", phase_type=PhaseType.AUTOMATED, execute=fix),
             Phase(name="verify", phase_type=PhaseType.AUTOMATED, execute=verify),
+            Phase(name="report", phase_type=PhaseType.AUTOMATED, execute=report),
+        ],
+    )
+
+
+def make_deep_clean_workflow() -> Workflow:
+    """Deep clean — stabilize, write characterization tests, incrementally refactor."""
+
+    def _make_refactor_phase(name: str) -> Phase:
+        async def _execute(ctx: WorkflowContext) -> dict:
+            return await refactor_step(ctx, step_name=name)
+
+        return Phase(name=name, phase_type=PhaseType.GATE, execute=_execute)
+
+    return Workflow(
+        name="deep_clean",
+        phases=[
+            Phase(
+                name="discover",
+                phase_type=PhaseType.AUTOMATED,
+                execute=discover_all_files,
+            ),
+            Phase(
+                name="build_check",
+                phase_type=PhaseType.AUTOMATED,
+                execute=build_check,
+            ),
+            Phase(
+                name="dependency_health",
+                phase_type=PhaseType.AUTOMATED,
+                execute=dependency_health,
+            ),
+            Phase(
+                name="coverage",
+                phase_type=PhaseType.AUTOMATED,
+                execute=coverage_measurement,
+            ),
+            Phase(
+                name="structural_analysis",
+                phase_type=PhaseType.AUTOMATED,
+                execute=structural_analysis,
+            ),
+            Phase(
+                name="characterization_tests",
+                phase_type=PhaseType.AUTOMATED,
+                execute=characterization_tests,
+            ),
+            _make_refactor_phase("refactor_circular_deps"),
+            _make_refactor_phase("refactor_layering"),
+            _make_refactor_phase("refactor_god_modules"),
+            _make_refactor_phase("refactor_extract_shared"),
+            _make_refactor_phase("refactor_dead_code"),
+            _make_refactor_phase("refactor_naming"),
+            Phase(
+                name="rescan_structure",
+                phase_type=PhaseType.AUTOMATED,
+                execute=structural_analysis,
+            ),
+            Phase(
+                name="update_readme",
+                phase_type=PhaseType.AUTOMATED,
+                execute=update_readme,
+            ),
+            Phase(
+                name="final_verify",
+                phase_type=PhaseType.AUTOMATED,
+                execute=final_verify,
+            ),
             Phase(name="report", phase_type=PhaseType.AUTOMATED, execute=report),
         ],
     )

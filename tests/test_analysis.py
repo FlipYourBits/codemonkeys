@@ -27,7 +27,9 @@ class TestAnalyzeFile:
         assert "make_diff_workflow" in names
 
     def test_detects_async_functions(self) -> None:
-        result = analyze_file("codemonkeys/workflows/phase_library/review.py", root=ROOT)
+        result = analyze_file(
+            "codemonkeys/workflows/phase_library/review.py", root=ROOT
+        )
         by_name = {f.name: f for f in result.functions}
         assert by_name["file_review"].is_async is True
         assert by_name["_extract_hunks_for_files"].is_async is False

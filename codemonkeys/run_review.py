@@ -62,6 +62,8 @@ def _resolve_mode(args: argparse.Namespace) -> str:
         return "diff"
     if args.repo:
         return "repo"
+    if args.deep_clean:
+        return "deep_clean"
     return _select_mode()
 
 
@@ -72,7 +74,34 @@ def _pick_workflow(config: ReviewConfig):
         return make_diff_workflow(auto_fix=config.auto_fix)
     if config.mode == "post_feature":
         return make_post_feature_workflow(auto_fix=config.auto_fix)
+    if config.mode == "deep_clean":
+        from codemonkeys.workflows.compositions import make_deep_clean_workflow
+
+        return make_deep_clean_workflow()
     return make_full_repo_workflow(auto_fix=config.auto_fix)
+
+
+def _handle_refactor_gate(
+    engine: WorkflowEngine, display: WorkflowDisplay, phase_name: str
+) -> None:
+    display.pause()
+    step_label = phase_name.replace("refactor_", "").replace("_", " ").title()
+    console.print(
+        Panel(
+            f"[bold]Refactor Step: {step_label}[/bold]\n\n"
+            '  [dim]"approve" to proceed with this refactoring[/dim]\n'
+            '  [dim]"skip" to skip this step[/dim]',
+            border_style="yellow",
+            padding=(1, 2),
+        )
+    )
+    user_input = console.input("  [bold]>[/bold] ").strip()
+    display.resume()
+
+    if not user_input or user_input.lower() == "skip":
+        engine.resolve_gate("skip")
+    else:
+        engine.resolve_gate("approve")
 
 
 def _handle_triage_gate(engine: WorkflowEngine, display: WorkflowDisplay) -> None:
@@ -117,7 +146,11 @@ async def main_async(args: argparse.Namespace) -> None:
     engine = WorkflowEngine(emitter)
 
     def on_waiting(_: EventType, payload: object) -> None:
-        _handle_triage_gate(engine, display)
+        phase_name = getattr(payload, "phase", "")
+        if phase_name.startswith("refactor_"):
+            _handle_refactor_gate(engine, display, phase_name)
+        else:
+            _handle_triage_gate(engine, display)
 
     emitter.on(EventType.WAITING_FOR_USER, on_waiting)
 
@@ -152,6 +185,11 @@ def main() -> None:
     )
     scope.add_argument(
         "--repo", action="store_true", help="Review all .py files in the repo"
+    )
+    scope.add_argument(
+        "--deep-clean",
+        action="store_true",
+        help="Deep clean — stabilize, write characterization tests, and refactor the codebase",
     )
     parser.add_argument(
         "--auto-fix", action="store_true", help="Fix all findings without triage"

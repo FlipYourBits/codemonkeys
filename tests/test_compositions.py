@@ -162,3 +162,43 @@ class TestPostFeatureWorkflow:
         workflow = make_post_feature_workflow()
         names = [p.name for p in workflow.phases]
         assert names.index("spec_compliance_review") < names.index("file_review")
+
+
+class TestDeepCleanWorkflow:
+    def test_deep_clean_workflow_has_expected_phases(self) -> None:
+        from codemonkeys.workflows.compositions import make_deep_clean_workflow
+
+        wf = make_deep_clean_workflow()
+        names = [p.name for p in wf.phases]
+
+        assert "build_check" in names
+        assert "dependency_health" in names
+        assert "coverage" in names
+        assert "structural_analysis" in names
+        assert "characterization_tests" in names
+
+        refactor_names = [n for n in names if n.startswith("refactor_")]
+        assert len(refactor_names) == 6
+
+        assert "rescan_structure" in names
+        assert "update_readme" in names
+        assert "final_verify" in names
+        assert "report" in names
+
+    def test_refactor_phases_are_gates(self) -> None:
+        from codemonkeys.workflows.compositions import make_deep_clean_workflow
+        from codemonkeys.workflows.phases import PhaseType
+
+        wf = make_deep_clean_workflow()
+        for phase in wf.phases:
+            if phase.name.startswith("refactor_"):
+                assert phase.phase_type == PhaseType.GATE, (
+                    f"{phase.name} should be GATE"
+                )
+
+    def test_deep_clean_config(self) -> None:
+        from codemonkeys.workflows.compositions import ReviewConfig
+
+        config = ReviewConfig(mode="deep_clean")
+        assert "dead_code" in config.audit_tools
+        assert "pip_audit" in config.audit_tools

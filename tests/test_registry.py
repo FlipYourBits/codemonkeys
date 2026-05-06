@@ -112,3 +112,21 @@ class TestDefaultRegistry:
         spec = registry.get("architecture-reviewer")
         assert spec is not None
         assert spec.consumes is FileFindings
+
+
+class TestDeepCleanAgentRegistration:
+    def test_characterization_tester_registered(self) -> None:
+        from codemonkeys.core.agents import default_registry
+
+        registry = default_registry()
+        spec = registry.get("python-characterization-tester")
+        assert spec is not None
+        assert spec.role.value == "executor"
+
+    def test_structural_refactorer_registered(self) -> None:
+        from codemonkeys.core.agents import default_registry
+
+        registry = default_registry()
+        spec = registry.get("python-structural-refactorer")
+        assert spec is not None
+        assert spec.role.value == "executor"

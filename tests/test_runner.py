@@ -73,8 +73,9 @@ class TestAgentRunnerReturnsRunResult:
             yield result_msg
 
         runner = AgentRunner(cwd="/tmp/test")
-        with patch("codemonkeys.core.runner.query", fake_query), patch(
-            "codemonkeys.core.runner.restrict"
+        with (
+            patch("codemonkeys.core.runner.query", fake_query),
+            patch("codemonkeys.core.runner.restrict"),
         ):
             result = await runner.run_agent(_make_agent(), "do stuff")
 
@@ -95,8 +96,9 @@ class TestAgentRunnerReturnsRunResult:
             yield result_msg
 
         runner = AgentRunner(cwd="/tmp/test")
-        with patch("codemonkeys.core.runner.query", fake_query), patch(
-            "codemonkeys.core.runner.restrict"
+        with (
+            patch("codemonkeys.core.runner.query", fake_query),
+            patch("codemonkeys.core.runner.restrict"),
         ):
             result = await runner.run_agent(_make_agent(), "do stuff")
 
@@ -118,8 +120,9 @@ class TestAgentRunnerEmitsEvents:
         emitter.on_any(lambda et, p: events.append((et, p)))
 
         runner = AgentRunner(cwd="/tmp/test", emitter=emitter)
-        with patch("codemonkeys.core.runner.query", fake_query), patch(
-            "codemonkeys.core.runner.restrict"
+        with (
+            patch("codemonkeys.core.runner.query", fake_query),
+            patch("codemonkeys.core.runner.restrict"),
         ):
             await runner.run_agent(_make_agent(), "do stuff", log_name="test_agent")
 
@@ -137,8 +140,9 @@ class TestAgentRunnerEmitsEvents:
             yield result_msg
 
         runner = AgentRunner(cwd="/tmp/test")
-        with patch("codemonkeys.core.runner.query", fake_query), patch(
-            "codemonkeys.core.runner.restrict"
+        with (
+            patch("codemonkeys.core.runner.query", fake_query),
+            patch("codemonkeys.core.runner.restrict"),
         ):
             result = await runner.run_agent(_make_agent(), "do stuff")
 
@@ -149,21 +153,18 @@ class TestAgentRunnerLogging:
     @pytest.mark.asyncio
     async def test_writes_log_files(self, tmp_path: Path) -> None:
         assistant = _make_assistant_message()
-        result_msg = _make_result_message(
-            result="done", structured_output={"out": 1}
-        )
+        result_msg = _make_result_message(result="done", structured_output={"out": 1})
 
         async def fake_query(**kwargs):
             yield assistant
             yield result_msg
 
         runner = AgentRunner(cwd="/tmp/test", log_dir=tmp_path)
-        with patch("codemonkeys.core.runner.query", fake_query), patch(
-            "codemonkeys.core.runner.restrict"
+        with (
+            patch("codemonkeys.core.runner.query", fake_query),
+            patch("codemonkeys.core.runner.restrict"),
         ):
-            await runner.run_agent(
-                _make_agent(), "do stuff", log_name="test_log"
-            )
+            await runner.run_agent(_make_agent(), "do stuff", log_name="test_log")
 
         log_files = list(tmp_path.glob("test_log*.log"))
         md_files = list(tmp_path.glob("test_log*.md"))
@@ -187,8 +188,9 @@ class TestAgentRunnerLogging:
             yield result_msg
 
         runner = AgentRunner(cwd="/tmp/test")
-        with patch("codemonkeys.core.runner.query", fake_query), patch(
-            "codemonkeys.core.runner.restrict"
+        with (
+            patch("codemonkeys.core.runner.query", fake_query),
+            patch("codemonkeys.core.runner.restrict"),
         ):
             result = await runner.run_agent(_make_agent(), "do stuff")
 
