@@ -46,12 +46,17 @@ async def _run_file_batch(
     model: str,
     ctx: WorkflowContext,
     semaphore: asyncio.Semaphore,
+    *,
+    resilience: bool = False,
+    test_quality: bool = False,
 ) -> FileFindings:
     """Run a single file review batch under the concurrency semaphore."""
     async with semaphore:
         config = ctx.config
         runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
-        agent = make_python_file_reviewer(batch_files, model=model)
+        agent = make_python_file_reviewer(
+            batch_files, model=model, resilience=resilience, test_quality=test_quality
+        )
 
         prompt = f"Review: {', '.join(batch_files)}"
         if config.mode == "diff":
@@ -89,8 +94,10 @@ async def file_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     files: list[str] = ctx.phase_results["discover"]["files"]
     config = ctx.config
 
+    resilience = config.mode in ("full_repo", "post_feature")
+
     # Batch: up to 3 files per agent, test files on haiku, prod on sonnet
-    batches: list[tuple[list[str], str]] = []
+    batches: list[tuple[list[str], str, bool]] = []  # (files, model, is_test)
     test_batch: list[str] = []
     prod_batch: list[str] = []
 
@@ -98,23 +105,30 @@ async def file_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
         if "test" in f.split("/")[-1]:
             test_batch.append(f)
             if len(test_batch) == 3:
-                batches.append((test_batch, "haiku"))
+                batches.append((test_batch, "haiku", True))
                 test_batch = []
         else:
             prod_batch.append(f)
             if len(prod_batch) == 3:
-                batches.append((prod_batch, "sonnet"))
+                batches.append((prod_batch, "sonnet", False))
                 prod_batch = []
 
     if test_batch:
-        batches.append((test_batch, "haiku"))
+        batches.append((test_batch, "haiku", True))
     if prod_batch:
-        batches.append((prod_batch, "sonnet"))
+        batches.append((prod_batch, "sonnet", False))
 
     semaphore = asyncio.Semaphore(config.max_concurrent)
     tasks = [
-        _run_file_batch(batch_files, model, ctx, semaphore)
-        for batch_files, model in batches
+        _run_file_batch(
+            batch_files,
+            model,
+            ctx,
+            semaphore,
+            resilience=resilience and not is_test,
+            test_quality=is_test,
+        )
+        for batch_files, model, is_test in batches
     ]
     all_findings = await asyncio.gather(*tasks)
 

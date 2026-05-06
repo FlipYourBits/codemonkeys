@@ -55,6 +55,132 @@ class TestFileReview:
         assert "file_findings" in result
         assert mock_runner.run_agent.call_count >= 1
 
+    @pytest.mark.asyncio
+    async def test_passes_resilience_in_full_repo_mode(self, tmp_path: Path) -> None:
+        from codemonkeys.workflows.phase_library.review import file_review
+
+        mock_runner = MagicMock()
+        mock_runner.run_agent = AsyncMock(
+            return_value=RunResult(
+                text="{}",
+                structured=FileFindings(
+                    file="app.py", summary="test", findings=[]
+                ).model_dump(),
+                usage={"input_tokens": 100, "output_tokens": 50},
+                cost=None,
+                duration_ms=500,
+            )
+        )
+
+        ctx = _make_ctx(
+            tmp_path,
+            mode="full_repo",
+            phase_results={
+                "discover": {"files": ["app.py"], "structural_metadata": ""}
+            },
+        )
+
+        with (
+            patch(
+                "codemonkeys.workflows.phase_library.review.AgentRunner",
+                return_value=mock_runner,
+            ),
+            patch(
+                "codemonkeys.workflows.phase_library.review.make_python_file_reviewer"
+            ) as mock_make,
+        ):
+            mock_make.return_value = MagicMock()
+            await file_review(ctx)
+
+        mock_make.assert_called_once()
+        _, kwargs = mock_make.call_args
+        assert kwargs.get("resilience") is True
+
+    @pytest.mark.asyncio
+    async def test_no_resilience_in_diff_mode(self, tmp_path: Path) -> None:
+        from codemonkeys.workflows.phase_library.review import file_review
+
+        mock_runner = MagicMock()
+        mock_runner.run_agent = AsyncMock(
+            return_value=RunResult(
+                text="{}",
+                structured=FileFindings(
+                    file="app.py", summary="test", findings=[]
+                ).model_dump(),
+                usage={"input_tokens": 100, "output_tokens": 50},
+                cost=None,
+                duration_ms=500,
+            )
+        )
+
+        ctx = _make_ctx(
+            tmp_path,
+            mode="diff",
+            phase_results={
+                "discover": {
+                    "files": ["app.py"],
+                    "structural_metadata": "",
+                    "diff_hunks": "",
+                    "call_graph": "",
+                },
+            },
+        )
+
+        with (
+            patch(
+                "codemonkeys.workflows.phase_library.review.AgentRunner",
+                return_value=mock_runner,
+            ),
+            patch(
+                "codemonkeys.workflows.phase_library.review.make_python_file_reviewer"
+            ) as mock_make,
+        ):
+            mock_make.return_value = MagicMock()
+            await file_review(ctx)
+
+        _, kwargs = mock_make.call_args
+        assert kwargs.get("resilience") is False
+
+    @pytest.mark.asyncio
+    async def test_passes_test_quality_for_test_files(self, tmp_path: Path) -> None:
+        from codemonkeys.workflows.phase_library.review import file_review
+
+        mock_runner = MagicMock()
+        mock_runner.run_agent = AsyncMock(
+            return_value=RunResult(
+                text="{}",
+                structured=FileFindings(
+                    file="test_app.py", summary="test", findings=[]
+                ).model_dump(),
+                usage={"input_tokens": 100, "output_tokens": 50},
+                cost=None,
+                duration_ms=500,
+            )
+        )
+
+        ctx = _make_ctx(
+            tmp_path,
+            mode="files",
+            phase_results={
+                "discover": {"files": ["test_app.py"], "structural_metadata": ""},
+            },
+        )
+
+        with (
+            patch(
+                "codemonkeys.workflows.phase_library.review.AgentRunner",
+                return_value=mock_runner,
+            ),
+            patch(
+                "codemonkeys.workflows.phase_library.review.make_python_file_reviewer"
+            ) as mock_make,
+        ):
+            mock_make.return_value = MagicMock()
+            await file_review(ctx)
+
+        _, kwargs = mock_make.call_args
+        assert kwargs.get("test_quality") is True
+
 
 class TestArchitectureReview:
     @pytest.mark.asyncio
