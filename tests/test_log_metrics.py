@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 
 from codemonkeys.core.log_metrics import extract_metrics
 
@@ -367,15 +368,38 @@ class TestSerialization:
         assert isinstance(data["tool_calls"], list)
 
 
+class TestRealLogExtraction:
+    """Smoke test against actual log files if they exist."""
+
+    def test_extract_from_real_log_if_available(self):
+        log_dir = Path(".codemonkeys/logs")
+        if not log_dir.exists():
+            pytest.skip("No .codemonkeys/logs directory")
+        log_files = sorted(log_dir.rglob("*.log"))
+        if not log_files:
+            pytest.skip("No log files found")
+
+        metrics = extract_metrics(log_files[0])
+        assert metrics.agent_name
+        assert metrics.model
+        assert metrics.total_turns > 0
+        assert len(metrics.turns) > 0
+        json_str = metrics.to_json()
+        data = json.loads(json_str)
+        assert data["agent_name"] == metrics.agent_name
+
+
 class TestRunAgentAuditFlag:
     def test_audit_flag_is_accepted(self):
         import codemonkeys.run_agent as ra
+
         parser = ra._build_parser()
         args = parser.parse_args(["changelog_reviewer", "--audit"])
         assert args.audit is True
 
     def test_no_audit_by_default(self):
         import codemonkeys.run_agent as ra
+
         parser = ra._build_parser()
         args = parser.parse_args(["changelog_reviewer"])
         assert args.audit is False

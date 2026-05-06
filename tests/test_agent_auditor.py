@@ -18,7 +18,10 @@ class TestAgentAuditorFactory:
 
     def test_prompt_instructs_evaluation(self):
         agent = make_agent_auditor("codemonkeys/core/agents/changelog_reviewer.py")
-        assert "instruction compliance" in agent.prompt.lower() or "instruction" in agent.prompt.lower()
+        assert (
+            "instruction compliance" in agent.prompt.lower()
+            or "instruction" in agent.prompt.lower()
+        )
         assert "tool" in agent.prompt.lower()
         assert "efficiency" in agent.prompt.lower() or "turn" in agent.prompt.lower()
 
@@ -29,5 +32,6 @@ class TestAgentAuditorFactory:
 
     def test_agent_sources_paths_exist(self):
         from pathlib import Path
+
         for name, path in AGENT_SOURCES.items():
             assert Path(path).exists(), f"Agent source for {name} not found: {path}"

@@ -177,7 +177,10 @@ async def main_async(args: argparse.Namespace) -> None:
 
     if getattr(args, "audit", False):
         from codemonkeys.artifacts.schemas.audit import AgentAudit
-        from codemonkeys.core.agents.agent_auditor import AGENT_SOURCES, make_agent_auditor
+        from codemonkeys.core.agents.agent_auditor import (
+            AGENT_SOURCES,
+            make_agent_auditor,
+        )
         from codemonkeys.core.log_metrics import extract_metrics
         from codemonkeys.core.runner import AgentRunner
 
@@ -187,13 +190,18 @@ async def main_async(args: argparse.Namespace) -> None:
         else:
             console.print(f"\n[bold]Auditing {len(log_files)} agent run(s)...[/bold]\n")
             runner = AgentRunner(cwd=str(cwd), log_dir=log_dir)
-            audit_schema = {"type": "json_schema", "schema": AgentAudit.model_json_schema()}
+            audit_schema = {
+                "type": "json_schema",
+                "schema": AgentAudit.model_json_schema(),
+            }
             for lf in log_files:
                 metrics = extract_metrics(lf)
                 agent_base = metrics.agent_name.split("__")[0]
                 source_path = AGENT_SOURCES.get(agent_base)
                 if not source_path:
-                    console.print(f"  [dim]Skipping {metrics.agent_name} — no source mapping[/dim]")
+                    console.print(
+                        f"  [dim]Skipping {metrics.agent_name} — no source mapping[/dim]"
+                    )
                     continue
                 auditor = make_agent_auditor(source_path)
                 audit_result = await runner.run_agent(
@@ -204,13 +212,16 @@ async def main_async(args: argparse.Namespace) -> None:
                 )
                 if audit_result.structured:
                     import json
+
                     verdict = audit_result.structured.get("verdict", "?")
                     style = "green" if verdict == "pass" else "red"
-                    console.print(Panel(
-                        json.dumps(audit_result.structured, indent=2),
-                        title=f"[{style}]{agent_base}: {verdict.upper()}[/{style}]",
-                        border_style=style,
-                    ))
+                    console.print(
+                        Panel(
+                            json.dumps(audit_result.structured, indent=2),
+                            title=f"[{style}]{agent_base}: {verdict.upper()}[/{style}]",
+                            border_style=style,
+                        )
+                    )
 
 
 def main() -> None:
