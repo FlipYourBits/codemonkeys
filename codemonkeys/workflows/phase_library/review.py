@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from typing import Any
 
@@ -51,7 +50,7 @@ async def _run_file_batch(
     """Run a single file review batch under the concurrency semaphore."""
     async with semaphore:
         config = ctx.config
-        runner = AgentRunner(cwd=ctx.cwd)
+        runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
         agent = make_python_file_reviewer(batch_files, model=model)
 
         prompt = f"Review: {', '.join(batch_files)}"
@@ -68,15 +67,15 @@ async def _run_file_batch(
             "type": "json_schema",
             "schema": FileFindings.model_json_schema(),
         }
-        raw = await runner.run_agent(agent, prompt, output_format=output_format)
+        result = await runner.run_agent(
+            agent, prompt, output_format=output_format,
+            log_name=f"review_batch__{batch_files[0]}",
+        )
 
-        structured = getattr(runner.last_result, "structured_output", None)
-        if structured:
-            if isinstance(structured, str):
-                structured = json.loads(structured)
-            return FileFindings.model_validate(structured)
+        if result.structured:
+            return FileFindings.model_validate(result.structured)
         try:
-            return FileFindings.model_validate_json(raw)
+            return FileFindings.model_validate_json(result.text)
         except Exception:
             return FileFindings(
                 file=batch_files[0], summary="Could not parse output", findings=[]
@@ -151,43 +150,45 @@ async def architecture_review(ctx: WorkflowContext) -> dict[str, ArchitectureFin
     elif config.mode == "diff":
         prompt += "\n\nFocus on module boundaries touched by the diff."
 
-    runner = AgentRunner(cwd=ctx.cwd)
+    runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
     output_format: dict[str, Any] = {
         "type": "json_schema",
         "schema": ArchitectureFindings.model_json_schema(),
     }
-    raw = await runner.run_agent(agent, prompt, output_format=output_format)
+    result = await runner.run_agent(
+        agent, prompt, output_format=output_format, log_name="architecture_review",
+    )
 
-    structured = getattr(runner.last_result, "structured_output", None)
-    if structured:
-        if isinstance(structured, str):
-            structured = json.loads(structured)
-        findings = ArchitectureFindings.model_validate(structured)
+    if result.structured:
+        findings = ArchitectureFindings.model_validate(result.structured)
     else:
         try:
-            findings = ArchitectureFindings.model_validate_json(raw)
+            findings = ArchitectureFindings.model_validate_json(result.text)
         except Exception:
             findings = ArchitectureFindings(files_reviewed=files, findings=[])
 
     return {"architecture_findings": findings}
 
 
-async def _run_doc_reviewer(make_fn: Any, target: str, cwd: str) -> FileFindings:
+async def _run_doc_reviewer(
+    make_fn: Any, target: str, cwd: str,
+    emitter: Any = None, log_dir: Any = None,
+) -> FileFindings:
     """Run a single doc reviewer agent."""
-    runner = AgentRunner(cwd=cwd)
+    runner = AgentRunner(cwd=cwd, emitter=emitter, log_dir=log_dir)
     output_format: dict[str, Any] = {
         "type": "json_schema",
         "schema": FileFindings.model_json_schema(),
     }
     agent = make_fn()
-    raw = await runner.run_agent(agent, f"Review {target}", output_format=output_format)
-    structured = getattr(runner.last_result, "structured_output", None)
-    if structured:
-        if isinstance(structured, str):
-            structured = json.loads(structured)
-        return FileFindings.model_validate(structured)
+    result = await runner.run_agent(
+        agent, f"Review {target}", output_format=output_format,
+        log_name=f"doc_review__{target}",
+    )
+    if result.structured:
+        return FileFindings.model_validate(result.structured)
     try:
-        return FileFindings.model_validate_json(raw)
+        return FileFindings.model_validate_json(result.text)
     except Exception:
         return FileFindings(file=target, summary="Could not parse", findings=[])
 
@@ -195,8 +196,8 @@ async def _run_doc_reviewer(make_fn: Any, target: str, cwd: str) -> FileFindings
 async def doc_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     """Dispatch readme and changelog reviewers in parallel."""
     tasks = [
-        _run_doc_reviewer(make_readme_reviewer, "README.md", ctx.cwd),
-        _run_doc_reviewer(make_changelog_reviewer, "CHANGELOG.md", ctx.cwd),
+        _run_doc_reviewer(make_readme_reviewer, "README.md", ctx.cwd, ctx.emitter, ctx.log_dir),
+        _run_doc_reviewer(make_changelog_reviewer, "CHANGELOG.md", ctx.cwd, ctx.emitter, ctx.log_dir),
     ]
     all_findings = await asyncio.gather(*tasks)
     return {"doc_findings": list(all_findings)}
@@ -214,25 +215,23 @@ async def spec_compliance_review(
     agent = make_spec_compliance_reviewer(
         spec=spec, files=files, unplanned_files=unplanned
     )
-    runner = AgentRunner(cwd=ctx.cwd)
+    runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
     output_format: dict[str, Any] = {
         "type": "json_schema",
         "schema": SpecComplianceFindings.model_json_schema(),
     }
-    raw = await runner.run_agent(
+    result = await runner.run_agent(
         agent,
         f"Review implementation against spec: {spec.title}",
         output_format=output_format,
+        log_name="spec_compliance_review",
     )
 
-    structured = getattr(runner.last_result, "structured_output", None)
-    if structured:
-        if isinstance(structured, str):
-            structured = json.loads(structured)
-        findings = SpecComplianceFindings.model_validate(structured)
+    if result.structured:
+        findings = SpecComplianceFindings.model_validate(result.structured)
     else:
         try:
-            findings = SpecComplianceFindings.model_validate_json(raw)
+            findings = SpecComplianceFindings.model_validate_json(result.text)
         except Exception:
             findings = SpecComplianceFindings(
                 spec_title=spec.title,

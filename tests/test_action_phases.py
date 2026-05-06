@@ -7,6 +7,7 @@ import pytest
 
 from codemonkeys.artifacts.schemas.findings import FileFindings, Finding, FixRequest
 from codemonkeys.artifacts.schemas.results import FixResult, VerificationResult
+from codemonkeys.core.run_result import RunResult
 from codemonkeys.workflows.compositions import ReviewConfig
 from codemonkeys.workflows.phases import WorkflowContext
 
@@ -128,12 +129,15 @@ class TestFix:
         from codemonkeys.workflows.phase_library.action import fix
 
         mock_runner = MagicMock()
-        mock_runner.run_agent = AsyncMock(return_value="{}")
-        mock_runner.last_result = MagicMock(
-            structured_output=FixResult(
+        mock_runner.run_agent = AsyncMock(return_value=RunResult(
+            text="{}",
+            structured=FixResult(
                 file="a.py", fixed=["fixed"], skipped=[]
-            ).model_dump()
-        )
+            ).model_dump(),
+            usage={"input_tokens": 100, "output_tokens": 50},
+            cost=None,
+            duration_ms=500,
+        ))
 
         ctx = _make_ctx(
             tmp_path,

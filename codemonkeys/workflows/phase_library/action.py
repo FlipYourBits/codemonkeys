@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import json  # noqa: F401 — needed by NLP triage (next task)
 import subprocess
 import sys
 from pathlib import Path
@@ -252,6 +252,7 @@ async def _fix_one_file(
     cwd: str,
     emitter: Any,
     semaphore: asyncio.Semaphore,
+    log_dir: Any = None,
 ) -> FixResult:
     """Fix a single file under the concurrency semaphore."""
     async with semaphore:
@@ -261,34 +262,32 @@ async def _fix_one_file(
                 FixProgressPayload(file=request.file, status="started"),
             )
 
-        runner = AgentRunner(cwd=cwd)
+        runner = AgentRunner(cwd=cwd, emitter=emitter, log_dir=log_dir)
         findings_json = request.model_dump_json(indent=2)
         agent = make_python_code_fixer(request.file, findings_json)
         output_format = {
             "type": "json_schema",
             "schema": FixResult.model_json_schema(),
         }
-        await runner.run_agent(
-            agent, f"Fix findings in {request.file}", output_format=output_format
+        result = await runner.run_agent(
+            agent, f"Fix findings in {request.file}", output_format=output_format,
+            log_name=f"fix__{request.file}",
         )
-        structured = getattr(runner.last_result, "structured_output", None)
-        if structured:
-            if isinstance(structured, str):
-                structured = json.loads(structured)
-            result = FixResult.model_validate(structured)
+        if result.structured:
+            fix_result = FixResult.model_validate(result.structured)
         else:
-            result = FixResult(
+            fix_result = FixResult(
                 file=request.file, fixed=[], skipped=["Could not parse agent output"]
             )
 
         if emitter:
-            status = "completed" if result.fixed else "failed"
+            status = "completed" if fix_result.fixed else "failed"
             emitter.emit(
                 EventType.FIX_PROGRESS,
                 FixProgressPayload(file=request.file, status=status),
             )
 
-        return result
+        return fix_result
 
 
 async def fix(ctx: WorkflowContext) -> dict[str, list[FixResult]]:
@@ -298,7 +297,7 @@ async def fix(ctx: WorkflowContext) -> dict[str, list[FixResult]]:
     semaphore = asyncio.Semaphore(config.max_concurrent)
 
     tasks = [
-        _fix_one_file(request, ctx.cwd, ctx.emitter, semaphore)
+        _fix_one_file(request, ctx.cwd, ctx.emitter, semaphore, ctx.log_dir)
         for request in fix_requests
     ]
     results = await asyncio.gather(*tasks)

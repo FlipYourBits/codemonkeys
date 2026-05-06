@@ -7,6 +7,7 @@ import pytest
 
 from codemonkeys.artifacts.schemas.findings import FileFindings
 from codemonkeys.artifacts.schemas.plans import FeaturePlan, PlanStep
+from codemonkeys.core.run_result import RunResult
 from codemonkeys.workflows.compositions import ReviewConfig
 from codemonkeys.workflows.phases import WorkflowContext
 
@@ -28,12 +29,15 @@ class TestFileReview:
         from codemonkeys.workflows.phase_library.review import file_review
 
         mock_runner = MagicMock()
-        mock_runner.run_agent = AsyncMock(return_value="{}")
-        mock_runner.last_result = MagicMock(
-            structured_output=FileFindings(
+        mock_runner.run_agent = AsyncMock(return_value=RunResult(
+            text="{}",
+            structured=FileFindings(
                 file="a.py", summary="test", findings=[]
-            ).model_dump()
-        )
+            ).model_dump(),
+            usage={"input_tokens": 100, "output_tokens": 50},
+            cost=None,
+            duration_ms=500,
+        ))
 
         ctx = _make_ctx(
             tmp_path,
@@ -58,12 +62,15 @@ class TestArchitectureReview:
         from codemonkeys.artifacts.schemas.architecture import ArchitectureFindings
 
         mock_runner = MagicMock()
-        mock_runner.run_agent = AsyncMock(return_value="{}")
-        mock_runner.last_result = MagicMock(
-            structured_output=ArchitectureFindings(
+        mock_runner.run_agent = AsyncMock(return_value=RunResult(
+            text="{}",
+            structured=ArchitectureFindings(
                 files_reviewed=["a.py"], findings=[]
-            ).model_dump()
-        )
+            ).model_dump(),
+            usage={"input_tokens": 100, "output_tokens": 50},
+            cost=None,
+            duration_ms=500,
+        ))
 
         ctx = _make_ctx(
             tmp_path,
@@ -90,10 +97,13 @@ class TestArchitectureReview:
         from codemonkeys.workflows.phase_library.review import architecture_review
 
         mock_runner = MagicMock()
-        mock_runner.run_agent = AsyncMock(return_value="{}")
-        mock_runner.last_result = MagicMock(
-            structured_output={"files_reviewed": [], "findings": []}
-        )
+        mock_runner.run_agent = AsyncMock(return_value=RunResult(
+            text="{}",
+            structured={"files_reviewed": [], "findings": []},
+            usage={"input_tokens": 100, "output_tokens": 50},
+            cost=None,
+            duration_ms=500,
+        ))
 
         ctx = _make_ctx(
             tmp_path,
@@ -126,12 +136,15 @@ class TestDocReview:
         from codemonkeys.workflows.phase_library.review import doc_review
 
         mock_runner = MagicMock()
-        mock_runner.run_agent = AsyncMock(return_value="{}")
-        mock_runner.last_result = MagicMock(
-            structured_output=FileFindings(
+        mock_runner.run_agent = AsyncMock(return_value=RunResult(
+            text="{}",
+            structured=FileFindings(
                 file="README.md", summary="readme", findings=[]
-            ).model_dump()
-        )
+            ).model_dump(),
+            usage={"input_tokens": 100, "output_tokens": 50},
+            cost=None,
+            duration_ms=500,
+        ))
 
         ctx = _make_ctx(tmp_path, phase_results={"discover": {"files": ["a.py"]}})
 
@@ -151,15 +164,18 @@ class TestSpecComplianceReview:
         from codemonkeys.workflows.phase_library.review import spec_compliance_review
 
         mock_runner = MagicMock()
-        mock_runner.run_agent = AsyncMock(return_value="{}")
-        mock_runner.last_result = MagicMock(
-            structured_output={
+        mock_runner.run_agent = AsyncMock(return_value=RunResult(
+            text="{}",
+            structured={
                 "spec_title": "Test",
                 "steps_implemented": 1,
                 "steps_total": 1,
                 "findings": [],
-            }
-        )
+            },
+            usage={"input_tokens": 100, "output_tokens": 50},
+            cost=None,
+            duration_ms=500,
+        ))
 
         spec = FeaturePlan(
             title="Test",
