@@ -31,9 +31,29 @@ from codemonkeys.workflows.phase_library import (
 from codemonkeys.workflows.phases import Phase, PhaseType, Workflow, WorkflowContext
 
 ALL_TOOLS = frozenset(
-    {"ruff", "pyright", "pytest", "pip_audit", "secrets", "coverage", "dead_code"}
+    {
+        "ruff",
+        "pyright",
+        "pytest",
+        "pip_audit",
+        "secrets",
+        "coverage",
+        "dead_code",
+        "license_compliance",
+        "release_hygiene",
+    }
 )
-SCOPED_TOOLS = frozenset({"ruff", "pyright", "pytest", "secrets", "coverage"})
+SCOPED_TOOLS = frozenset(
+    {
+        "ruff",
+        "pyright",
+        "pytest",
+        "secrets",
+        "coverage",
+        "license_compliance",
+        "release_hygiene",
+    }
+)
 
 _MODE_TOOLS: dict[str, frozenset[str]] = {
     "full_repo": ALL_TOOLS,

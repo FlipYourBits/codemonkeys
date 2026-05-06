@@ -56,6 +56,52 @@ class TestMechanicalAudit:
         assert result["mechanical"].dead_code is None
 
     @pytest.mark.asyncio
+    async def test_runs_license_compliance(self, tmp_path: Path) -> None:
+        from codemonkeys.workflows.phase_library.mechanical import mechanical_audit
+        import json
+
+        pip_licenses_json = json.dumps(
+            [{"Name": "gpl-lib", "Version": "1.0", "License": "GPL-3.0"}]
+        )
+
+        with patch(
+            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+        ) as mock_sub:
+            mock_sub.run.return_value = MagicMock(
+                returncode=0, stdout=pip_licenses_json, stderr=""
+            )
+            ctx = WorkflowContext(
+                cwd=str(tmp_path),
+                run_id="test/run1",
+                config=ReviewConfig(mode="files", target_files=["a.py"]),
+                phase_results={"discover": {"files": ["a.py"]}},
+            )
+            ctx.config.audit_tools = {"license_compliance"}
+            result = await mechanical_audit(ctx)
+
+        assert result["mechanical"].license_compliance is not None
+        assert len(result["mechanical"].license_compliance) == 1
+
+    @pytest.mark.asyncio
+    async def test_runs_release_hygiene(self, tmp_path: Path) -> None:
+        from codemonkeys.workflows.phase_library.mechanical import mechanical_audit
+
+        target = tmp_path / "app.py"
+        target.write_text("breakpoint()\n")
+
+        ctx = WorkflowContext(
+            cwd=str(tmp_path),
+            run_id="test/run1",
+            config=ReviewConfig(mode="files", target_files=["app.py"]),
+            phase_results={"discover": {"files": ["app.py"]}},
+        )
+        ctx.config.audit_tools = {"release_hygiene"}
+        result = await mechanical_audit(ctx)
+
+        assert result["mechanical"].release_hygiene is not None
+        assert len(result["mechanical"].release_hygiene) >= 1
+
+    @pytest.mark.asyncio
     async def test_runs_pytest(self, tmp_path: Path) -> None:
         from codemonkeys.workflows.phase_library.mechanical import mechanical_audit
 

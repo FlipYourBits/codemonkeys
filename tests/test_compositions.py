@@ -21,6 +21,8 @@ class TestReviewConfig:
             "secrets",
             "coverage",
             "dead_code",
+            "license_compliance",
+            "release_hygiene",
         }
         assert config.auto_fix is False
         assert config.max_concurrent == 5
@@ -34,6 +36,8 @@ class TestReviewConfig:
             "pytest",
             "secrets",
             "coverage",
+            "license_compliance",
+            "release_hygiene",
         }
         assert "pip_audit" not in config.audit_tools
 
@@ -46,6 +50,8 @@ class TestReviewConfig:
             "pytest",
             "secrets",
             "coverage",
+            "license_compliance",
+            "release_hygiene",
         }
 
     def test_post_feature_config(self) -> None:
@@ -57,6 +63,8 @@ class TestReviewConfig:
             "pytest",
             "secrets",
             "coverage",
+            "license_compliance",
+            "release_hygiene",
         }
 
     def test_auto_fix_override(self) -> None:
@@ -70,6 +78,16 @@ class TestReviewConfig:
     def test_custom_audit_tools(self) -> None:
         config = ReviewConfig(mode="diff", audit_tools={"ruff"})
         assert config.audit_tools == {"ruff"}
+
+    def test_full_repo_includes_new_tools(self) -> None:
+        config = ReviewConfig(mode="full_repo")
+        assert "license_compliance" in config.audit_tools
+        assert "release_hygiene" in config.audit_tools
+
+    def test_diff_includes_new_tools(self) -> None:
+        config = ReviewConfig(mode="diff")
+        assert "license_compliance" in config.audit_tools
+        assert "release_hygiene" in config.audit_tools
 
 
 class TestFullRepoWorkflow:
@@ -202,3 +220,5 @@ class TestDeepCleanWorkflow:
         config = ReviewConfig(mode="deep_clean")
         assert "dead_code" in config.audit_tools
         assert "pip_audit" in config.audit_tools
+        assert "license_compliance" in config.audit_tools
+        assert "release_hygiene" in config.audit_tools
