@@ -49,6 +49,11 @@ class WorkflowEngine:
                     PhaseCompletedPayload(phase=phase.name, workflow=workflow.name),
                 )
 
+            if getattr(context.config, "graph", False):
+                from codemonkeys.workflows.graph import generate_workflow_graph
+
+                generate_workflow_graph(workflow, context)
+
             self._emitter.emit(
                 EventType.WORKFLOW_COMPLETED,
                 WorkflowCompletedPayload(workflow=workflow.name, run_id=context.run_id),

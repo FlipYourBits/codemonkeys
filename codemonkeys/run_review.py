@@ -984,6 +984,51 @@ async def main_async(args: argparse.Namespace) -> None:
     # 8. Report
     report(per_file, arch, fix_results)
 
+    # 9. Workflow graph (optional)
+    if args.graph:
+        from codemonkeys.workflows.graph import generate_workflow_graph
+        from codemonkeys.workflows.phases import (
+            Phase,
+            PhaseType,
+            Workflow,
+            WorkflowContext,
+        )
+
+        phases = [
+            Phase(
+                name="discover", phase_type=PhaseType.AUTOMATED, execute=lambda _: None
+            ),
+            Phase(
+                name="file_review",
+                phase_type=PhaseType.AUTOMATED,
+                execute=lambda _: None,
+            ),
+            Phase(
+                name="architecture_review",
+                phase_type=PhaseType.AUTOMATED,
+                execute=lambda _: None,
+            ),
+            Phase(name="triage", phase_type=PhaseType.GATE, execute=lambda _: None),
+            Phase(name="fix", phase_type=PhaseType.AUTOMATED, execute=lambda _: None),
+            Phase(
+                name="verify", phase_type=PhaseType.AUTOMATED, execute=lambda _: None
+            ),
+        ]
+        wf = Workflow(name="review", phases=phases)
+        ctx = WorkflowContext(
+            cwd=str(cwd),
+            run_id=str(log_dir.relative_to(cwd / ".codemonkeys")),
+            phase_results={
+                "discover": disc,
+                "file_review": {"file_findings": per_file},
+                "architecture_review": {"architecture_findings": arch},
+                "triage": {"fix_requests": fix_requests},
+                "fix": {"fix_results": fix_results},
+            },
+        )
+        graph_path = generate_workflow_graph(wf, ctx, output_dir=log_dir)
+        console.print(f"  [dim]Graph:[/dim] file://{graph_path}")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="codemonkeys review pipeline")
@@ -997,6 +1042,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--auto-fix", action="store_true", help="Fix all findings without triage"
+    )
+    parser.add_argument(
+        "--graph",
+        action="store_true",
+        help="Generate an interactive HTML workflow graph after run",
     )
     args = parser.parse_args()
     asyncio.run(main_async(args))

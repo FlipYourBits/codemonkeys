@@ -44,6 +44,7 @@ class ReviewConfig:
     max_concurrent: int = 5
     base_branch: str = "main"
     audit_tools: set[str] = field(default_factory=set)
+    graph: bool = False
 
     def __post_init__(self) -> None:
         if not self.audit_tools:
