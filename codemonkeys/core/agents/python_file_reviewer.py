@@ -12,15 +12,27 @@ from claude_agent_sdk import AgentDefinition
 from codemonkeys.core.prompts import (
     CODE_QUALITY,
     PYTHON_GUIDELINES,
+    RESILIENCE_REVIEW,
     SECURITY_OBSERVATIONS,
+    TEST_QUALITY,
 )
 
 
 def make_python_file_reviewer(
-    files: list[str], *, model: str = "sonnet"
+    files: list[str],
+    *,
+    model: str = "sonnet",
+    resilience: bool = False,
+    test_quality: bool = False,
 ) -> AgentDefinition:
     """Create a reviewer agent for one or more Python files."""
     file_list = "\n".join(f"- `{f}`" for f in files)
+
+    checklists = f"{CODE_QUALITY}\n\n{SECURITY_OBSERVATIONS}\n\n{PYTHON_GUIDELINES}"
+    if resilience:
+        checklists += f"\n\n{RESILIENCE_REVIEW}"
+    if test_quality:
+        checklists += f"\n\n{TEST_QUALITY}"
 
     return AgentDefinition(
         description=f"Review {len(files)} file(s) for quality and security",
@@ -70,11 +82,7 @@ the JSON:
 - Do NOT report formatting issues (linter handles those) or type errors (type checker handles those)
 - Do NOT read files other than those listed above
 
-{CODE_QUALITY}
-
-{SECURITY_OBSERVATIONS}
-
-{PYTHON_GUIDELINES}""",
+{checklists}""",
         model=model,
         tools=["Read", "Grep"],
         permissionMode="dontAsk",

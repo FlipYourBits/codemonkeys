@@ -166,6 +166,44 @@ class TestDocReview:
         assert mock_runner.run_agent.call_count == 2
 
 
+class TestFileReviewerPromptInjection:
+    def test_resilience_flag_injects_prompt(self) -> None:
+        from codemonkeys.core.agents.python_file_reviewer import (
+            make_python_file_reviewer,
+        )
+
+        agent = make_python_file_reviewer(["app.py"], resilience=True)
+        assert "concurrency" in agent.prompt
+        assert "error_recovery" in agent.prompt
+        assert "log_hygiene" in agent.prompt
+
+    def test_resilience_off_by_default(self) -> None:
+        from codemonkeys.core.agents.python_file_reviewer import (
+            make_python_file_reviewer,
+        )
+
+        agent = make_python_file_reviewer(["app.py"])
+        assert "Resilience Review" not in agent.prompt
+
+    def test_test_quality_flag_injects_prompt(self) -> None:
+        from codemonkeys.core.agents.python_file_reviewer import (
+            make_python_file_reviewer,
+        )
+
+        agent = make_python_file_reviewer(["test_app.py"], test_quality=True)
+        assert "assertion_quality" in agent.prompt
+        assert "test_design" in agent.prompt
+        assert "isolation" in agent.prompt
+
+    def test_test_quality_off_by_default(self) -> None:
+        from codemonkeys.core.agents.python_file_reviewer import (
+            make_python_file_reviewer,
+        )
+
+        agent = make_python_file_reviewer(["test_app.py"])
+        assert "Test Quality" not in agent.prompt
+
+
 class TestSpecComplianceReview:
     @pytest.mark.asyncio
     async def test_dispatches_reviewer(self, tmp_path: Path) -> None:
