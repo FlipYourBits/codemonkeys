@@ -175,6 +175,43 @@ async def main_async(args: argparse.Namespace) -> None:
     finally:
         display.stop()
 
+    if getattr(args, "audit", False):
+        from codemonkeys.artifacts.schemas.audit import AgentAudit
+        from codemonkeys.core.agents.agent_auditor import AGENT_SOURCES, make_agent_auditor
+        from codemonkeys.core.log_metrics import extract_metrics
+        from codemonkeys.core.runner import AgentRunner
+
+        log_files = sorted(log_dir.glob("*.log"))
+        if not log_files:
+            console.print("[yellow]No log files found for audit[/yellow]")
+        else:
+            console.print(f"\n[bold]Auditing {len(log_files)} agent run(s)...[/bold]\n")
+            runner = AgentRunner(cwd=str(cwd), log_dir=log_dir)
+            audit_schema = {"type": "json_schema", "schema": AgentAudit.model_json_schema()}
+            for lf in log_files:
+                metrics = extract_metrics(lf)
+                agent_base = metrics.agent_name.split("__")[0]
+                source_path = AGENT_SOURCES.get(agent_base)
+                if not source_path:
+                    console.print(f"  [dim]Skipping {metrics.agent_name} — no source mapping[/dim]")
+                    continue
+                auditor = make_agent_auditor(source_path)
+                audit_result = await runner.run_agent(
+                    auditor,
+                    metrics.to_json(),
+                    output_format=audit_schema,
+                    agent_name=f"audit__{agent_base}",
+                )
+                if audit_result.structured:
+                    import json
+                    verdict = audit_result.structured.get("verdict", "?")
+                    style = "green" if verdict == "pass" else "red"
+                    console.print(Panel(
+                        json.dumps(audit_result.structured, indent=2),
+                        title=f"[{style}]{agent_base}: {verdict.upper()}[/{style}]",
+                        border_style=style,
+                    ))
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="codemonkeys review pipeline")
@@ -198,6 +235,11 @@ def main() -> None:
         "--graph",
         action="store_true",
         help="Generate an interactive HTML workflow graph after run",
+    )
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help="Run the agent auditor on all agent logs after the workflow completes",
     )
     args = parser.parse_args()
     asyncio.run(main_async(args))
