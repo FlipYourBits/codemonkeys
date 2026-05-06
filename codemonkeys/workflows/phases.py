@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Coroutine
 
 
@@ -34,3 +35,4 @@ class WorkflowContext:
     user_input: Any = None
     config: Any = None
     emitter: Any = None
+    log_dir: Path | None = None
