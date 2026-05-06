@@ -56,6 +56,17 @@ from codemonkeys.core.analysis import analyze_files, format_analysis
 
 console = Console()
 
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_spinner_tick = 0
+
+
+def _spinner() -> str:
+    """Return next spinner frame (advances on each call)."""
+    global _spinner_tick
+    _spinner_tick += 1
+    return _SPINNER_FRAMES[_spinner_tick % len(_SPINNER_FRAMES)]
+
+
 # Log directory — created once per run
 _log_dir: Path | None = None
 
@@ -197,12 +208,11 @@ def _render_agent_card(s: dict[str, Any]) -> Text:
         card.append("  ○ ", style="dim")
         card.append(s["agent_name"], style="dim")
         card.append(f"  {s['model']}", style="dim")
-        card.append("  waiting", style="dim")
+        card.append("  queued", style="dim")
     elif s["status"] == "running":
-        card.append("  ● ", style="yellow")
+        card.append(f"  {_spinner()} ", style="yellow")
         card.append(s["agent_name"], style="bold")
         card.append(f"  {s['model']}", style="dim")
-        card.append("  running", style="yellow")
         if s["tokens"]:
             card.append(f"  {s['tokens']:,} tok", style="dim")
     elif s["status"] == "error":

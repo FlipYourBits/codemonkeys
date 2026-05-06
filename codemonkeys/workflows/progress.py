@@ -13,7 +13,6 @@ from typing import Any
 from pydantic import BaseModel
 from rich.console import Console, Group
 from rich.live import Live
-from rich.spinner import Spinner
 from rich.text import Text
 
 from codemonkeys.workflows.events import (
@@ -29,6 +28,8 @@ from codemonkeys.workflows.events import (
 )
 from codemonkeys.workflows.phases import Workflow
 
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
 
 class WorkflowProgress:
     """Rich live display driven by workflow events."""
@@ -43,6 +44,7 @@ class WorkflowProgress:
         self._triage_info: str = ""
         self._error: str | None = None
         self._live: Live | None = None
+        self._tick: int = 0
 
     def attach(self, emitter: EventEmitter) -> None:
         """Subscribe to all relevant events."""
@@ -72,8 +74,12 @@ class WorkflowProgress:
         if self._live:
             self._live.update(self._render())
 
+    def _spinner(self) -> str:
+        self._tick += 1
+        return _SPINNER_FRAMES[self._tick % len(_SPINNER_FRAMES)]
+
     def _render(self) -> Group:
-        parts: list[Text | Spinner | Group] = []
+        parts: list[Text | Group] = []
 
         # Phase checklist
         for name in self._phases:
@@ -83,9 +89,8 @@ class WorkflowProgress:
                 line.append("  ✓ ", style="green")
                 line.append(name.replace("_", " "), style="green")
             elif status == "running":
-                line.append("  ● ", style="yellow")
+                line.append(f"  {self._spinner()} ", style="yellow")
                 line.append(name.replace("_", " "), style="bold yellow")
-                line.append("  ⠋", style="yellow")
             else:
                 line.append("  ○ ", style="dim")
                 line.append(name.replace("_", " "), style="dim")
@@ -98,7 +103,9 @@ class WorkflowProgress:
                 and self._current_tool
             ):
                 tool_line = Text()
-                tool_line.append(f"      running {self._current_tool}...", style="dim")
+                tool_line.append(
+                    f"      {self._spinner()} {self._current_tool}...", style="dim"
+                )
                 parts.append(tool_line)
 
             if name == "mechanical_audit" and self._mechanical_tools:
@@ -123,7 +130,10 @@ class WorkflowProgress:
                 for fix_info in self._fix_files:
                     fix_line = Text()
                     if fix_info["status"] == "started":
-                        fix_line.append(f"      ● {fix_info['file']}", style="yellow")
+                        fix_line.append(
+                            f"      {self._spinner()} {fix_info['file']}",
+                            style="yellow",
+                        )
                     elif fix_info["status"] == "completed":
                         fix_line.append(f"      ✓ {fix_info['file']}", style="green")
                     else:
