@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json  # noqa: F401 — needed by NLP triage (next task)
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +14,7 @@ from codemonkeys.artifacts.schemas.mechanical import MechanicalAuditResult
 from codemonkeys.artifacts.schemas.results import FixResult, VerificationResult
 from codemonkeys.artifacts.schemas.spec_compliance import SpecComplianceFindings
 from codemonkeys.core.agents.python_code_fixer import make_python_code_fixer
+from claude_agent_sdk import AgentDefinition
 from codemonkeys.core.runner import AgentRunner
 from codemonkeys.workflows.events import (
     EventType,
@@ -123,6 +124,75 @@ def _collect_spec_compliance_findings(
         )
 
     return findings
+
+
+async def _nlp_triage(
+    user_text: str,
+    all_findings: dict[str, list[Finding]],
+    ctx: WorkflowContext,
+) -> list[FixRequest]:
+    """Use a haiku agent to translate natural language into fix selections."""
+    flat_findings = []
+    for file, findings in all_findings.items():
+        for f in findings:
+            flat_findings.append(f)
+
+    findings_summary = json.dumps(
+        [{"idx": i + 1, **f.model_dump()} for i, f in enumerate(flat_findings)],
+        indent=2,
+    )
+
+    triage_prompt = f"""\
+Here are the code review findings:
+
+{findings_summary}
+
+The user said: "{user_text}"
+
+Based on the user's instruction, return a JSON array of objects, each with:
+- "file": the file path
+- "finding_indices": array of 1-based finding indices to fix in that file
+
+Group findings by file. Only include findings the user wants to fix.
+Return ONLY the JSON array, no explanation."""
+
+    agent = AgentDefinition(
+        description="Triage filter",
+        prompt="You translate natural language triage instructions into structured selections. Return only valid JSON.",
+        model="haiku",
+        tools=[],
+        permissionMode="dontAsk",
+    )
+
+    runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
+    result = await runner.run_agent(agent, triage_prompt, log_name="nlp_triage")
+
+    raw = result.text.strip()
+    try:
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+        selections = json.loads(raw)
+    except (json.JSONDecodeError, IndexError):
+        selections = None
+
+    if selections is None:
+        fix_requests = []
+        for file, findings in all_findings.items():
+            if findings:
+                fix_requests.append(FixRequest(file=file, findings=findings))
+        return fix_requests
+
+    fix_requests = []
+    for sel in selections:
+        file_path = sel["file"]
+        indices = sel.get("finding_indices", [])
+        matched = [
+            flat_findings[i - 1] for i in indices if 1 <= i <= len(flat_findings)
+        ]
+        if matched:
+            fix_requests.append(FixRequest(file=file_path, findings=matched))
+
+    return fix_requests
 
 
 async def triage(ctx: WorkflowContext) -> dict[str, list[FixRequest]]:
@@ -237,6 +307,9 @@ async def triage(ctx: WorkflowContext) -> dict[str, list[FixRequest]]:
         return {"fix_requests": fix_requests}
 
     if ctx.user_input is not None:
+        if isinstance(ctx.user_input, str):
+            fix_requests = await _nlp_triage(ctx.user_input, all_findings, ctx)
+            return {"fix_requests": fix_requests}
         return {"fix_requests": ctx.user_input}
 
     # Default: all findings
@@ -270,7 +343,9 @@ async def _fix_one_file(
             "schema": FixResult.model_json_schema(),
         }
         result = await runner.run_agent(
-            agent, f"Fix findings in {request.file}", output_format=output_format,
+            agent,
+            f"Fix findings in {request.file}",
+            output_format=output_format,
             log_name=f"fix__{request.file}",
         )
         if result.structured:

@@ -123,21 +123,89 @@ class TestTriage:
         assert result["fix_requests"] == manual_requests
 
 
+class TestNLPTriage:
+    @pytest.mark.asyncio
+    async def test_string_input_dispatches_nlp_agent(self, tmp_path: Path) -> None:
+        from codemonkeys.workflows.phase_library.action import triage
+
+        mock_runner = MagicMock()
+        mock_runner.run_agent = AsyncMock(
+            return_value=RunResult(
+                text='[{"file": "a.py", "finding_indices": [1]}]',
+                structured=None,
+                usage={},
+                cost=None,
+                duration_ms=100,
+            )
+        )
+
+        ctx = _make_ctx(
+            tmp_path,
+            phase_results={
+                "file_review": {
+                    "file_findings": [
+                        FileFindings(
+                            file="a.py",
+                            summary="test",
+                            findings=[_make_finding(file="a.py", severity="high")],
+                        )
+                    ]
+                },
+            },
+        )
+        ctx.user_input = "fix everything"
+
+        with patch(
+            "codemonkeys.workflows.phase_library.action.AgentRunner",
+            return_value=mock_runner,
+        ):
+            result = await triage(ctx)
+
+        assert mock_runner.run_agent.call_count == 1
+        assert len(result["fix_requests"]) == 1
+        assert result["fix_requests"][0].file == "a.py"
+
+    @pytest.mark.asyncio
+    async def test_list_input_passes_through(self, tmp_path: Path) -> None:
+        from codemonkeys.workflows.phase_library.action import triage
+
+        manual = [FixRequest(file="x.py", findings=[_make_finding(file="x.py")])]
+        ctx = _make_ctx(
+            tmp_path,
+            phase_results={
+                "file_review": {
+                    "file_findings": [
+                        FileFindings(
+                            file="a.py",
+                            summary="test",
+                            findings=[_make_finding()],
+                        )
+                    ]
+                },
+            },
+        )
+        ctx.user_input = manual
+        result = await triage(ctx)
+        assert result["fix_requests"] == manual
+
+
 class TestFix:
     @pytest.mark.asyncio
     async def test_dispatches_fixer_per_file(self, tmp_path: Path) -> None:
         from codemonkeys.workflows.phase_library.action import fix
 
         mock_runner = MagicMock()
-        mock_runner.run_agent = AsyncMock(return_value=RunResult(
-            text="{}",
-            structured=FixResult(
-                file="a.py", fixed=["fixed"], skipped=[]
-            ).model_dump(),
-            usage={"input_tokens": 100, "output_tokens": 50},
-            cost=None,
-            duration_ms=500,
-        ))
+        mock_runner.run_agent = AsyncMock(
+            return_value=RunResult(
+                text="{}",
+                structured=FixResult(
+                    file="a.py", fixed=["fixed"], skipped=[]
+                ).model_dump(),
+                usage={"input_tokens": 100, "output_tokens": 50},
+                cost=None,
+                duration_ms=500,
+            )
+        )
 
         ctx = _make_ctx(
             tmp_path,
