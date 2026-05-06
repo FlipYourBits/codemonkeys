@@ -21,9 +21,19 @@ class WorkflowEngine:
     def __init__(self, emitter: EventEmitter) -> None:
         self._emitter = emitter
         self._gate_future: asyncio.Future[Any] | None = None
+        self._progress: Any = None
+
+    def attach_progress(self, workflow: Workflow) -> None:
+        """Attach a Rich live progress display to this engine's event stream."""
+        from codemonkeys.workflows.progress import WorkflowProgress
+
+        self._progress = WorkflowProgress(workflow)
+        self._progress.attach(self._emitter)
 
     async def run(self, workflow: Workflow, context: WorkflowContext) -> None:
         context.emitter = self._emitter
+        if self._progress:
+            self._progress.start()
         try:
             for phase in workflow.phases:
                 self._emitter.emit(
@@ -64,6 +74,9 @@ class WorkflowEngine:
                 WorkflowErrorPayload(workflow=workflow.name, error=str(exc)),
             )
             raise
+        finally:
+            if self._progress:
+                self._progress.stop()
 
     def resolve_gate(self, user_input: Any) -> None:
         if self._gate_future and not self._gate_future.done():
