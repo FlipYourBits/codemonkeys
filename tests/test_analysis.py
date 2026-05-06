@@ -21,21 +21,21 @@ class TestAnalyzeFile:
         assert "codemonkeys.core.run_result" in modules
 
     def test_extracts_top_level_functions(self) -> None:
-        result = analyze_file("codemonkeys/workflows/review.py", root=ROOT)
+        result = analyze_file("codemonkeys/workflows/compositions.py", root=ROOT)
         names = [f.name for f in result.functions]
-        assert "make_review_workflow" in names
-        assert "_discover" in names
+        assert "make_files_workflow" in names
+        assert "make_diff_workflow" in names
 
     def test_detects_async_functions(self) -> None:
-        result = analyze_file("codemonkeys/workflows/review.py", root=ROOT)
+        result = analyze_file("codemonkeys/workflows/phase_library/review.py", root=ROOT)
         by_name = {f.name: f for f in result.functions}
-        assert by_name["_discover"].is_async is True
-        assert by_name["make_review_workflow"].is_async is False
+        assert by_name["file_review"].is_async is True
+        assert by_name["_extract_hunks_for_files"].is_async is False
 
     def test_extracts_return_types(self) -> None:
-        result = analyze_file("codemonkeys/workflows/review.py", root=ROOT)
+        result = analyze_file("codemonkeys/workflows/compositions.py", root=ROOT)
         by_name = {f.name: f for f in result.functions}
-        assert by_name["make_review_workflow"].return_type == "Workflow"
+        assert by_name["make_files_workflow"].return_type == "Workflow"
 
     def test_extracts_classes_and_methods(self) -> None:
         result = analyze_file("codemonkeys/core/runner.py", root=ROOT)
@@ -92,7 +92,7 @@ class TestAnalyzeFiles:
     def test_batch_returns_all_results(self) -> None:
         files = [
             "codemonkeys/core/runner.py",
-            "codemonkeys/workflows/review.py",
+            "codemonkeys/workflows/compositions.py",
         ]
         results = analyze_files(files, root=ROOT)
         assert len(results) == 2
@@ -109,12 +109,12 @@ class TestAnalyzeFiles:
 class TestFormatAnalysis:
     def test_includes_file_headers(self) -> None:
         results = analyze_files(
-            ["codemonkeys/core/runner.py", "codemonkeys/workflows/review.py"],
+            ["codemonkeys/core/runner.py", "codemonkeys/workflows/compositions.py"],
             root=ROOT,
         )
         text = format_analysis(results)
         assert "### `codemonkeys/core/runner.py`" in text
-        assert "### `codemonkeys/workflows/review.py`" in text
+        assert "### `codemonkeys/workflows/compositions.py`" in text
 
     def test_shows_function_signatures(self, tmp_path: Path) -> None:
         code = dedent("""\
@@ -139,10 +139,10 @@ class TestFormatAnalysis:
         assert "bark() -> str" in text
 
     def test_shows_internal_imports(self) -> None:
-        results = analyze_files(["codemonkeys/workflows/review.py"], root=ROOT)
+        results = analyze_files(["codemonkeys/workflows/compositions.py"], root=ROOT)
         text = format_analysis(results)
         assert "Internal imports:" in text
-        assert "codemonkeys.artifacts.schemas.architecture" in text
+        assert "codemonkeys.workflows.phase_library" in text
 
     def test_shows_parse_error(self, tmp_path: Path) -> None:
         (tmp_path / "bad.py").write_text("def broken(")

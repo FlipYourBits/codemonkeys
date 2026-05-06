@@ -39,7 +39,7 @@ dev = [
 ]
 
 [project.scripts]
-codemonkeys = "codemonkeys.cli:main"
+codemonkeys = "codemonkeys.run_review:main"
 
 [project.urls]
 Homepage = "https://github.com/FlipYourBits/codemonkeys"

@@ -44,7 +44,7 @@ async def _approve(ctx: WorkflowContext) -> dict[str, FeaturePlan]:
     return {"approved_plan": ctx.user_input}
 
 
-async def _implement(ctx: WorkflowContext) -> dict[str, str]:
+async def _implement(ctx: WorkflowContext) -> dict[str, Any]:
     from codemonkeys.core.runner import AgentRunner
 
     plan: FeaturePlan = ctx.phase_results["approve"]["approved_plan"]
@@ -52,52 +52,53 @@ async def _implement(ctx: WorkflowContext) -> dict[str, str]:
     store.save(ctx.run_id, "approved-plan", plan)
 
     agent = make_python_implementer()
-    runner = AgentRunner(cwd=ctx.cwd)
+    runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
     prompt = f"Implement this plan:\n\n{plan.model_dump_json(indent=2)}"
-    result = await runner.run_agent(agent, prompt)
-    return {"result": result}
+    result = await runner.run_agent(agent, prompt, log_name="implementer")
+    return {"result": result.text}
 
 
 async def _auto_review(ctx: WorkflowContext) -> dict[str, Any]:
-    from codemonkeys.workflows.review import (
-        _architecture,
-        _discover,
-        _fix,
-        _review,
-        _triage,
+    from codemonkeys.workflows.compositions import ReviewConfig
+    from codemonkeys.workflows.phase_library import (
+        architecture_review,
+        file_review,
+        fix,
+        triage,
     )
-
-    discover_result = await _discover(ctx)
+    from codemonkeys.workflows.phase_library.discovery import discover_diff
 
     review_ctx = WorkflowContext(
         cwd=ctx.cwd,
         run_id=ctx.run_id,
-        phase_results={"discover": discover_result},
+        config=ReviewConfig(mode="diff", auto_fix=True),
+        emitter=ctx.emitter,
+        log_dir=ctx.log_dir,
+        phase_results={},
     )
-    review_result = await _review(review_ctx)
-    review_ctx.phase_results["review"] = review_result
 
-    arch_result = await _architecture(review_ctx)
-    review_ctx.phase_results["architecture"] = arch_result
+    discover_result = await discover_diff(review_ctx)
+    review_ctx.phase_results["discover"] = discover_result
 
-    triage_result = await _triage(review_ctx)
+    review_result = await file_review(review_ctx)
+    review_ctx.phase_results["file_review"] = review_result
+
+    arch_result = await architecture_review(review_ctx)
+    review_ctx.phase_results["architecture_review"] = arch_result
+
+    triage_result = await triage(review_ctx)
     review_ctx.phase_results["triage"] = triage_result
 
     if triage_result["fix_requests"]:
-        fix_ctx = WorkflowContext(
-            cwd=ctx.cwd,
-            run_id=ctx.run_id,
-            phase_results={**review_ctx.phase_results},
-        )
-        fix_result = await _fix(fix_ctx)
+        fix_result = await fix(review_ctx)
         return {
-            "findings": review_result["findings"],
+            "findings": review_result.get("file_findings", []),
             "architecture_findings": arch_result.get("architecture_findings"),
             "fix_results": fix_result.get("fix_results", []),
         }
 
     return {
-        "findings": review_result["findings"],
+        "findings": review_result.get("file_findings", []),
         "architecture_findings": arch_result.get("architecture_findings"),
         "fix_results": [],
     }

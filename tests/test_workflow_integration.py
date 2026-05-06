@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from codemonkeys.artifacts.schemas.findings import FileFindings
+from codemonkeys.core.run_result import RunResult
 from codemonkeys.workflows.compositions import ReviewConfig, make_files_workflow
 from codemonkeys.workflows.engine import WorkflowEngine
 from codemonkeys.workflows.events import EventEmitter, EventType
@@ -17,11 +18,16 @@ from codemonkeys.workflows.phases import WorkflowContext
 def _mock_runner():
     """Create a mock AgentRunner that returns empty findings."""
     runner = MagicMock()
-    runner.run_agent = AsyncMock(return_value="{}")
-    runner.last_result = MagicMock(
-        structured_output=FileFindings(
-            file="a.py", summary="test module", findings=[]
-        ).model_dump()
+    runner.run_agent = AsyncMock(
+        return_value=RunResult(
+            text="{}",
+            structured=FileFindings(
+                file="a.py", summary="test module", findings=[]
+            ).model_dump(),
+            usage={"input_tokens": 100, "output_tokens": 50},
+            cost=None,
+            duration_ms=500,
+        )
     )
     return runner
 

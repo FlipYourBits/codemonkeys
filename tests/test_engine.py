@@ -90,6 +90,36 @@ class TestWorkflowEngine:
         assert EventType.WORKFLOW_COMPLETED in events
 
     @pytest.mark.asyncio
+    async def test_gate_future_exists_when_waiting_event_fires(self) -> None:
+        """The gate future must be created before WAITING_FOR_USER is emitted."""
+        future_existed: list[bool] = []
+
+        async def gate_phase(ctx: WorkflowContext) -> dict[str, str]:
+            return {"input": ctx.user_input}
+
+        workflow = Workflow(
+            name="test",
+            phases=[
+                Phase(name="gate", phase_type=PhaseType.GATE, execute=gate_phase),
+            ],
+        )
+
+        emitter = EventEmitter()
+        engine = WorkflowEngine(emitter)
+
+        def on_waiting(_: EventType, payload: object) -> None:
+            future_existed.append(engine._gate_future is not None)
+            engine.resolve_gate("user_says_go")
+
+        emitter.on(EventType.WAITING_FOR_USER, on_waiting)
+
+        ctx = WorkflowContext(cwd="/tmp/test", run_id="test/run1")
+        await engine.run(workflow, ctx)
+
+        assert future_existed == [True]
+        assert ctx.phase_results["gate"] == {"input": "user_says_go"}
+
+    @pytest.mark.asyncio
     async def test_error_emits_error_event(self) -> None:
         events: list[EventType] = []
 
