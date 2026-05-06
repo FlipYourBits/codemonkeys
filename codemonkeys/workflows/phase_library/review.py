@@ -94,7 +94,7 @@ async def file_review(ctx: WorkflowContext) -> dict[str, list[FileFindings]]:
     files: list[str] = ctx.phase_results["discover"]["files"]
     config = ctx.config
 
-    resilience = config.mode in ("full_repo", "post_feature")
+    resilience = config.mode in ("full_repo", "repo", "post_feature")
 
     # Batch: up to 3 files per agent, test files on haiku, prod on sonnet
     batches: list[tuple[list[str], str, bool]] = []  # (files, model, is_test)

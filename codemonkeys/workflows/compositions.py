@@ -57,6 +57,7 @@ SCOPED_TOOLS = frozenset(
 
 _MODE_TOOLS: dict[str, frozenset[str]] = {
     "full_repo": ALL_TOOLS,
+    "repo": ALL_TOOLS,
     "diff": SCOPED_TOOLS,
     "files": SCOPED_TOOLS,
     "post_feature": SCOPED_TOOLS,
@@ -66,7 +67,7 @@ _MODE_TOOLS: dict[str, frozenset[str]] = {
 
 @dataclass
 class ReviewConfig:
-    mode: Literal["full_repo", "diff", "files", "post_feature", "deep_clean"]
+    mode: Literal["full_repo", "repo", "diff", "files", "post_feature", "deep_clean"]
     target_files: list[str] | None = None
     spec_path: str | None = None
     auto_fix: bool = False
