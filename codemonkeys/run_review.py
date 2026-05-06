@@ -941,7 +941,8 @@ async def main_async(args: argparse.Namespace) -> None:
     else:
         mode = _select_mode()
 
-    disc = discover(cwd, mode=mode, explicit_files=args.files or None)
+    with console.status("[bold yellow]Discovering files...", spinner="dots"):
+        disc = discover(cwd, mode=mode, explicit_files=args.files or None)
     files = disc["files"]
     metadata = disc["structural_metadata"]
 
@@ -979,7 +980,8 @@ async def main_async(args: argparse.Namespace) -> None:
 
     # 7. Verify
     if fix_results:
-        verify(cwd)
+        with console.status("[bold yellow]Verifying fixes...", spinner="dots"):
+            verify(cwd)
 
     # 8. Report
     report(per_file, arch, fix_results)

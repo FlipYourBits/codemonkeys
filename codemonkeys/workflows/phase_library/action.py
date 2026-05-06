@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
@@ -246,19 +247,21 @@ async def triage(ctx: WorkflowContext) -> dict[str, list[FixRequest]]:
     return {"fix_requests": fix_requests}
 
 
-async def fix(ctx: WorkflowContext) -> dict[str, list[FixResult]]:
-    """Dispatch code fixer per file."""
-    fix_requests: list[FixRequest] = ctx.phase_results["triage"]["fix_requests"]
-    runner = AgentRunner(cwd=ctx.cwd)
-    results: list[FixResult] = []
-
-    for request in fix_requests:
-        if ctx.emitter:
-            ctx.emitter.emit(
+async def _fix_one_file(
+    request: FixRequest,
+    cwd: str,
+    emitter: Any,
+    semaphore: asyncio.Semaphore,
+) -> FixResult:
+    """Fix a single file under the concurrency semaphore."""
+    async with semaphore:
+        if emitter:
+            emitter.emit(
                 EventType.FIX_PROGRESS,
                 FixProgressPayload(file=request.file, status="started"),
             )
 
+        runner = AgentRunner(cwd=cwd)
         findings_json = request.model_dump_json(indent=2)
         agent = make_python_code_fixer(request.file, findings_json)
         output_format = {
@@ -277,16 +280,30 @@ async def fix(ctx: WorkflowContext) -> dict[str, list[FixResult]]:
             result = FixResult(
                 file=request.file, fixed=[], skipped=["Could not parse agent output"]
             )
-        results.append(result)
 
-        if ctx.emitter:
+        if emitter:
             status = "completed" if result.fixed else "failed"
-            ctx.emitter.emit(
+            emitter.emit(
                 EventType.FIX_PROGRESS,
                 FixProgressPayload(file=request.file, status=status),
             )
 
-    return {"fix_results": results}
+        return result
+
+
+async def fix(ctx: WorkflowContext) -> dict[str, list[FixResult]]:
+    """Dispatch code fixers in parallel (one per file)."""
+    fix_requests: list[FixRequest] = ctx.phase_results["triage"]["fix_requests"]
+    config = ctx.config
+    semaphore = asyncio.Semaphore(config.max_concurrent)
+
+    tasks = [
+        _fix_one_file(request, ctx.cwd, ctx.emitter, semaphore)
+        for request in fix_requests
+    ]
+    results = await asyncio.gather(*tasks)
+
+    return {"fix_results": list(results)}
 
 
 async def verify(ctx: WorkflowContext) -> dict[str, VerificationResult]:
