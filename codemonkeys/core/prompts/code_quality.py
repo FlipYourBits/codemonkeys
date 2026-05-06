@@ -67,5 +67,5 @@ These belong to other review categories:
 - Formatting/whitespace (linter owns these)
 - Type errors (type checker owns these)
 - Missing tests (test runner owns these)
-- Security vulnerabilities (security skill owns these)
+- Security vulnerabilities (security checklist owns these)
 - README/changelog staleness (their own agents own these)"""

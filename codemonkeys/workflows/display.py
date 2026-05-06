@@ -15,7 +15,6 @@ from typing import Any
 from pydantic import BaseModel
 from rich.console import Console, Group
 from rich.live import Live
-from rich.table import Table
 from rich.text import Text
 
 from codemonkeys.workflows.events import (
@@ -54,6 +53,7 @@ class WorkflowDisplay:
         self._triage_info: str = ""
         self._error: str | None = None
         self._cumulative_tokens: int = 0
+        self._cumulative_cost: float = 0.0
         self._live: Live | None = None
         self._tick: int = 0
 
@@ -75,6 +75,7 @@ class WorkflowDisplay:
             console=self._console,
             refresh_per_second=4,
             vertical_overflow="visible",
+            get_renderable=self._render,
         )
         self._live.start()
 
@@ -102,10 +103,13 @@ class WorkflowDisplay:
         return _SPINNER_FRAMES[self._tick % len(_SPINNER_FRAMES)]
 
     def _render(self) -> Group:
-        parts: list[Text | Table] = []
+        parts: list[Text] = []
 
         if self._cumulative_tokens > 0:
-            header = Text(f"  [{self._cumulative_tokens:,} tokens total]", style="dim")
+            header = Text(
+                f"  [{self._cumulative_tokens:,} tokens  ${self._cumulative_cost:.4f}]",
+                style="dim",
+            )
             parts.append(header)
 
         for name in self._phases:
@@ -146,29 +150,36 @@ class WorkflowDisplay:
                     parts.append(tool_line)
 
             if status == "running" and self._agents:
-                table = Table(show_header=True, expand=True, padding=(0, 1), box=None)
-                table.add_column("Agent", style="bold cyan", no_wrap=True)
-                table.add_column("Model", width=8, style="dim")
-                table.add_column("Status", width=8)
-                table.add_column("Activity", style="dim")
-                table.add_column("Tokens", justify="right", width=10)
-                table.add_column("Tools", justify="right", width=5)
-
                 for info in self._agents.values():
-                    status_text = (
-                        Text("running", style="yellow")
-                        if info["status"] == "running"
-                        else Text("done", style="green")
+                    agent_line = Text()
+                    if info["status"] == "running":
+                        agent_line.append(f"      {self._spinner()} ", style="yellow")
+                        agent_line.append(info["name"], style="bold cyan")
+                    else:
+                        agent_line.append("      ✓ ", style="green")
+                        agent_line.append(info["name"], style="cyan")
+                    model = info.get("model", "")
+                    tokens = info.get("tokens", 0)
+                    cost = info.get("cost", 0.0)
+                    tools = info.get("tool_calls", 0)
+                    agent_line.append(f"  ({model})", style="dim")
+                    agent_line.append(
+                        f"  [{tokens:,} tokens, ${cost:.4f}, {tools} tools]",
+                        style="dim",
                     )
-                    table.add_row(
-                        info["name"],
-                        info.get("model", ""),
-                        status_text,
-                        info.get("current_tool", ""),
-                        f"{info.get('tokens', 0):,}",
-                        str(info.get("tool_calls", 0)),
-                    )
-                parts.append(table)
+                    parts.append(agent_line)
+
+                    files_label = info.get("files_label", "")
+                    if files_label:
+                        files_line = Text()
+                        files_line.append(f"          {files_label}", style="dim")
+                        parts.append(files_line)
+
+                    current = info.get("current_tool", "")
+                    if current and info["status"] == "running":
+                        activity_line = Text()
+                        activity_line.append(f"          {current}", style="dim")
+                        parts.append(activity_line)
 
             if name == "triage" and self._triage_info:
                 info_line = Text()
@@ -217,6 +228,7 @@ class WorkflowDisplay:
             "status": "running",
             "current_tool": "",
             "tokens": 0,
+            "cost": 0.0,
             "tool_calls": 0,
         }
         self._refresh()
@@ -225,6 +237,7 @@ class WorkflowDisplay:
         p: AgentProgressPayload = payload  # type: ignore[assignment]
         if p.task_id in self._agents:
             self._agents[p.task_id]["tokens"] = p.tokens
+            self._agents[p.task_id]["cost"] = p.cost
             self._agents[p.task_id]["tool_calls"] = p.tool_calls
             self._agents[p.task_id]["current_tool"] = p.current_tool
         self._refresh()
@@ -234,7 +247,9 @@ class WorkflowDisplay:
         if p.task_id in self._agents:
             self._agents[p.task_id]["status"] = "done"
             self._agents[p.task_id]["tokens"] = p.tokens
+            self._agents[p.task_id]["cost"] = p.cost
         self._cumulative_tokens += p.tokens
+        self._cumulative_cost += p.cost
         self._refresh()
 
     def _on_tool_started(self, _: EventType, payload: BaseModel) -> None:

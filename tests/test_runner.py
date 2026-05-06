@@ -124,7 +124,7 @@ class TestAgentRunnerEmitsEvents:
             patch("codemonkeys.core.runner.query", fake_query),
             patch("codemonkeys.core.runner.restrict"),
         ):
-            await runner.run_agent(_make_agent(), "do stuff", log_name="test_agent")
+            await runner.run_agent(_make_agent(), "do stuff", agent_name="test_agent")
 
         event_types = [e[0] for e in events]
         assert EventType.AGENT_STARTED in event_types
@@ -164,7 +164,7 @@ class TestAgentRunnerLogging:
             patch("codemonkeys.core.runner.query", fake_query),
             patch("codemonkeys.core.runner.restrict"),
         ):
-            await runner.run_agent(_make_agent(), "do stuff", log_name="test_log")
+            await runner.run_agent(_make_agent(), "do stuff", agent_name="test_log")
 
         log_files = list(tmp_path.glob("test_log*.log"))
         md_files = list(tmp_path.glob("test_log*.md"))

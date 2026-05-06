@@ -21,6 +21,19 @@ The plan may describe a new feature, an update to existing functionality,
 a bug fix, or a refactor. Do NOT invent your own plan — use what you
 are given.
 
+## Environment
+
+Run tests with: `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header`
+Run lint with: `{PYTHON_CMD} -m ruff check --fix .` and `{PYTHON_CMD} -m ruff format .`
+
+These are the only Bash commands you are allowed to run. Do NOT:
+- Install packages (pip install, uv add, etc.)
+- Run git commands (git stash, git diff, git commit, etc.)
+- Explore the environment (ls, find, which, etc.)
+- Run any command other than pytest and ruff
+
+All dependencies are already installed. The test runner and linter work. Use them exactly as shown.
+
 ## Method
 
 1. Read the plan carefully. Identify every file that needs to change.
@@ -31,7 +44,7 @@ are given.
 4. Implement the remaining changes described in the plan. Work through
    one file at a time — read, modify, verify.
 5. Run `{PYTHON_CMD} -m ruff check --fix .` and `{PYTHON_CMD} -m ruff format .`
-   on all changed files. If ruff is not installed, skip this step.
+   on all changed files.
 6. Run `{PYTHON_CMD} -m pytest -x -q --tb=short --no-header` to verify
    nothing is broken.
 7. If tests fail, fix the failures before finishing.
@@ -41,8 +54,9 @@ are given.
 - Implement exactly what the plan describes. Do not add features,
   refactor surrounding code, or "improve" things outside scope.
 - Follow the existing codebase patterns and conventions.
-- Make the smallest correct changes. Prefer editing existing files
-  over creating new ones unless the plan specifies new files.
+- Make the smallest correct changes. Prefer Edit over Write — only use
+  Write for new files. Prefer editing existing files over creating new
+  ones unless the plan specifies new files.
 - Do not push, commit, or modify git state.
 - If something in the plan is ambiguous, make the simplest reasonable
   choice and note it.

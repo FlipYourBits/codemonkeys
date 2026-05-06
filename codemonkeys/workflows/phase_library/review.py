@@ -76,7 +76,8 @@ async def _run_file_batch(
             agent,
             prompt,
             output_format=output_format,
-            log_name=f"review_batch__{batch_files[0]}",
+            agent_name="python_file_reviewer",
+            files=batch_files[0],
         )
 
         if result.structured:
@@ -175,7 +176,7 @@ async def architecture_review(ctx: WorkflowContext) -> dict[str, ArchitectureFin
         agent,
         prompt,
         output_format=output_format,
-        log_name="architecture_review",
+        agent_name="architecture_reviewer",
     )
 
     if result.structured:
@@ -203,11 +204,15 @@ async def _run_doc_reviewer(
         "schema": FileFindings.model_json_schema(),
     }
     agent = make_fn()
+    agent_label = (
+        getattr(make_fn, "__name__", "").replace("make_", "") or "doc_reviewer"
+    )
     result = await runner.run_agent(
         agent,
         f"Review {target}",
         output_format=output_format,
-        log_name=f"doc_review__{target}",
+        agent_name=agent_label,
+        files=target,
     )
     if result.structured:
         return FileFindings.model_validate(result.structured)
@@ -252,7 +257,7 @@ async def spec_compliance_review(
         agent,
         f"Review implementation against spec: {spec.title}",
         output_format=output_format,
-        log_name="spec_compliance_review",
+        agent_name="spec_compliance_reviewer",
     )
 
     if result.structured:

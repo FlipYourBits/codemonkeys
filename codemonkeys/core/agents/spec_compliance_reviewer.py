@@ -33,11 +33,19 @@ def make_spec_compliance_reviewer(
         else "(none — all changed files are in the spec)"
     )
 
+    safe_title = spec.title.replace('"', '\\"')
+
     return AgentDefinition(
         description=f"Spec compliance review: {spec.title}",
         prompt=f"""\
 You review whether an implementation matches its specification. Read the spec,
 then read the implementation files, and report any gaps between intent and reality.
+
+## Guardrails
+
+You are a **read-only reviewer**. Do NOT modify, create, or delete any files.
+Do NOT run commands, install packages, or modify git state. Your only job is
+to analyze and report findings.
 
 ## The Spec
 
@@ -65,7 +73,7 @@ Return ONLY a JSON object. No prose, no explanation, no markdown wrapping:
 
 ```json
 {{
-  "spec_title": "{spec.title}",
+  "spec_title": "{safe_title}",
   "steps_implemented": <int>,
   "steps_total": {len(spec.steps)},
   "findings": [

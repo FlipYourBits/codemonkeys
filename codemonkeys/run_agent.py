@@ -374,6 +374,7 @@ async def main_async(args: argparse.Namespace) -> None:
         from codemonkeys.core.agents.agent_auditor import (
             AGENT_SOURCES,
             make_agent_auditor,
+            run_audit_with_fixes,
         )
         from codemonkeys.core.log_metrics import extract_metrics
 
@@ -394,14 +395,8 @@ async def main_async(args: argparse.Namespace) -> None:
                     agent_name="agent_auditor",
                 )
                 if audit_result.structured:
-                    verdict = audit_result.structured.get("verdict", "?")
-                    style = "green" if verdict == "pass" else "red"
-                    console.print(
-                        Panel(
-                            json.dumps(audit_result.structured, indent=2),
-                            title=f"[{style}]Audit: {verdict.upper()}[/{style}]",
-                            border_style=style,
-                        )
+                    await run_audit_with_fixes(
+                        console, runner, audit_result.structured, name, source_path
                     )
                 else:
                     console.print(

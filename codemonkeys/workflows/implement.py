@@ -54,7 +54,7 @@ async def _implement(ctx: WorkflowContext) -> dict[str, Any]:
     agent = make_python_implementer()
     runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
     prompt = f"Implement this plan:\n\n{plan.model_dump_json(indent=2)}"
-    result = await runner.run_agent(agent, prompt, log_name="implementer")
+    result = await runner.run_agent(agent, prompt, agent_name="python_implementer")
     return {"result": result.text}
 
 

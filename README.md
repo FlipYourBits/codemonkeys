@@ -6,6 +6,7 @@ Skill-driven workflows for Python development in [Claude Code](https://docs.anth
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 - Python 3.10+
+- [uv](https://docs.astral.sh/uv/) — used for dependency management, virtual environments, and running commands (`uv sync`, `uv run`)
 
 ### Optional Tool Dependencies
 
@@ -13,15 +14,16 @@ Skills run these tools as part of their workflows. Missing tools are skipped gra
 
 | Tool | Used by | Install |
 |------|---------|---------|
-| ruff | codemonkeys-python-review, codemonkeys-python-feature | `pip install ruff` |
-| pyright | codemonkeys-python-review | `pip install pyright` |
-| pytest | codemonkeys-python-review, codemonkeys-python-feature | `pip install pytest` |
-| pip-audit | codemonkeys-python-review | `pip install pip-audit` |
+| ruff | codemonkeys-python-review, codemonkeys-python-feature | `uv pip install ruff` |
+| pyright | codemonkeys-python-review | `uv pip install pyright` |
+| pytest | codemonkeys-python-review, codemonkeys-python-feature | `uv pip install pytest` |
+| pip-audit | codemonkeys-python-review | `uv pip install pip-audit` |
+| pip-licenses | codemonkeys-python-review | `uv pip install pip-licenses` |
 
-To install everything:
+Or install everything at once:
 
 ```bash
-pip install ruff pyright pytest pip-audit
+uv sync --extra python
 ```
 
 ## Installation

@@ -18,7 +18,7 @@ class TestMechanicalAudit:
         ruff_json = '[{"filename": "a.py", "location": {"row": 1}, "code": "F401", "message": "unused import"}]'
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_tools.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=1, stdout=ruff_json, stderr=""
@@ -40,7 +40,7 @@ class TestMechanicalAudit:
         from codemonkeys.workflows.phase_library.mechanical import mechanical_audit
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_tools.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
             ctx = WorkflowContext(
@@ -65,7 +65,7 @@ class TestMechanicalAudit:
         )
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_license.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=0, stdout=pip_licenses_json, stderr=""
@@ -106,7 +106,7 @@ class TestMechanicalAudit:
         from codemonkeys.workflows.phase_library.mechanical import mechanical_audit
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_tools.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=0, stdout="5 passed\n", stderr=""
@@ -126,7 +126,7 @@ class TestMechanicalAudit:
 
 class TestSecretsScanner:
     def test_detects_aws_key(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _scan_secrets
+        from codemonkeys.workflows.phase_library._mechanical_tools import _scan_secrets
 
         target = tmp_path / "config.py"
         target.write_text('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n')
@@ -136,7 +136,7 @@ class TestSecretsScanner:
         assert "AWS" in findings[0].pattern
 
     def test_no_false_positive_on_normal_code(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _scan_secrets
+        from codemonkeys.workflows.phase_library._mechanical_tools import _scan_secrets
 
         target = tmp_path / "clean.py"
         target.write_text("x = 42\nname = 'hello'\n")
@@ -147,7 +147,7 @@ class TestSecretsScanner:
 
 class TestLicenseCompliance:
     def test_classifies_gpl_as_copyleft(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import (
+        from codemonkeys.workflows.phase_library._mechanical_license import (
             _run_license_compliance,
         )
 
@@ -159,7 +159,7 @@ class TestLicenseCompliance:
         )
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_license.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=0, stdout=piplicenses_json, stderr=""
@@ -172,7 +172,7 @@ class TestLicenseCompliance:
         assert findings[0].severity == "high"
 
     def test_classifies_unknown_license(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import (
+        from codemonkeys.workflows.phase_library._mechanical_license import (
             _run_license_compliance,
         )
 
@@ -183,7 +183,7 @@ class TestLicenseCompliance:
         )
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_license.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=0, stdout=piplicenses_json, stderr=""
@@ -195,7 +195,7 @@ class TestLicenseCompliance:
         assert findings[0].severity == "medium"
 
     def test_permissive_licenses_pass(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import (
+        from codemonkeys.workflows.phase_library._mechanical_license import (
             _run_license_compliance,
         )
 
@@ -209,7 +209,7 @@ class TestLicenseCompliance:
         )
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_license.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=0, stdout=piplicenses_json, stderr=""
@@ -219,7 +219,7 @@ class TestLicenseCompliance:
         assert findings == []
 
     def test_classifies_restrictive_license(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import (
+        from codemonkeys.workflows.phase_library._mechanical_license import (
             _run_license_compliance,
         )
 
@@ -230,7 +230,7 @@ class TestLicenseCompliance:
         )
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_license.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=0, stdout=piplicenses_json, stderr=""
@@ -242,7 +242,7 @@ class TestLicenseCompliance:
         assert findings[0].severity == "low"
 
     def test_classifies_non_standard_license(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import (
+        from codemonkeys.workflows.phase_library._mechanical_license import (
             _run_license_compliance,
         )
 
@@ -257,7 +257,7 @@ class TestLicenseCompliance:
         )
 
         with patch(
-            "codemonkeys.workflows.phase_library.mechanical.subprocess"
+            "codemonkeys.workflows.phase_library._mechanical_license.subprocess"
         ) as mock_sub:
             mock_sub.run.return_value = MagicMock(
                 returncode=0, stdout=piplicenses_json, stderr=""
@@ -271,7 +271,9 @@ class TestLicenseCompliance:
 
 class TestReleaseHygiene:
     def test_detects_breakpoint(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "app.py").write_text("x = 1\nbreakpoint()\ny = 2\n")
         (tmp_path / "uv.lock").write_text("")
@@ -283,7 +285,9 @@ class TestReleaseHygiene:
         assert debug_findings[0].detail == "breakpoint() call"
 
     def test_detects_import_pdb(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "app.py").write_text("import pdb\npdb.set_trace()\n")
         (tmp_path / "uv.lock").write_text("")
@@ -294,7 +298,9 @@ class TestReleaseHygiene:
         assert any(f.detail == "pdb import" for f in debug_findings)
 
     def test_skips_print_in_test_files(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "test_app.py").write_text('print("hello")\n')
         (tmp_path / "uv.lock").write_text("")
@@ -308,7 +314,9 @@ class TestReleaseHygiene:
         assert print_findings == []
 
     def test_detects_bare_todo(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "app.py").write_text("# TODO fix this later\n")
         (tmp_path / "uv.lock").write_text("")
@@ -318,7 +326,9 @@ class TestReleaseHygiene:
         assert len(marker_findings) == 1
 
     def test_allows_todo_with_issue_ref(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "app.py").write_text("# TODO(#123) fix this later\n")
         (tmp_path / "uv.lock").write_text("")
@@ -328,7 +338,9 @@ class TestReleaseHygiene:
         assert marker_findings == []
 
     def test_detects_localhost(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "client.py").write_text('URL = "http://localhost:8080/api"\n')
         (tmp_path / "uv.lock").write_text("")
@@ -339,7 +351,9 @@ class TestReleaseHygiene:
         assert dev_findings[0].severity == "high"
 
     def test_skips_localhost_in_test_files(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "test_client.py").write_text('URL = "http://localhost:8080/api"\n')
         (tmp_path / "uv.lock").write_text("")
@@ -349,7 +363,9 @@ class TestReleaseHygiene:
         assert dev_findings == []
 
     def test_skips_localhost_in_config_files(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "config.py").write_text('URL = "http://localhost:8080/api"\n')
         (tmp_path / "uv.lock").write_text("")
@@ -359,7 +375,9 @@ class TestReleaseHygiene:
         assert dev_findings == []
 
     def test_detects_missing_lockfile(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
@@ -369,7 +387,9 @@ class TestReleaseHygiene:
         assert "lockfile" in dep_findings[0].detail.lower()
 
     def test_no_lockfile_finding_when_present(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "app.py").write_text("x = 1\n")
         (tmp_path / "uv.lock").write_text("")
@@ -379,7 +399,9 @@ class TestReleaseHygiene:
         assert dep_findings == []
 
     def test_clean_file_no_findings(self, tmp_path: Path) -> None:
-        from codemonkeys.workflows.phase_library.mechanical import _run_release_hygiene
+        from codemonkeys.workflows.phase_library._mechanical_hygiene import (
+            _run_release_hygiene,
+        )
 
         (tmp_path / "app.py").write_text(
             "def greet(name: str) -> str:\n    return f'Hello, {name}'\n"

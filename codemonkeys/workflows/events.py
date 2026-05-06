@@ -46,6 +46,7 @@ class AgentProgressPayload(BaseModel):
     agent_name: str = Field(description="Name of the agent")
     task_id: str = Field(description="Unique ID for this agent task")
     tokens: int = Field(default=0, description="Tokens consumed so far")
+    cost: float = Field(default=0.0, description="Estimated cost in USD so far")
     tool_calls: int = Field(default=0, description="Number of tool calls so far")
     current_tool: str = Field(default="", description="Currently executing tool")
 
@@ -54,6 +55,7 @@ class AgentCompletedPayload(BaseModel):
     agent_name: str = Field(description="Name of the agent that completed")
     task_id: str = Field(description="Unique ID for this agent task")
     tokens: int = Field(default=0, description="Total tokens consumed")
+    cost: float = Field(default=0.0, description="Estimated total cost in USD")
 
 
 class FindingAddedPayload(BaseModel):

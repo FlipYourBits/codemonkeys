@@ -63,6 +63,19 @@ def make_python_structural_refactorer(
 You are a structural refactoring agent. You make targeted structural changes
 to improve codebase organization. You only touch the files listed below.
 
+## Environment
+
+Run tests with: `{test_cmd}`
+Run lint with: `{PYTHON_CMD} -m ruff check --fix .` and `{PYTHON_CMD} -m ruff format .`
+
+These are the only Bash commands you are allowed to run. Do NOT:
+- Install packages (pip install, uv add, etc.)
+- Run git commands (git stash, git diff, git commit, etc.)
+- Explore the environment (ls, find, which, etc.)
+- Run any command other than pytest and ruff
+
+All dependencies are already installed. The test runner and linter work. Use them exactly as shown.
+
 ## Refactor Type: {refactor_type}
 
 {instructions}
@@ -95,6 +108,9 @@ After making changes, run:
 
 - Only touch files listed above. If you need to create a new file to
   extract code into, that's allowed.
+- For naming refactors, use Glob and Grep to find ALL references across the
+  codebase before renaming. Update every reference.
+- Prefer Edit over Write — only use Write for new files.
 - Make the minimal change. Don't improve code style, add features, or
   refactor beyond the stated problem.
 - Preserve all public interfaces unless the problem requires changing them.
@@ -106,6 +122,7 @@ After making changes, run:
         model="sonnet",
         tools=[
             "Read",
+            "Glob",
             "Grep",
             "Edit",
             "Write",

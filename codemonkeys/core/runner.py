@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +14,7 @@ from claude_agent_sdk import (
     AgentDefinition,
     AssistantMessage,
     ClaudeAgentOptions,
+    RateLimitEvent,
     ResultMessage,
     TaskNotificationMessage,
     TaskProgressMessage,
@@ -20,6 +23,14 @@ from claude_agent_sdk import (
     query,
 )
 
+_log = logging.getLogger(__name__)
+
+from codemonkeys.core._runner_helpers import (
+    _build_tool_hooks,
+    _estimate_cost,
+    _serialize_message,
+    _tool_detail,
+)
 from codemonkeys.core.run_result import RunResult
 from codemonkeys.core.sandbox import restrict
 from codemonkeys.workflows.events import (
@@ -29,69 +40,6 @@ from codemonkeys.workflows.events import (
     EventEmitter,
     EventType,
 )
-
-
-def _tool_detail(block: ToolUseBlock) -> str:
-    name = block.name
-    tool_input = block.input or {}
-    if name in ("Read", "Edit", "Write"):
-        path = tool_input.get("file_path", "?")
-        return f"{name}({path})"
-    if name == "Grep":
-        return f"Grep('{tool_input.get('pattern', '?')}')"
-    if name == "Glob":
-        return f"Glob({tool_input.get('pattern', tool_input.get('path', '?'))})"
-    if name == "Bash":
-        cmd = tool_input.get("command", "")
-        return f"Bash($ {cmd[:80]})" if cmd else "Bash"
-    return name
-
-
-def _serialize_message(message: Any) -> dict[str, Any]:
-    """Serialize an SDK message to a JSON-safe dict for logging."""
-    entry: dict[str, Any] = {"type": type(message).__name__}
-    if isinstance(message, AssistantMessage):
-        entry["usage"] = message.usage
-        blocks = []
-        for b in message.content:
-            if isinstance(b, ToolUseBlock):
-                blocks.append({"type": "tool_use", "name": b.name, "input": b.input})
-            elif hasattr(b, "text"):
-                blocks.append({"type": "text", "text": b.text[:500]})
-            elif hasattr(b, "thinking"):
-                blocks.append({"type": "thinking", "thinking": b.thinking[:500]})
-        entry["content"] = blocks
-    elif isinstance(message, ResultMessage):
-        entry["result"] = (getattr(message, "result", "") or "")[:500]
-        entry["usage"] = message.usage
-        entry["cost"] = getattr(message, "total_cost_usd", None)
-        entry["duration_ms"] = getattr(message, "duration_ms", 0)
-    elif isinstance(message, TaskStartedMessage):
-        entry["task_id"] = message.task_id
-        entry["description"] = message.description
-    elif isinstance(message, TaskProgressMessage):
-        usage = message.usage
-        entry["task_id"] = message.task_id
-        entry["usage"] = (
-            dict(usage)
-            if isinstance(usage, dict)
-            else {
-                "total_tokens": getattr(usage, "total_tokens", 0),
-                "tool_uses": getattr(usage, "tool_uses", 0),
-            }
-        )
-    elif isinstance(message, TaskNotificationMessage):
-        entry["task_id"] = message.task_id
-        usage = message.usage
-        if usage:
-            entry["usage"] = (
-                dict(usage)
-                if isinstance(usage, dict)
-                else {
-                    "total_tokens": getattr(usage, "total_tokens", 0),
-                }
-            )
-    return entry
 
 
 class AgentRunner:
@@ -125,31 +73,20 @@ class AgentRunner:
         *,
         output_format: dict[str, Any] | None = None,
         log_name: str = "agent",
+        agent_name: str | None = None,  # backward-compat alias for log_name
+        files: str = "",
+        on_tool_call: Any | None = None,
     ) -> RunResult:
+        # agent_name was the original parameter name; accept both for backwards compat
+        if agent_name is not None:
+            log_name = agent_name
+
         restrict(self.cwd)
 
-        options = ClaudeAgentOptions(
-            system_prompt=agent.prompt,
-            model=agent.model or "sonnet",
-            cwd=self.cwd,
-            permission_mode=agent.permissionMode or "dontAsk",
-            allowed_tools=agent.tools or [],
-            disallowed_tools=agent.disallowedTools or [],
-            output_format=output_format,
-        )
-
-        self._emit(
-            EventType.AGENT_STARTED,
-            AgentStartedPayload(
-                agent_name=log_name,
-                task_id=log_name,
-                model=agent.model or "sonnet",
-                files_label="",
-            ),
-        )
-
-        log_file = self._log_path(log_name)
+        log_label = f"{log_name}__{files}" if files else log_name
+        log_file = self._log_path(log_label)
         total_tokens = 0
+        total_cost = 0.0
         tool_calls = 0
         current_tool = ""
         last_result: ResultMessage | None = None
@@ -157,17 +94,59 @@ class AgentRunner:
         has_subagents = False
         start_time = time.monotonic()
 
-        def _log(entry: dict[str, Any]) -> None:
+        def _write_log(entry: dict[str, Any]) -> None:
             if not log_file:
                 return
             entry["ts"] = datetime.now(timezone.utc).isoformat()
             with open(log_file, "a") as f:
                 f.write(json.dumps(entry, default=repr) + "\n")
 
-        _log(
+        def _on_tool_denied(command: str, patterns: list[str]) -> None:
+            _write_log(
+                {
+                    "event": "tool_denied",
+                    "tool": "Bash",
+                    "command": command,
+                    "permitted_patterns": patterns,
+                }
+            )
+            if on_tool_call:
+                nonlocal tool_calls
+                tool_calls += 1
+                on_tool_call(
+                    tool_calls,
+                    f"Bash($ {command[:80]})  DENIED",
+                    total_tokens,
+                    total_cost,
+                )
+
+        tools = agent.tools or []
+        options = ClaudeAgentOptions(
+            system_prompt=agent.prompt,
+            model=agent.model or "sonnet",
+            cwd=self.cwd,
+            permission_mode=agent.permissionMode or "dontAsk",
+            allowed_tools=tools,
+            disallowed_tools=agent.disallowedTools or [],
+            hooks=_build_tool_hooks(tools, on_deny=_on_tool_denied),
+            output_format=output_format,
+            setting_sources=[],
+        )
+
+        self._emit(
+            EventType.AGENT_STARTED,
+            AgentStartedPayload(
+                agent_name=log_name,
+                task_id=log_label,
+                model=agent.model or "sonnet",
+                files_label=files,
+            ),
+        )
+
+        _write_log(
             {
                 "event": "agent_start",
-                "name": log_name,
+                "name": log_label,
                 "description": agent.description,
                 "model": agent.model,
                 "tools": agent.tools,
@@ -180,27 +159,30 @@ class AgentRunner:
             yield {"type": "user", "message": {"role": "user", "content": prompt}}
 
         async for message in query(prompt=_prompt_gen(), options=options):
-            _log(_serialize_message(message))
+            _write_log(_serialize_message(message))
 
             if isinstance(message, AssistantMessage):
                 if not has_subagents:
                     usage = message.usage or {}
-                    turn_tokens = usage.get("total_tokens", 0) or (
+                    total_tokens = usage.get("total_tokens", 0) or (
                         usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                     )
-                    total_tokens += turn_tokens
+                    total_cost = _estimate_cost(usage, agent.model or "sonnet")
 
                 for block in message.content:
                     if isinstance(block, ToolUseBlock) and block.name != "Agent":
                         tool_calls += 1
                         current_tool = _tool_detail(block)
+                        if on_tool_call:
+                            on_tool_call(tool_calls, current_tool, total_tokens, total_cost)
 
                 self._emit(
                     EventType.AGENT_PROGRESS,
                     AgentProgressPayload(
                         agent_name=log_name,
-                        task_id=log_name,
+                        task_id=log_label,
                         tokens=total_tokens,
+                        cost=total_cost,
                         tool_calls=tool_calls,
                         current_tool=current_tool,
                     ),
@@ -228,8 +210,9 @@ class AgentRunner:
                     EventType.AGENT_PROGRESS,
                     AgentProgressPayload(
                         agent_name=log_name,
-                        task_id=log_name,
+                        task_id=log_label,
                         tokens=total_tokens,
+                        cost=total_cost,
                         tool_calls=tools,
                         current_tool="",
                     ),
@@ -245,6 +228,29 @@ class AgentRunner:
                     )
                     subagent_tokens[message.task_id] = final
                     total_tokens = sum(subagent_tokens.values())
+
+            elif isinstance(message, RateLimitEvent):
+                info = message.rate_limit_info
+                if info.status == "rejected":
+                    resets_at = info.resets_at or 0
+                    wait = max(resets_at - int(time.time()), 30)
+                    _log.warning(
+                        "Rate limited (%s), waiting %ds before retry",
+                        info.rate_limit_type or "unknown",
+                        wait,
+                    )
+                    self._emit(
+                        EventType.AGENT_PROGRESS,
+                        AgentProgressPayload(
+                            agent_name=log_name,
+                            task_id=log_label,
+                            tokens=total_tokens,
+                            cost=total_cost,
+                            tool_calls=tool_calls,
+                            current_tool=f"rate limited — retrying in {wait}s",
+                        ),
+                    )
+                    await asyncio.sleep(wait)
 
             elif isinstance(message, ResultMessage):
                 last_result = message
@@ -282,8 +288,9 @@ class AgentRunner:
             EventType.AGENT_COMPLETED,
             AgentCompletedPayload(
                 agent_name=log_name,
-                task_id=log_name,
+                task_id=log_label,
                 tokens=total_tokens,
+                cost=total_cost,
             ),
         )
 

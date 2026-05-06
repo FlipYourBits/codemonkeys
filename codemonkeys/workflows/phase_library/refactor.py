@@ -171,7 +171,8 @@ async def refactor_step(
         agent,
         f"Refactor ({refactor_type}): {problem_description[:200]}",
         output_format=output_format,
-        log_name=f"refactor__{step_name}",
+        agent_name="python_implementer",
+        files=step_name,
     )
 
     if result.structured:
@@ -245,7 +246,7 @@ You are given a structural summary showing the current files and modules.
     )
 
     runner = AgentRunner(cwd=ctx.cwd, emitter=ctx.emitter, log_dir=ctx.log_dir)
-    await runner.run_agent(agent, "Update README.md", log_name="update_readme")
+    await runner.run_agent(agent, "Update README.md", agent_name="readme_updater")
 
     return {"readme_updated": True}
 

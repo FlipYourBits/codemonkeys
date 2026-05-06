@@ -50,7 +50,7 @@ findings with concrete attack scenarios.
 ## Exclusions — DO NOT REPORT
 
 These belong to other review categories:
-- Code quality issues (code-quality skill owns these)
+- Code quality issues (code-quality checklist owns these)
 - Dependency vulnerabilities (pip-audit owns these)
 - Test failures (test runner owns these)
 - Denial of service (out of scope)"""
