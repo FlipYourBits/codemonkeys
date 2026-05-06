@@ -9,6 +9,8 @@ from codemonkeys.artifacts.schemas.mechanical import (
     CoverageMap,
     CveFinding,
     DeadCodeFinding,
+    HygieneFinding,
+    LicenseFinding,
     MechanicalAuditResult,
     PyrightFinding,
     PytestResult,
@@ -206,6 +208,74 @@ class TestDeadCodeFinding:
             assert "description" in schema["properties"][field_name]
 
 
+class TestLicenseFinding:
+    def test_roundtrip_json(self) -> None:
+        finding = LicenseFinding(
+            package="sqlalchemy",
+            version="2.0.25",
+            license="GPL-3.0",
+            category="copyleft_risk",
+            severity="high",
+        )
+        data = json.loads(finding.model_dump_json())
+        restored = LicenseFinding.model_validate(data)
+        assert restored == finding
+
+    def test_invalid_category(self) -> None:
+        with pytest.raises(ValidationError):
+            LicenseFinding(
+                package="foo",
+                version="1.0.0",
+                license="MIT",
+                category="permissive",  # type: ignore[arg-type]
+                severity="low",
+            )
+
+    def test_json_schema_has_descriptions(self) -> None:
+        schema = LicenseFinding.model_json_schema()
+        for field_name in ("package", "version", "license", "category", "severity"):
+            assert "description" in schema["properties"][field_name]
+
+
+class TestHygieneFinding:
+    def test_roundtrip_json(self) -> None:
+        finding = HygieneFinding(
+            file="src/app.py",
+            line=42,
+            category="debug_artifact",
+            detail="breakpoint() call left in production code",
+            severity="high",
+        )
+        data = json.loads(finding.model_dump_json())
+        restored = HygieneFinding.model_validate(data)
+        assert restored == finding
+
+    def test_line_nullable(self) -> None:
+        finding = HygieneFinding(
+            file="pyproject.toml",
+            line=None,
+            category="dependency_pinning",
+            detail="Package 'requests' has no upper bound",
+            severity="medium",
+        )
+        assert finding.line is None
+
+    def test_invalid_category(self) -> None:
+        with pytest.raises(ValidationError):
+            HygieneFinding(
+                file="src/app.py",
+                line=1,
+                category="style_issue",  # type: ignore[arg-type]
+                detail="Bad category",
+                severity="low",
+            )
+
+    def test_json_schema_has_descriptions(self) -> None:
+        schema = HygieneFinding.model_json_schema()
+        for field_name in ("file", "line", "category", "detail", "severity"):
+            assert "description" in schema["properties"][field_name]
+
+
 class TestMechanicalAuditResult:
     def test_roundtrip_json(self) -> None:
         result = MechanicalAuditResult(
@@ -252,6 +322,24 @@ class TestMechanicalAuditResult:
                     file="src/legacy.py", line=5, name="OldClass", kind="class"
                 ),
             ],
+            license_compliance=[
+                LicenseFinding(
+                    package="sqlalchemy",
+                    version="2.0.25",
+                    license="GPL-3.0",
+                    category="copyleft_risk",
+                    severity="high",
+                ),
+            ],
+            release_hygiene=[
+                HygieneFinding(
+                    file="src/app.py",
+                    line=42,
+                    category="debug_artifact",
+                    detail="breakpoint() call left in production code",
+                    severity="high",
+                ),
+            ],
         )
         data = json.loads(result.model_dump_json())
         restored = MechanicalAuditResult.model_validate(data)
@@ -266,11 +354,15 @@ class TestMechanicalAuditResult:
             secrets=[],
             coverage=None,
             dead_code=None,
+            license_compliance=None,
+            release_hygiene=None,
         )
         assert result.pytest is None
         assert result.pip_audit is None
         assert result.coverage is None
         assert result.dead_code is None
+        assert result.license_compliance is None
+        assert result.release_hygiene is None
 
     def test_json_schema_has_descriptions(self) -> None:
         schema = MechanicalAuditResult.model_json_schema()
@@ -282,5 +374,7 @@ class TestMechanicalAuditResult:
             "secrets",
             "coverage",
             "dead_code",
+            "license_compliance",
+            "release_hygiene",
         ):
             assert "description" in schema["properties"][field_name]

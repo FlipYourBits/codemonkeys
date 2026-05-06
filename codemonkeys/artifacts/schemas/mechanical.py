@@ -76,6 +76,32 @@ class DeadCodeFinding(BaseModel):
     )
 
 
+class LicenseFinding(BaseModel):
+    package: str = Field(description="Package name")
+    version: str = Field(description="Installed version")
+    license: str = Field(description="License string from metadata")
+    category: Literal[
+        "copyleft_risk",
+        "unknown_license",
+        "restrictive_license",
+        "non_standard_license",
+    ] = Field(description="Risk category")
+    severity: Literal["high", "medium", "low"] = Field(description="Risk level")
+
+
+class HygieneFinding(BaseModel):
+    file: str = Field(description="File path")
+    line: int | None = Field(description="Line number, if applicable")
+    category: Literal[
+        "debug_artifact",
+        "unresolved_marker",
+        "hardcoded_dev_value",
+        "dependency_pinning",
+    ] = Field(description="Issue category")
+    detail: str = Field(description="What was found")
+    severity: Literal["high", "medium", "low"] = Field(description="Risk level")
+
+
 class MechanicalAuditResult(BaseModel):
     ruff: list[RuffFinding] = Field(description="Lint violations found by ruff")
     pyright: list[PyrightFinding] = Field(description="Type errors found by pyright")
@@ -93,4 +119,12 @@ class MechanicalAuditResult(BaseModel):
     )
     dead_code: list[DeadCodeFinding] | None = Field(
         description="Unused code detected by static analysis, or null if not run"
+    )
+    license_compliance: list[LicenseFinding] | None = Field(
+        default=None,
+        description="License issues in dependencies, or null if not run",
+    )
+    release_hygiene: list[HygieneFinding] | None = Field(
+        default=None,
+        description="Development artifacts and release hygiene issues, or null if not run",
     )
