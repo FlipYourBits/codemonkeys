@@ -6,6 +6,7 @@ the agent behaved correctly and efficiently.
 
 Also provides:
 - A prompt fixer agent that modifies agent source files to address findings
+- Interactive discussion mode for disputing/refining audit findings
 - Interactive display/prompt helpers for the CLI audit flow
 """
 
@@ -167,6 +168,55 @@ Read and edit: {agent_source_path}
     )
 
 
+def make_audit_discussion_agent(
+    agent_source_path: str,
+    audit_json: str,
+    log_metrics_json: str,
+    conversation_history: list[dict[str, str]],
+) -> AgentDefinition:
+    """Create a discussion agent for back-and-forth about audit findings."""
+    history_text = ""
+    for msg in conversation_history:
+        role = msg["role"].upper()
+        history_text += f"\n{role}: {msg['content']}\n"
+
+    return AgentDefinition(
+        description="Discuss audit findings with the user",
+        prompt=f"""\
+You are discussing agent audit findings with the user. You have access to:
+1. The audit results
+2. The log metrics from the agent's execution
+3. The agent's source code at: {agent_source_path}
+
+## Audit Results
+
+{audit_json}
+
+## Log Metrics
+
+{log_metrics_json}
+
+## Prior Discussion
+
+{history_text if history_text else "(none yet)"}
+
+## Instructions
+
+Respond conversationally to the user's message. If they dispute a finding,
+examine the evidence in the log metrics carefully and explain whether you
+agree or disagree. Be willing to concede if the user makes a valid point.
+
+You may Read the agent source file to verify claims about the agent's
+contract. Do NOT modify any files.
+
+Keep responses focused and concise — this is a back-and-forth discussion,
+not a report.""",
+        model="sonnet",
+        tools=["Read"],
+        permissionMode="dontAsk",
+    )
+
+
 def display_audit_results(
     console: Console, audit: dict[str, Any], agent_name: str
 ) -> None:
@@ -206,8 +256,11 @@ def display_audit_results(
 
 def prompt_for_fixes(
     console: Console, audit: dict[str, Any]
-) -> list[dict[str, Any]]:
-    """Prompt user to select issues/recommendations to fix. Returns selected items."""
+) -> list[dict[str, Any]] | str:
+    """Prompt user to select issues/recommendations to fix.
+
+    Returns selected items list, or the string "discuss" to enter discussion mode.
+    """
     issues = audit.get("issues", [])
     recommendations = audit.get("recommendations", [])
 
@@ -216,14 +269,20 @@ def prompt_for_fixes(
         return []
 
     response = Prompt.ask(
-        "\n[bold]Fix issues?[/bold] Enter numbers (e.g. 1,3), [cyan]all[/cyan], or [dim]skip[/dim]",
+        "\n[bold]Fix issues?[/bold] Enter numbers (e.g. 1,3), "
+        "[cyan]all[/cyan], [magenta]discuss[/magenta], or [dim]skip[/dim]",
         default="skip",
     )
 
-    if response.strip().lower() == "skip":
+    choice = response.strip().lower()
+
+    if choice == "skip":
         return []
 
-    if response.strip().lower() == "all":
+    if choice == "discuss":
+        return "discuss"
+
+    if choice == "all":
         selected_indices = list(range(1, total + 1))
     else:
         try:
@@ -247,36 +306,146 @@ def prompt_for_fixes(
     return selected
 
 
+async def _run_discussion(
+    console: Console,
+    runner: Any,
+    audit_result: dict[str, Any],
+    agent_name: str,
+    source_path: str,
+    log_metrics_json: str,
+) -> dict[str, Any]:
+    """Run an interactive discussion loop about audit findings.
+
+    Returns the (potentially revised) audit result after discussion.
+    """
+    audit_json = json.dumps(audit_result, indent=2)
+    conversation: list[dict[str, str]] = []
+
+    console.print(
+        Panel(
+            "[bold]Discussion mode[/bold]\n\n"
+            "  Type your questions or objections about the findings.\n"
+            "  Type [cyan]done[/cyan] to finish and re-evaluate, or [dim]quit[/dim] to accept as-is.",
+            border_style="magenta",
+        )
+    )
+
+    while True:
+        user_input = console.input("\n  [bold magenta]you>[/bold magenta] ").strip()
+        if not user_input:
+            continue
+        if user_input.lower() == "quit":
+            return audit_result
+        if user_input.lower() == "done":
+            break
+
+        conversation.append({"role": "user", "content": user_input})
+
+        discussion_agent = make_audit_discussion_agent(
+            source_path, audit_json, log_metrics_json, conversation
+        )
+        result = await runner.run_agent(
+            discussion_agent,
+            user_input,
+            agent_name=f"audit_discussion__{agent_name}",
+        )
+
+        response_text = result.text or "(no response)"
+        conversation.append({"role": "auditor", "content": response_text})
+        console.print()
+        console.print(
+            Panel(
+                response_text[:3000],
+                title="[magenta]auditor[/magenta]",
+                border_style="dim",
+            )
+        )
+
+    if not conversation:
+        return audit_result
+
+    console.print("\n[bold]Re-evaluating with your feedback...[/bold]")
+
+    feedback_summary = "\n".join(
+        f"- [{m['role']}] {m['content']}" for m in conversation
+    )
+    auditor = make_agent_auditor(source_path)
+    auditor.prompt += f"""
+
+## User Feedback
+
+The user reviewed the initial audit and provided the following feedback
+during an interactive discussion. Take this into account — remove or adjust
+any findings the user has successfully disputed, and keep findings the user
+did not challenge or that you still believe are valid.
+
+{feedback_summary}"""
+
+    from codemonkeys.artifacts.schemas.audit import AgentAudit
+
+    audit_schema = {
+        "type": "json_schema",
+        "schema": AgentAudit.model_json_schema(),
+    }
+    revised = await runner.run_agent(
+        auditor,
+        log_metrics_json,
+        output_format=audit_schema,
+        agent_name=f"audit_revised__{agent_name}",
+    )
+    if revised.structured:
+        return revised.structured
+    return audit_result
+
+
 async def run_audit_with_fixes(
     console: Console,
     runner: Any,
     audit_result: dict[str, Any],
     agent_name: str,
     source_path: str,
+    log_metrics_json: str = "",
 ) -> None:
-    """Display audit, prompt for fixes, and run fixer agent if requested."""
+    """Display audit, prompt for fixes (with optional discussion), and run fixer if requested."""
     display_audit_results(console, audit_result, agent_name)
 
-    selected = prompt_for_fixes(console, audit_result)
-    if not selected:
-        return
+    while True:
+        choice = prompt_for_fixes(console, audit_result)
 
-    fixer = make_agent_prompt_fixer(source_path, selected)
-    console.print(f"\n[bold]Applying {len(selected)} fix(es) to {source_path}...[/bold]")
-
-    fix_result = await runner.run_agent(
-        fixer,
-        "Apply the selected fixes to the agent source file.",
-        agent_name="agent_prompt_fixer",
-    )
-
-    if fix_result.text:
-        console.print(
-            Panel(
-                fix_result.text[:2000],
-                title="[green]Fixes Applied[/green]",
-                border_style="green",
+        if choice == "discuss":
+            if not log_metrics_json:
+                console.print(
+                    "[yellow]No log metrics available for discussion[/yellow]"
+                )
+                continue
+            audit_result = await _run_discussion(
+                console, runner, audit_result, agent_name, source_path, log_metrics_json
             )
+            display_audit_results(console, audit_result, agent_name)
+            continue
+
+        if isinstance(choice, str) or not choice:
+            return
+
+        fixer = make_agent_prompt_fixer(source_path, choice)
+        console.print(
+            f"\n[bold]Applying {len(choice)} fix(es) to {source_path}...[/bold]"
         )
-    else:
-        console.print("[green]Fixes applied.[/green]")
+
+        fix_result = await runner.run_agent(
+            fixer,
+            "Apply the selected fixes to the agent source file.",
+            agent_name="agent_prompt_fixer",
+        )
+
+        if fix_result.text:
+            console.print(
+                Panel(
+                    fix_result.text[:2000],
+                    title="[green]Fixes Applied[/green]",
+                    border_style="green",
+                )
+            )
+        else:
+            console.print("[green]Fixes applied.[/green]")
+        return

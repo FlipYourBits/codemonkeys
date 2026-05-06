@@ -19,6 +19,8 @@ from claude_agent_sdk import (
     TaskNotificationMessage,
     TaskProgressMessage,
     TaskStartedMessage,
+    TextBlock,
+    ThinkingBlock,
     ToolUseBlock,
     query,
 )
@@ -76,6 +78,7 @@ class AgentRunner:
         agent_name: str | None = None,  # backward-compat alias for log_name
         files: str = "",
         on_tool_call: Any | None = None,
+        on_event: Any | None = None,
     ) -> RunResult:
         # agent_name was the original parameter name; accept both for backwards compat
         if agent_name is not None:
@@ -170,11 +173,31 @@ class AgentRunner:
                     total_cost = _estimate_cost(usage, agent.model or "sonnet")
 
                 for block in message.content:
-                    if isinstance(block, ToolUseBlock) and block.name != "Agent":
-                        tool_calls += 1
-                        current_tool = _tool_detail(block)
-                        if on_tool_call:
-                            on_tool_call(tool_calls, current_tool, total_tokens, total_cost)
+                    if isinstance(block, ToolUseBlock):
+                        if block.name != "Agent":
+                            tool_calls += 1
+                            current_tool = _tool_detail(block)
+                            if on_tool_call:
+                                on_tool_call(
+                                    tool_calls, current_tool, total_tokens, total_cost
+                                )
+                        if on_event:
+                            on_event(
+                                {
+                                    "type": "tool_use",
+                                    "name": block.name,
+                                    "input": block.input,
+                                    "detail": _tool_detail(block),
+                                }
+                            )
+                    elif isinstance(block, ThinkingBlock):
+                        if on_event:
+                            on_event(
+                                {"type": "thinking", "content": block.thinking or ""}
+                            )
+                    elif isinstance(block, TextBlock):
+                        if on_event:
+                            on_event({"type": "text", "content": block.text or ""})
 
                 self._emit(
                     EventType.AGENT_PROGRESS,
@@ -231,6 +254,14 @@ class AgentRunner:
 
             elif isinstance(message, RateLimitEvent):
                 info = message.rate_limit_info
+                if on_event:
+                    on_event(
+                        {
+                            "type": "rate_limit",
+                            "status": info.status,
+                            "rate_limit_type": info.rate_limit_type,
+                        }
+                    )
                 if info.status == "rejected":
                     resets_at = info.resets_at or 0
                     wait = max(resets_at - int(time.time()), 30)
@@ -239,6 +270,14 @@ class AgentRunner:
                         info.rate_limit_type or "unknown",
                         wait,
                     )
+                    if on_event:
+                        on_event(
+                            {
+                                "type": "rate_limit_wait",
+                                "wait_seconds": wait,
+                                "rate_limit_type": info.rate_limit_type,
+                            }
+                        )
                     self._emit(
                         EventType.AGENT_PROGRESS,
                         AgentProgressPayload(
@@ -258,6 +297,15 @@ class AgentRunner:
                 total_tokens = usage.get("total_tokens", 0) or (
                     usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                 )
+                if on_event:
+                    on_event(
+                        {
+                            "type": "result",
+                            "tokens": total_tokens,
+                            "cost": getattr(message, "total_cost_usd", None),
+                            "duration_ms": getattr(message, "duration_ms", 0),
+                        }
+                    )
 
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
 

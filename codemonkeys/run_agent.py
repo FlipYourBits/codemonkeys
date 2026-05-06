@@ -22,12 +22,14 @@ import argparse
 import asyncio
 import json
 import sys
+import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 
 from codemonkeys.core.runner import AgentRunner
 
@@ -300,6 +302,66 @@ def _build_agent(
     return builders[name]()
 
 
+def _print_event(console: Console, event: dict[str, Any]) -> None:
+    """Print a single agent event to the console in real-time."""
+    etype = event.get("type", "")
+
+    if etype == "thinking":
+        content = event.get("content", "")
+        if not content:
+            return
+        wrapped = textwrap.indent(content, "  ")
+        console.print(Text("  thinking", style="dim italic"))
+        console.print(Text(wrapped, style="dim"))
+        console.print()
+
+    elif etype == "tool_use":
+        name = event.get("name", "?")
+        inp = event.get("input", {})
+        console.print(f"  [bold cyan]{event.get('detail', name)}[/bold cyan]")
+        if name == "StructuredOutput":
+            summary = json.dumps(inp, indent=2, default=str)
+            if len(summary) > 500:
+                summary = summary[:500] + "\n  ..."
+            console.print(Text(textwrap.indent(summary, "    "), style="dim"))
+        elif name == "Bash":
+            cmd = inp.get("command", "")
+            if cmd:
+                console.print(Text(textwrap.indent(cmd, "    "), style="dim"))
+        elif name not in ("Read", "Grep", "Glob", "Edit", "Write"):
+            detail = json.dumps(inp, indent=2, default=str)
+            if len(detail) > 300:
+                detail = detail[:300] + "\n  ..."
+            console.print(Text(textwrap.indent(detail, "    "), style="dim"))
+        console.print()
+
+    elif etype == "text":
+        content = event.get("content", "")
+        if not content:
+            return
+        console.print("  [green]output[/green]")
+        console.print(textwrap.indent(content, "  "))
+        console.print()
+
+    elif etype == "rate_limit":
+        status = event.get("status", "?")
+        rl_type = event.get("rate_limit_type", "")
+        console.print(f"  [dim]rate limit: {status} ({rl_type})[/dim]")
+
+    elif etype == "rate_limit_wait":
+        wait = event.get("wait_seconds", "?")
+        console.print(f"  [yellow]rate limited — waiting {wait}s[/yellow]")
+
+    elif etype == "result":
+        tokens = event.get("tokens", 0)
+        cost = event.get("cost") or 0
+        duration = event.get("duration_ms", 0)
+        console.print(
+            f"  [dim]done: {tokens:,} tokens, ${cost:.4f}, {duration / 1000:.1f}s[/dim]"
+        )
+        console.print()
+
+
 async def main_async(args: argparse.Namespace) -> None:
     name = args.agent
     cwd = Path.cwd()
@@ -322,34 +384,18 @@ async def main_async(args: argparse.Namespace) -> None:
         )
     )
 
-    status = console.status("[dim]Starting agent...[/dim]", spinner="dots")
-    tool_lines: list[str] = []
-
-    def _on_tool(index: int, detail: str, tokens: int, cost: float) -> None:
-        tool_lines.append(
-            f"  [dim]#{index}[/dim] {detail}  [dim]({tokens:,} tok, ${cost:.4f})[/dim]"
-        )
-        status.update(
-            "\n".join(tool_lines)
-            + f"\n  [bold cyan]⠿ waiting...[/bold cyan]  [dim]({tokens:,} tok, ${cost:.4f})[/dim]"
-        )
+    def _on_event(event: dict[str, Any]) -> None:
+        _print_event(console, event)
 
     runner = AgentRunner(cwd=str(cwd), log_dir=log_dir)
-    status.start()
-    try:
-        result = await runner.run_agent(
-            agent,
-            prompt,
-            output_format=output_format,
-            agent_name=name,
-            files=files_label,
-            on_tool_call=_on_tool,
-        )
-    finally:
-        status.stop()
-
-    for line in tool_lines:
-        console.print(line)
+    result = await runner.run_agent(
+        agent,
+        prompt,
+        output_format=output_format,
+        agent_name=name,
+        files=files_label,
+        on_event=_on_event,
+    )
 
     console.print()
     if result.structured:
@@ -369,7 +415,6 @@ async def main_async(args: argparse.Namespace) -> None:
     console.print(f"[dim]Logs:[/dim] {log_dir}/")
 
     if getattr(args, "audit", False) and args.agent != "agent_auditor":
-        console.print("\n[bold]Running agent audit...[/bold]")
         from codemonkeys.artifacts.schemas.audit import AgentAudit
         from codemonkeys.core.agents.agent_auditor import (
             AGENT_SOURCES,
@@ -384,6 +429,17 @@ async def main_async(args: argparse.Namespace) -> None:
             source_path = AGENT_SOURCES.get(name)
             if source_path:
                 auditor = make_agent_auditor(source_path)
+                audit_model = auditor.model or "sonnet"
+                console.print()
+                console.print(
+                    Panel(
+                        f"[bold]agent_auditor[/bold]  model={audit_model}\n"
+                        f"target: {name}  source: {source_path}\n"
+                        f"[dim]Logs: {log_dir}[/dim]",
+                        title="[bold]codemonkeys run_agent[/bold]",
+                        border_style="bright_blue",
+                    )
+                )
                 audit_schema = {
                     "type": "json_schema",
                     "schema": AgentAudit.model_json_schema(),
@@ -393,10 +449,16 @@ async def main_async(args: argparse.Namespace) -> None:
                     metrics.to_json(),
                     output_format=audit_schema,
                     agent_name="agent_auditor",
+                    on_event=_on_event,
                 )
                 if audit_result.structured:
                     await run_audit_with_fixes(
-                        console, runner, audit_result.structured, name, source_path
+                        console,
+                        runner,
+                        audit_result.structured,
+                        name,
+                        source_path,
+                        log_metrics_json=metrics.to_json(),
                     )
                 else:
                     console.print(

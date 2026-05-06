@@ -176,6 +176,10 @@ async def main_async(args: argparse.Namespace) -> None:
         display.stop()
 
     if getattr(args, "audit", False):
+        import textwrap
+
+        from rich.text import Text
+
         from codemonkeys.artifacts.schemas.audit import AgentAudit
         from codemonkeys.core.agents.agent_auditor import (
             AGENT_SOURCES,
@@ -185,11 +189,35 @@ async def main_async(args: argparse.Namespace) -> None:
         from codemonkeys.core.log_metrics import extract_metrics
         from codemonkeys.core.runner import AgentRunner
 
+        def _print_audit_event(event: dict) -> None:
+            etype = event.get("type", "")
+            if etype == "thinking":
+                content = event.get("content", "")
+                if not content:
+                    return
+                wrapped = textwrap.indent(content, "  ")
+                console.print(Text("  thinking", style="dim italic"))
+                console.print(Text(wrapped, style="dim"))
+                console.print()
+            elif etype == "tool_use":
+                console.print(
+                    f"  [bold cyan]{event.get('detail', event.get('name', '?'))}[/bold cyan]"
+                )
+                console.print()
+            elif etype == "text":
+                content = event.get("content", "")
+                if content:
+                    console.print("  [green]output[/green]")
+                    console.print(textwrap.indent(content, "  "))
+                    console.print()
+            elif etype == "rate_limit_wait":
+                wait = event.get("wait_seconds", "?")
+                console.print(f"  [yellow]rate limited — waiting {wait}s[/yellow]")
+
         log_files = sorted(log_dir.glob("*.log"))
         if not log_files:
             console.print("[yellow]No log files found for audit[/yellow]")
         else:
-            console.print(f"\n[bold]Auditing {len(log_files)} agent run(s)...[/bold]\n")
             runner = AgentRunner(cwd=str(cwd), log_dir=log_dir)
             audit_schema = {
                 "type": "json_schema",
@@ -205,11 +233,23 @@ async def main_async(args: argparse.Namespace) -> None:
                     )
                     continue
                 auditor = make_agent_auditor(source_path)
+                audit_model = auditor.model or "sonnet"
+                console.print()
+                console.print(
+                    Panel(
+                        f"[bold]agent_auditor[/bold]  model={audit_model}\n"
+                        f"target: {agent_base}  source: {source_path}\n"
+                        f"[dim]Logs: {log_dir}[/dim]",
+                        title="[bold]codemonkeys audit[/bold]",
+                        border_style="bright_blue",
+                    )
+                )
                 audit_result = await runner.run_agent(
                     auditor,
                     metrics.to_json(),
                     output_format=audit_schema,
                     agent_name=f"audit__{agent_base}",
+                    on_event=_print_audit_event,
                 )
                 if audit_result.structured:
                     await run_audit_with_fixes(
@@ -218,6 +258,7 @@ async def main_async(args: argparse.Namespace) -> None:
                         audit_result.structured,
                         agent_base,
                         source_path,
+                        log_metrics_json=metrics.to_json(),
                     )
 
 

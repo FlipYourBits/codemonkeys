@@ -144,6 +144,12 @@ def _serialize_message(message: Any) -> dict[str, Any]:
         entry["content"] = blocks
     elif isinstance(message, ResultMessage):
         entry["result"] = (getattr(message, "result", "") or "")[:500]
+        raw_structured = getattr(message, "structured_output", None)
+        if raw_structured is not None:
+            if isinstance(raw_structured, str):
+                entry["structured_output"] = raw_structured[:2000]
+            else:
+                entry["structured_output"] = raw_structured
         entry["usage"] = message.usage
         entry["cost"] = getattr(message, "total_cost_usd", None)
         entry["duration_ms"] = getattr(message, "duration_ms", 0)

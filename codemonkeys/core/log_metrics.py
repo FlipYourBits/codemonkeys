@@ -108,6 +108,7 @@ def _extract_system_prompt(log_file: Path) -> str:
 def extract_metrics(log_file: Path) -> LogMetrics:
     metrics = LogMetrics()
     assistant_turn_index = 0
+    structured_output_from_tool: str | None = None
 
     lines = log_file.read_text().strip().split("\n")
     for line in lines:
@@ -169,6 +170,11 @@ def extract_metrics(log_file: Path) -> LogMetrics:
                     turn_tool_calls.append(tc)
                     metrics.tool_calls.append(tc)
 
+                    if tool_name == "StructuredOutput":
+                        structured_output_from_tool = json.dumps(
+                            tool_input, default=str
+                        )
+
                     if not _is_tool_authorized(
                         tool_name, tool_input, metrics.allowed_tools
                     ):
@@ -201,7 +207,17 @@ def extract_metrics(log_file: Path) -> LogMetrics:
             )
             metrics.total_cost = entry.get("cost", 0.0) or 0.0
             metrics.duration_ms = entry.get("duration_ms", 0)
-            metrics.structured_output = entry.get("result")
+            raw_so = entry.get("structured_output")
+            if raw_so is not None:
+                metrics.structured_output = (
+                    raw_so
+                    if isinstance(raw_so, str)
+                    else json.dumps(raw_so, default=str)
+                )
+            elif structured_output_from_tool is not None:
+                metrics.structured_output = structured_output_from_tool
+            else:
+                metrics.structured_output = entry.get("result")
             continue
 
     metrics.system_prompt = _extract_system_prompt(log_file)

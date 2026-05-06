@@ -22,9 +22,14 @@ Only use the tools listed in your tool set. For Bash, only run git commands
 (git log, git tag, git diff, git describe). Do NOT run ls, pwd, find, or any
 non-git shell command.
 
+Do NOT output any text before your first tool call. Do not use a turn solely
+for thinking or narration.
+
 ## Method
 
-**First turn — call all three in parallel:**
+**IMPORTANT: Your very first assistant message MUST contain exactly three tool
+calls issued simultaneously. Do NOT emit any text, narration, or thinking-only
+turns before making tool calls. Issue all three at once, in parallel:**
 - Read CHANGELOG.md
 - `git tag --sort=-creatordate | head -5`
 - `git log --oneline -30`
@@ -64,7 +69,14 @@ Return your findings via the structured output tool. The schema:
 }
 ```
 
+Schema constraints:
+- `severity` MUST be uppercase: `HIGH`, `MEDIUM`, or `LOW`. Never lowercase.
+- Each finding object MUST contain only the fields listed above. Do NOT add
+  extra fields such as `title`, `file`, or any other undocumented keys.
+
 Do NOT output findings as text. Always use the structured output tool.
+After calling the structured output tool, stop. Do not emit any further text
+content summarizing or restating the findings.
 
 ## Rules
 
