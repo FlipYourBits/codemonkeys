@@ -1,366 +1,199 @@
-"""Reusable agent runner with event emission, debug logging, and filesystem sandboxing."""
+"""Agent runner — thin wrapper around claude_agent_sdk.query()."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import re
 import time
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
-    AgentDefinition,
     AssistantMessage,
     ClaudeAgentOptions,
     RateLimitEvent,
     ResultMessage,
-    TaskNotificationMessage,
-    TaskProgressMessage,
-    TaskStartedMessage,
-    TextBlock,
-    ThinkingBlock,
     ToolUseBlock,
     query,
 )
 
+from codemonkeys.core.events import (
+    AgentCompleted,
+    AgentError,
+    AgentStarted,
+    EventHandler,
+    ToolCall,
+    ToolDenied,
+    TokenUpdate,
+)
+from codemonkeys.core.hooks import build_tool_hooks
+from codemonkeys.core.types import AgentDefinition, RunResult, TokenUsage
+
 _log = logging.getLogger(__name__)
 
-from codemonkeys.core._runner_helpers import (
-    _build_tool_hooks,
-    _estimate_cost,
-    _serialize_message,
-    _tool_detail,
-)
-from codemonkeys.core.run_result import RunResult
-from codemonkeys.core.sandbox import restrict
-from codemonkeys.workflows.events import (
-    AgentCompletedPayload,
-    AgentProgressPayload,
-    AgentStartedPayload,
-    EventEmitter,
-    EventType,
-)
+
+def _emit(on_event: EventHandler | None, event: Any) -> None:
+    if on_event:
+        on_event(event)
 
 
-class AgentRunner:
-    """Runs agents with event emission, debug logging, and filesystem sandboxing."""
+def _extract_simple_tools(tools: list[str]) -> list[str]:
+    """Get tool names suitable for SDK allowed_tools (no Bash patterns)."""
+    result = []
+    for t in tools:
+        if re.match(r"^Bash\(.+\)$", t):
+            if "Bash" not in result:
+                result.append("Bash")
+        else:
+            result.append(t)
+    return result
 
-    def __init__(
-        self,
-        cwd: str = ".",
-        emitter: EventEmitter | None = None,
-        log_dir: Path | None = None,
-    ) -> None:
-        self.cwd = cwd
-        self._emitter = emitter
-        self._log_dir = log_dir
 
-    def _emit(self, event_type: EventType, payload: Any) -> None:
-        if self._emitter:
-            self._emitter.emit(event_type, payload)
+async def run_agent(
+    agent: AgentDefinition,
+    prompt: str,
+    on_event: EventHandler | None = None,
+) -> RunResult:
+    """Run a single agent and return its result."""
+    now = time.time()
+    _emit(on_event, AgentStarted(agent_name=agent.name, timestamp=now, model=agent.model))
 
-    def _log_path(self, log_name: str) -> Path | None:
-        if not self._log_dir:
-            return None
-        safe = log_name.replace("/", "__").replace("\\", "__").replace(" ", "_")
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        return self._log_dir / f"{safe}_{ts}.log"
+    start_time = time.monotonic()
 
-    async def run_agent(
-        self,
-        agent: AgentDefinition,
-        prompt: str,
-        *,
-        output_format: dict[str, Any] | None = None,
-        log_name: str = "agent",
-        agent_name: str | None = None,  # backward-compat alias for log_name
-        files: str = "",
-        on_tool_call: Any | None = None,
-        on_event: Any | None = None,
-    ) -> RunResult:
-        # agent_name was the original parameter name; accept both for backwards compat
-        if agent_name is not None:
-            log_name = agent_name
+    # Build output_format from Pydantic schema
+    output_format: dict[str, Any] | None = None
+    if agent.output_schema:
+        output_format = {
+            "type": "json_schema",
+            "schema": agent.output_schema.model_json_schema(),
+        }
 
-        restrict(self.cwd)
-
-        log_label = f"{log_name}__{files}" if files else log_name
-        log_file = self._log_path(log_label)
-        total_tokens = 0
-        total_cost = 0.0
-        tool_calls = 0
-        current_tool = ""
-        last_result: ResultMessage | None = None
-        subagent_tokens: dict[str, int] = {}
-        has_subagents = False
-        start_time = time.monotonic()
-
-        def _write_log(entry: dict[str, Any]) -> None:
-            if not log_file:
-                return
-            entry["ts"] = datetime.now(timezone.utc).isoformat()
-            with open(log_file, "a") as f:
-                f.write(json.dumps(entry, default=repr) + "\n")
-
-        def _on_tool_denied(command: str, patterns: list[str]) -> None:
-            _write_log(
-                {
-                    "event": "tool_denied",
-                    "tool": "Bash",
-                    "command": command,
-                    "permitted_patterns": patterns,
-                }
-            )
-            if on_tool_call:
-                nonlocal tool_calls
-                tool_calls += 1
-                on_tool_call(
-                    tool_calls,
-                    f"Bash($ {command[:80]})  DENIED",
-                    total_tokens,
-                    total_cost,
-                )
-
-        tools = agent.tools or []
-        options = ClaudeAgentOptions(
-            system_prompt=agent.prompt,
-            model=agent.model or "sonnet",
-            cwd=self.cwd,
-            permission_mode=agent.permissionMode or "dontAsk",
-            allowed_tools=tools,
-            disallowed_tools=agent.disallowedTools or [],
-            hooks=_build_tool_hooks(tools, on_deny=_on_tool_denied),
-            output_format=output_format,
-            setting_sources=[],
-        )
-
-        self._emit(
-            EventType.AGENT_STARTED,
-            AgentStartedPayload(
-                agent_name=log_name,
-                task_id=log_label,
-                model=agent.model or "sonnet",
-                files_label=files,
+    # Build on_deny callback
+    def _on_deny(tool_name: str, command: str) -> None:
+        _emit(
+            on_event,
+            ToolDenied(
+                agent_name=agent.name,
+                timestamp=time.time(),
+                tool_name=tool_name,
+                command=command,
             ),
         )
 
-        _write_log(
-            {
-                "event": "agent_start",
-                "name": log_label,
-                "description": agent.description,
-                "model": agent.model,
-                "tools": agent.tools,
-                "prompt_length": len(agent.prompt),
-                "user_prompt": prompt,
-            }
-        )
+    # Build SDK options
+    sdk_tools = _extract_simple_tools(agent.tools)
+    options = ClaudeAgentOptions(
+        system_prompt=agent.system_prompt,
+        model=agent.model,
+        permission_mode="bypassPermissions",
+        allowed_tools=sdk_tools,
+        hooks=build_tool_hooks(agent.tools, on_deny=_on_deny),
+        output_format=output_format,
+    )
 
-        async def _prompt_gen():
-            yield {"type": "user", "message": {"role": "user", "content": prompt}}
+    # Track state
+    last_result: ResultMessage | None = None
+    current_usage = TokenUsage(input_tokens=0, output_tokens=0)
+    current_cost = 0.0
 
-        async for message in query(prompt=_prompt_gen(), options=options):
-            _write_log(_serialize_message(message))
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, AssistantMessage):
+            usage = message.usage or {}
+            current_usage = TokenUsage(
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+                cache_read_tokens=usage.get("cache_read_input_tokens", 0),
+                cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
+            )
 
-            if isinstance(message, AssistantMessage):
-                if not has_subagents:
-                    usage = message.usage or {}
-                    total_tokens = usage.get("total_tokens", 0) or (
-                        usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-                    )
-                    total_cost = _estimate_cost(usage, agent.model or "sonnet")
-
-                for block in message.content:
-                    if isinstance(block, ToolUseBlock):
-                        if block.name != "Agent":
-                            tool_calls += 1
-                            current_tool = _tool_detail(block)
-                            if on_tool_call:
-                                on_tool_call(
-                                    tool_calls, current_tool, total_tokens, total_cost
-                                )
-                        if on_event:
-                            on_event(
-                                {
-                                    "type": "tool_use",
-                                    "name": block.name,
-                                    "input": block.input,
-                                    "detail": _tool_detail(block),
-                                }
-                            )
-                    elif isinstance(block, ThinkingBlock):
-                        if on_event:
-                            on_event(
-                                {"type": "thinking", "content": block.thinking or ""}
-                            )
-                    elif isinstance(block, TextBlock):
-                        if on_event:
-                            on_event({"type": "text", "content": block.text or ""})
-
-                self._emit(
-                    EventType.AGENT_PROGRESS,
-                    AgentProgressPayload(
-                        agent_name=log_name,
-                        task_id=log_label,
-                        tokens=total_tokens,
-                        cost=total_cost,
-                        tool_calls=tool_calls,
-                        current_tool=current_tool,
-                    ),
-                )
-
-            elif isinstance(message, TaskStartedMessage):
-                has_subagents = True
-                subagent_tokens[message.task_id] = 0
-
-            elif isinstance(message, TaskProgressMessage):
-                usage = message.usage
-                tokens = (
-                    usage["total_tokens"]
-                    if isinstance(usage, dict)
-                    else getattr(usage, "total_tokens", 0)
-                )
-                subagent_tokens[message.task_id] = tokens
-                total_tokens = sum(subagent_tokens.values())
-                tools = (
-                    usage.get("tool_uses", 0)
-                    if isinstance(usage, dict)
-                    else getattr(usage, "tool_uses", 0)
-                )
-                self._emit(
-                    EventType.AGENT_PROGRESS,
-                    AgentProgressPayload(
-                        agent_name=log_name,
-                        task_id=log_label,
-                        tokens=total_tokens,
-                        cost=total_cost,
-                        tool_calls=tools,
-                        current_tool="",
-                    ),
-                )
-
-            elif isinstance(message, TaskNotificationMessage):
-                usage = message.usage
-                if usage:
-                    final = (
-                        usage["total_tokens"]
-                        if isinstance(usage, dict)
-                        else getattr(usage, "total_tokens", 0)
-                    )
-                    subagent_tokens[message.task_id] = final
-                    total_tokens = sum(subagent_tokens.values())
-
-            elif isinstance(message, RateLimitEvent):
-                info = message.rate_limit_info
-                if on_event:
-                    on_event(
-                        {
-                            "type": "rate_limit",
-                            "status": info.status,
-                            "rate_limit_type": info.rate_limit_type,
-                        }
-                    )
-                if info.status == "rejected":
-                    resets_at = info.resets_at or 0
-                    wait = max(resets_at - int(time.time()), 30)
-                    _log.warning(
-                        "Rate limited (%s), waiting %ds before retry",
-                        info.rate_limit_type or "unknown",
-                        wait,
-                    )
-                    if on_event:
-                        on_event(
-                            {
-                                "type": "rate_limit_wait",
-                                "wait_seconds": wait,
-                                "rate_limit_type": info.rate_limit_type,
-                            }
-                        )
-                    self._emit(
-                        EventType.AGENT_PROGRESS,
-                        AgentProgressPayload(
-                            agent_name=log_name,
-                            task_id=log_label,
-                            tokens=total_tokens,
-                            cost=total_cost,
-                            tool_calls=tool_calls,
-                            current_tool=f"rate limited — retrying in {wait}s",
+            for block in message.content:
+                if isinstance(block, ToolUseBlock):
+                    _emit(
+                        on_event,
+                        ToolCall(
+                            agent_name=agent.name,
+                            timestamp=time.time(),
+                            tool_name=block.name,
+                            tool_input=block.input or {},
                         ),
                     )
-                    await asyncio.sleep(wait)
 
-            elif isinstance(message, ResultMessage):
-                last_result = message
-                usage = message.usage or {}
-                total_tokens = usage.get("total_tokens", 0) or (
-                    usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-                )
-                if on_event:
-                    on_event(
-                        {
-                            "type": "result",
-                            "tokens": total_tokens,
-                            "cost": getattr(message, "total_cost_usd", None),
-                            "duration_ms": getattr(message, "duration_ms", 0),
-                        }
-                    )
+            _emit(
+                on_event,
+                TokenUpdate(
+                    agent_name=agent.name,
+                    timestamp=time.time(),
+                    usage=current_usage,
+                    cost_usd=current_cost,
+                ),
+            )
 
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+        elif isinstance(message, RateLimitEvent):
+            info = message.rate_limit_info
+            if info.status == "rejected":
+                resets_at = info.resets_at or 0
+                wait = max(resets_at - int(time.time()), 30)
+                _log.warning("Rate limited (%s), waiting %ds", info.rate_limit_type, wait)
+                await asyncio.sleep(wait)
 
-        # Extract structured output
-        structured: dict[str, Any] | None = None
-        if last_result:
-            raw = getattr(last_result, "structured_output", None)
-            if raw is not None:
-                if isinstance(raw, str):
-                    try:
-                        structured = json.loads(raw)
-                    except json.JSONDecodeError:
-                        structured = None
-                elif isinstance(raw, dict):
-                    structured = raw
+        elif isinstance(message, ResultMessage):
+            last_result = message
 
-        result = RunResult(
-            text=getattr(last_result, "result", "") or "" if last_result else "",
-            structured=structured,
-            usage=last_result.usage or {} if last_result else {},
-            cost=getattr(last_result, "total_cost_usd", None) if last_result else None,
-            duration_ms=getattr(last_result, "duration_ms", elapsed_ms)
-            if last_result
-            else elapsed_ms,
+    # Build final result
+    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+    if last_result is None:
+        error_result = RunResult(
+            output=None,
+            text="",
+            usage=current_usage,
+            cost_usd=0.0,
+            duration_ms=elapsed_ms,
+            error="No result message received from SDK",
         )
+        _emit(on_event, AgentError(agent_name=agent.name, timestamp=time.time(), error=error_result.error))
+        return error_result
 
-        self._emit(
-            EventType.AGENT_COMPLETED,
-            AgentCompletedPayload(
-                agent_name=log_name,
-                task_id=log_label,
-                tokens=total_tokens,
-                cost=total_cost,
-            ),
-        )
+    # Extract from final result
+    final_usage_raw = last_result.usage or {}
+    final_usage = TokenUsage(
+        input_tokens=final_usage_raw.get("input_tokens", 0),
+        output_tokens=final_usage_raw.get("output_tokens", 0),
+        cache_read_tokens=final_usage_raw.get("cache_read_input_tokens", 0),
+        cache_creation_tokens=final_usage_raw.get("cache_creation_input_tokens", 0),
+    )
+    final_cost = last_result.total_cost_usd or 0.0
 
-        # Write debug markdown
-        if log_file:
-            structured_out = ""
-            if structured:
-                structured_out = json.dumps(structured, indent=2, default=repr)
-            elif result.text:
-                structured_out = result.text
+    # Parse structured output
+    parsed_output = None
+    if agent.output_schema and last_result.structured_output is not None:
+        raw = last_result.structured_output
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                raw = None
+        if isinstance(raw, dict):
+            parsed_output = agent.output_schema.model_validate(raw)
 
-            debug_path = log_file.with_suffix(".md")
-            with open(debug_path, "w") as f:
-                f.write(f"# Agent: {log_name}\n\n")
-                f.write(f"**Model:** {agent.model or 'sonnet'}\n")
-                f.write(f"**Tools:** {', '.join(agent.tools or [])}\n\n")
-                f.write("## System Prompt\n\n```\n")
-                f.write(agent.prompt)
-                f.write("\n```\n\n## User Prompt\n\n```\n")
-                f.write(prompt)
-                f.write("\n```\n\n## Structured Output\n\n```json\n")
-                f.write(structured_out or "(no output)")
-                f.write("\n```\n")
+    # Check for error
+    error = None
+    if last_result.is_error:
+        error = last_result.result or "Agent returned an error"
 
-        return result
+    result = RunResult(
+        output=parsed_output,
+        text=last_result.result or "",
+        usage=final_usage,
+        cost_usd=final_cost,
+        duration_ms=last_result.duration_ms or elapsed_ms,
+        error=error,
+    )
+
+    if error:
+        _emit(on_event, AgentError(agent_name=agent.name, timestamp=time.time(), error=error))
+    else:
+        _emit(on_event, AgentCompleted(agent_name=agent.name, timestamp=time.time(), result=result))
+
+    return result

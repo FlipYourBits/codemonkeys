@@ -1,197 +1,143 @@
-# tests/test_runner.py
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import patch
 
 import pytest
+from pydantic import BaseModel
 
-from codemonkeys.core.run_result import RunResult
-from codemonkeys.core.runner import AgentRunner
-from codemonkeys.workflows.events import EventEmitter, EventType
+from claude_agent_sdk import AssistantMessage, ResultMessage, ToolUseBlock
 
-
-def _make_assistant_message(
-    usage: dict[str, Any] | None = None,
-    content: list | None = None,
-) -> MagicMock:
-    from claude_agent_sdk import AssistantMessage
-
-    msg = MagicMock(spec=AssistantMessage)
-    msg.usage = usage or {"input_tokens": 100, "output_tokens": 50}
-    msg.content = content or []
-    return msg
+from codemonkeys.core.events import (
+    AgentCompleted,
+    AgentError,
+    AgentStarted,
+    Event,
+    ToolCall,
+    TokenUpdate,
+)
+from codemonkeys.core.runner import run_agent
+from codemonkeys.core.types import AgentDefinition
 
 
-def _make_result_message(
-    result: str = "",
-    structured_output: Any = None,
-    usage: dict[str, Any] | None = None,
-    cost: float | None = None,
-    duration_ms: int = 500,
-) -> MagicMock:
-    from claude_agent_sdk import ResultMessage
-
-    msg = MagicMock(spec=ResultMessage)
-    msg.result = result
-    msg.structured_output = structured_output
-    msg.usage = usage or {"input_tokens": 200, "output_tokens": 100}
-    msg.total_cost_usd = cost
-    msg.duration_ms = duration_ms
-    msg.num_turns = 1
-    msg.model_usage = None
-    return msg
+class ReviewOutput(BaseModel):
+    findings: list[str]
 
 
-def _make_agent() -> MagicMock:
-    from claude_agent_sdk import AgentDefinition
-
-    agent = MagicMock(spec=AgentDefinition)
-    agent.prompt = "You are a test agent."
-    agent.model = "sonnet"
-    agent.tools = ["Read", "Bash"]
-    agent.disallowedTools = []
-    agent.permissionMode = "dontAsk"
-    agent.description = "Test agent"
-    return agent
+def _make_agent(**overrides) -> AgentDefinition:
+    defaults = {
+        "name": "test-agent",
+        "model": "sonnet",
+        "system_prompt": "You are a test agent.",
+        "tools": ["Read", "Grep"],
+    }
+    defaults.update(overrides)
+    return AgentDefinition(**defaults)
 
 
-class TestAgentRunnerReturnsRunResult:
-    @pytest.mark.asyncio
-    async def test_returns_run_result(self) -> None:
-        assistant = _make_assistant_message()
-        result_msg = _make_result_message(
-            result="done",
-            structured_output={"key": "value"},
-            cost=0.05,
-            duration_ms=1234,
+def _make_assistant_message(content=None, usage=None):
+    return AssistantMessage(
+        content=content or [],
+        model="sonnet",
+        usage=usage or {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+    )
+
+
+def _make_tool_use_block(name="Read", input=None):
+    return ToolUseBlock(id="tool-1", name=name, input=input or {})
+
+
+def _make_result_message(text="", structured_output=None, cost=0.01, duration_ms=500, is_error=False):
+    return ResultMessage(
+        subtype="result",
+        duration_ms=duration_ms,
+        duration_api_ms=duration_ms,
+        is_error=is_error,
+        num_turns=1,
+        session_id="test-session",
+        total_cost_usd=cost,
+        usage={"input_tokens": 1000, "output_tokens": 200, "total_tokens": 1200},
+        result=text,
+        structured_output=structured_output,
+        stop_reason="end_turn",
+    )
+
+
+async def _fake_query_simple(**kwargs):
+    yield _make_assistant_message(
+        content=[_make_tool_use_block(name="Read", input={"file_path": "/foo.py"})],
+        usage={"input_tokens": 500, "output_tokens": 100, "total_tokens": 600},
+    )
+    yield _make_result_message(text="All good")
+
+
+async def _fake_query_structured(**kwargs):
+    output = {"findings": ["unused import", "missing docstring"]}
+    yield _make_result_message(
+        text="",
+        structured_output=output,
+        cost=0.02,
+        duration_ms=1200,
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_agent_basic():
+    events: list[Event] = []
+
+    with patch("codemonkeys.core.runner.query", side_effect=_fake_query_simple):
+        result = await run_agent(
+            _make_agent(),
+            "Review the code",
+            on_event=events.append,
         )
 
-        async def fake_query(**kwargs):
-            yield assistant
-            yield result_msg
+    assert result.text == "All good"
+    assert result.error is None
+    assert result.cost_usd == 0.01
 
-        runner = AgentRunner(cwd="/tmp/test")
-        with (
-            patch("codemonkeys.core.runner.query", fake_query),
-            patch("codemonkeys.core.runner.restrict"),
-        ):
-            result = await runner.run_agent(_make_agent(), "do stuff")
+    event_types = [type(e).__name__ for e in events]
+    assert "AgentStarted" in event_types
+    assert "ToolCall" in event_types
+    assert "AgentCompleted" in event_types
 
-        assert isinstance(result, RunResult)
-        assert result.structured == {"key": "value"}
-        assert result.cost == 0.05
-        assert result.duration_ms == 1234
 
-    @pytest.mark.asyncio
-    async def test_structured_output_parses_json_string(self) -> None:
-        assistant = _make_assistant_message()
-        result_msg = _make_result_message(
-            structured_output='{"parsed": true}',
+@pytest.mark.asyncio
+async def test_run_agent_structured_output():
+    events: list[Event] = []
+
+    with patch("codemonkeys.core.runner.query", side_effect=_fake_query_structured):
+        result = await run_agent(
+            _make_agent(output_schema=ReviewOutput),
+            "Review the code",
+            on_event=events.append,
         )
 
-        async def fake_query(**kwargs):
-            yield assistant
-            yield result_msg
-
-        runner = AgentRunner(cwd="/tmp/test")
-        with (
-            patch("codemonkeys.core.runner.query", fake_query),
-            patch("codemonkeys.core.runner.restrict"),
-        ):
-            result = await runner.run_agent(_make_agent(), "do stuff")
-
-        assert result.structured == {"parsed": True}
+    assert result.output is not None
+    assert isinstance(result.output, ReviewOutput)
+    assert result.output.findings == ["unused import", "missing docstring"]
+    assert result.cost_usd == 0.02
 
 
-class TestAgentRunnerEmitsEvents:
-    @pytest.mark.asyncio
-    async def test_emits_agent_started_and_completed(self) -> None:
-        assistant = _make_assistant_message()
-        result_msg = _make_result_message(result="done")
+@pytest.mark.asyncio
+async def test_run_agent_no_event_handler():
+    with patch("codemonkeys.core.runner.query", side_effect=_fake_query_simple):
+        result = await run_agent(_make_agent(), "Review the code")
 
-        async def fake_query(**kwargs):
-            yield assistant
-            yield result_msg
-
-        emitter = EventEmitter()
-        events: list[tuple[EventType, Any]] = []
-        emitter.on_any(lambda et, p: events.append((et, p)))
-
-        runner = AgentRunner(cwd="/tmp/test", emitter=emitter)
-        with (
-            patch("codemonkeys.core.runner.query", fake_query),
-            patch("codemonkeys.core.runner.restrict"),
-        ):
-            await runner.run_agent(_make_agent(), "do stuff", agent_name="test_agent")
-
-        event_types = [e[0] for e in events]
-        assert EventType.AGENT_STARTED in event_types
-        assert EventType.AGENT_COMPLETED in event_types
-
-    @pytest.mark.asyncio
-    async def test_no_emitter_does_not_crash(self) -> None:
-        assistant = _make_assistant_message()
-        result_msg = _make_result_message(result="done")
-
-        async def fake_query(**kwargs):
-            yield assistant
-            yield result_msg
-
-        runner = AgentRunner(cwd="/tmp/test")
-        with (
-            patch("codemonkeys.core.runner.query", fake_query),
-            patch("codemonkeys.core.runner.restrict"),
-        ):
-            result = await runner.run_agent(_make_agent(), "do stuff")
-
-        assert isinstance(result, RunResult)
+    assert result.text == "All good"
 
 
-class TestAgentRunnerLogging:
-    @pytest.mark.asyncio
-    async def test_writes_log_files(self, tmp_path: Path) -> None:
-        assistant = _make_assistant_message()
-        result_msg = _make_result_message(result="done", structured_output={"out": 1})
+@pytest.mark.asyncio
+async def test_run_agent_error_handling():
+    async def _fake_query_error(**kwargs):
+        yield _make_result_message(text="Something went wrong", is_error=True)
 
-        async def fake_query(**kwargs):
-            yield assistant
-            yield result_msg
+    events: list[Event] = []
+    with patch("codemonkeys.core.runner.query", side_effect=_fake_query_error):
+        result = await run_agent(
+            _make_agent(),
+            "Do something",
+            on_event=events.append,
+        )
 
-        runner = AgentRunner(cwd="/tmp/test", log_dir=tmp_path)
-        with (
-            patch("codemonkeys.core.runner.query", fake_query),
-            patch("codemonkeys.core.runner.restrict"),
-        ):
-            await runner.run_agent(_make_agent(), "do stuff", agent_name="test_log")
-
-        log_files = list(tmp_path.glob("test_log*.log"))
-        md_files = list(tmp_path.glob("test_log*.md"))
-        assert len(log_files) == 1
-        assert len(md_files) == 1
-
-        log_content = log_files[0].read_text()
-        assert "agent_start" in log_content
-
-        md_content = md_files[0].read_text()
-        assert "System Prompt" in md_content
-        assert "User Prompt" in md_content
-
-    @pytest.mark.asyncio
-    async def test_no_log_dir_skips_logging(self) -> None:
-        assistant = _make_assistant_message()
-        result_msg = _make_result_message(result="done")
-
-        async def fake_query(**kwargs):
-            yield assistant
-            yield result_msg
-
-        runner = AgentRunner(cwd="/tmp/test")
-        with (
-            patch("codemonkeys.core.runner.query", fake_query),
-            patch("codemonkeys.core.runner.restrict"),
-        ):
-            result = await runner.run_agent(_make_agent(), "do stuff")
-
-        assert isinstance(result, RunResult)
+    assert result.error is not None
+    event_types = [type(e).__name__ for e in events]
+    assert "AgentError" in event_types
