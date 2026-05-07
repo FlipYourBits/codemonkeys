@@ -128,7 +128,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/runs")
     async def submit_run(body: dict):
-        agent_name = body.get("agent")
+        agent_name: str = body.get("agent", "")
         input_data = body.get("input", {})
 
         agent_meta = next((a for a in agents if a.name == agent_name), None)
