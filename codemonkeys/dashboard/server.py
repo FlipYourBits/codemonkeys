@@ -188,3 +188,22 @@ def create_app() -> FastAPI:
         app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
     return app
+
+
+def main() -> None:
+    """CLI entry point for `codemonkeys dashboard`."""
+    import argparse
+
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="Start the Codemonkeys dashboard")
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Port to listen on (default: 8000)"
+    )
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)"
+    )
+    args = parser.parse_args()
+
+    app = create_app()
+    uvicorn.run(app, host=args.host, port=args.port)

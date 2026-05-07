@@ -45,6 +45,7 @@ dev = [
 
 [project.scripts]
 codemonkeys = "codemonkeys.run_review:main"
+codemonkeys-dashboard = "codemonkeys.dashboard.server:main"
 
 [project.urls]
 Homepage = "https://github.com/FlipYourBits/codemonkeys"
