@@ -6,7 +6,9 @@ import argparse
 import asyncio
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
@@ -16,9 +18,19 @@ from codemonkeys.agents.python_file_reviewer import (
     Finding,
     make_python_file_reviewer,
 )
+from codemonkeys.core.events import (
+    AgentCompleted,
+    AgentError,
+    AgentStarted,
+    Event,
+    RateLimitHit,
+    ToolCall,
+    ToolDenied,
+    TokenUpdate,
+)
 from codemonkeys.core.runner import run_agent
 from codemonkeys.core.types import RunResult
-from codemonkeys.display.live import LiveDisplay
+from codemonkeys.display.logger import FileLogger
 
 BATCH_SIZE = 3
 EXCLUDE_DIRS = {".venv", "__pycache__", ".git", "node_modules", ".tox", ".mypy_cache"}
@@ -135,6 +147,69 @@ def _print_summary(all_findings: list[Finding], total_cost: float) -> None:
     )
 
 
+def _make_log_dir() -> Path:
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    log_dir = Path(".codemonkeys") / "logs" / ts
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+
+def _make_stdout_printer() -> Any:
+    """Returns a handler that prints real-time agent activity to stdout."""
+    _console = Console(stderr=True)
+
+    def _handle(event: Event) -> None:
+        name = event.agent_name
+        if isinstance(event, AgentStarted):
+            _console.print(f"[bold cyan]{name}[/bold cyan] started [{event.model}]")
+        elif isinstance(event, ToolCall):
+            detail = event.tool_name
+            inp = event.tool_input
+            if event.tool_name in ("Read", "Edit", "Write"):
+                detail = f"{event.tool_name}({inp.get('file_path', '?')})"
+            elif event.tool_name == "Grep":
+                detail = f"Grep('{inp.get('pattern', '?')}')"
+            elif event.tool_name == "Bash":
+                cmd = inp.get("command", "")
+                detail = f"Bash($ {cmd[:80]})"
+            _console.print(f"  [dim]{name}[/dim] -> {detail}")
+        elif isinstance(event, ToolDenied):
+            _console.print(
+                f"  [red]{name} DENIED: {event.tool_name}({event.command[:80]})[/red]"
+            )
+        elif isinstance(event, TokenUpdate):
+            _console.print(
+                f"  [dim]{name}[/dim] "
+                f"tokens: {event.usage.input_tokens:,}in/{event.usage.output_tokens:,}out "
+                f"cost: ${event.cost_usd:.4f}"
+            )
+        elif isinstance(event, RateLimitHit):
+            _console.print(
+                f"  [yellow]{name} rate limited ({event.rate_limit_type}) "
+                f"— waiting {event.wait_seconds}s[/yellow]"
+            )
+        elif isinstance(event, AgentCompleted):
+            r = event.result
+            _console.print(
+                f"[bold green]{name}[/bold green] done "
+                f"— ${r.cost_usd:.4f} in {r.duration_ms}ms"
+            )
+        elif isinstance(event, AgentError):
+            _console.print(f"[bold red]{name} ERROR: {event.error}[/bold red]")
+
+    return _handle
+
+
+def _fan_out(*handlers: Any) -> Any:
+    """Combine multiple event handlers into one."""
+
+    def _handle(event: Event) -> None:
+        for h in handlers:
+            h(event)
+
+    return _handle
+
+
 async def run_review(files: list[str], model: str = "sonnet") -> int:
     """Run parallel file reviewers and print findings. Returns exit code."""
     batches = _batch(files, BATCH_SIZE)
@@ -144,18 +219,23 @@ async def run_review(files: list[str], model: str = "sonnet") -> int:
         f"\n[bold]Reviewing {len(files)} file(s) in {len(batches)} batch(es) [{model}][/bold]\n"
     )
 
-    display = LiveDisplay()
-    display.start()
+    # Set up logging
+    log_dir = _make_log_dir()
+    file_logger = FileLogger(log_dir / "events.jsonl")
+    stdout_printer = _make_stdout_printer()
+    on_event = _fan_out(stdout_printer, file_logger.handle)
+
+    console.print(f"[dim]Logging to {log_dir}/[/dim]\n")
 
     try:
         results: list[RunResult] = await asyncio.gather(
             *[
-                run_agent(agent, "Review the listed files.", on_event=display.handle)
+                run_agent(agent, "Review the listed files.", on_event=on_event)
                 for agent in agents
             ]
         )
     finally:
-        display.stop()
+        file_logger.close()
 
     all_findings: list[Finding] = []
     total_cost = 0.0

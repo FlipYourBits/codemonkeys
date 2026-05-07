@@ -14,6 +14,11 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     RateLimitEvent,
     ResultMessage,
+    TaskNotificationMessage,
+    TaskProgressMessage,
+    TaskStartedMessage,
+    TextBlock,
+    ThinkingBlock,
     ToolUseBlock,
     query,
 )
@@ -23,6 +28,8 @@ from codemonkeys.core.events import (
     AgentError,
     AgentStarted,
     EventHandler,
+    RateLimitHit,
+    RawMessage,
     ToolCall,
     ToolDenied,
     TokenUpdate,
@@ -32,10 +39,96 @@ from codemonkeys.core.types import AgentDefinition, RunResult, TokenUsage
 
 _log = logging.getLogger(__name__)
 
+_PRICING: dict[str, dict[str, float]] = {
+    "opus": {"input": 5.0, "output": 25.0, "cache_read": 0.50, "cache_creation": 6.25},
+    "sonnet": {
+        "input": 3.0,
+        "output": 15.0,
+        "cache_read": 0.30,
+        "cache_creation": 3.75,
+    },
+    "haiku": {"input": 1.0, "output": 5.0, "cache_read": 0.10, "cache_creation": 1.25},
+}
+
+
+def _estimate_cost(usage: dict[str, int], model: str) -> float:
+    rates = _PRICING.get(model, _PRICING["sonnet"])
+    m = 1_000_000
+    return (
+        usage.get("input_tokens", 0) * rates["input"] / m
+        + usage.get("output_tokens", 0) * rates["output"] / m
+        + usage.get("cache_read_input_tokens", 0) * rates["cache_read"] / m
+        + usage.get("cache_creation_input_tokens", 0) * rates["cache_creation"] / m
+    )
+
 
 def _emit(on_event: EventHandler | None, event: Any) -> None:
     if on_event:
         on_event(event)
+
+
+def _serialize_message(message: Any) -> dict[str, Any]:
+    """Serialize an SDK message to a JSON-safe dict."""
+    entry: dict[str, Any] = {"type": type(message).__name__}
+    if isinstance(message, AssistantMessage):
+        entry["usage"] = message.usage
+        blocks = []
+        for b in message.content:
+            if isinstance(b, ToolUseBlock):
+                blocks.append({"type": "tool_use", "name": b.name, "input": b.input})
+            elif isinstance(b, TextBlock):
+                blocks.append({"type": "text", "text": (b.text or "")[:500]})
+            elif isinstance(b, ThinkingBlock):
+                blocks.append(
+                    {"type": "thinking", "thinking": (b.thinking or "")[:500]}
+                )
+        entry["content"] = blocks
+    elif isinstance(message, ResultMessage):
+        entry["result"] = ((message.result) or "")[:500]
+        raw_structured = message.structured_output
+        if raw_structured is not None:
+            entry["structured_output"] = (
+                raw_structured[:2000]
+                if isinstance(raw_structured, str)
+                else raw_structured
+            )
+        entry["usage"] = message.usage
+        entry["cost"] = message.total_cost_usd
+        entry["duration_ms"] = message.duration_ms
+        entry["is_error"] = message.is_error
+        entry["num_turns"] = message.num_turns
+    elif isinstance(message, TaskStartedMessage):
+        entry["task_id"] = message.task_id
+        entry["description"] = message.description
+    elif isinstance(message, TaskProgressMessage):
+        usage = message.usage
+        entry["task_id"] = message.task_id
+        entry["usage"] = (
+            dict(usage)
+            if isinstance(usage, dict)
+            else {
+                "total_tokens": getattr(usage, "total_tokens", 0),
+                "tool_uses": getattr(usage, "tool_uses", 0),
+            }
+        )
+    elif isinstance(message, TaskNotificationMessage):
+        entry["task_id"] = message.task_id
+        usage = message.usage
+        if usage:
+            entry["usage"] = (
+                dict(usage)
+                if isinstance(usage, dict)
+                else {
+                    "total_tokens": getattr(usage, "total_tokens", 0),
+                }
+            )
+    elif isinstance(message, RateLimitEvent):
+        info = message.rate_limit_info
+        entry["status"] = info.status
+        entry["rate_limit_type"] = info.rate_limit_type
+        entry["resets_at"] = info.resets_at
+        entry["utilization"] = info.utilization
+    return entry
 
 
 def _extract_simple_tools(tools: list[str]) -> list[str]:
@@ -100,6 +193,17 @@ async def run_agent(
     current_cost = 0.0
 
     async for message in query(prompt=prompt, options=options):
+        # Emit raw message for full-fidelity logging
+        _emit(
+            on_event,
+            RawMessage(
+                agent_name=agent.name,
+                timestamp=time.time(),
+                message_type=type(message).__name__,
+                data=_serialize_message(message),
+            ),
+        )
+
         if isinstance(message, AssistantMessage):
             usage = message.usage or {}
             current_usage = TokenUsage(
@@ -108,6 +212,7 @@ async def run_agent(
                 cache_read_tokens=usage.get("cache_read_input_tokens", 0),
                 cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
             )
+            current_cost = _estimate_cost(usage, agent.model)
 
             for block in message.content:
                 if isinstance(block, ToolUseBlock):
@@ -133,9 +238,23 @@ async def run_agent(
 
         elif isinstance(message, RateLimitEvent):
             info = message.rate_limit_info
+            resets_at = info.resets_at or 0
+            wait = (
+                max(resets_at - int(time.time()), 30)
+                if info.status == "rejected"
+                else 0
+            )
+            _emit(
+                on_event,
+                RateLimitHit(
+                    agent_name=agent.name,
+                    timestamp=time.time(),
+                    rate_limit_type=info.rate_limit_type or "unknown",
+                    status=info.status,
+                    wait_seconds=wait,
+                ),
+            )
             if info.status == "rejected":
-                resets_at = info.resets_at or 0
-                wait = max(resets_at - int(time.time()), 30)
                 _log.warning(
                     "Rate limited (%s), waiting %ds", info.rate_limit_type, wait
                 )

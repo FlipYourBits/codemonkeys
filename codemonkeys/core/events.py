@@ -69,4 +69,21 @@ class AgentError(Event):
     error: str
 
 
+@dataclass
+class RawMessage(Event):
+    """Wraps every raw SDK message for full-fidelity logging."""
+
+    message_type: str
+    data: dict
+
+
+@dataclass
+class RateLimitHit(Event):
+    """Emitted when the SDK reports a rate limit."""
+
+    rate_limit_type: str
+    status: str
+    wait_seconds: int
+
+
 EventHandler = Callable[[Event], None]

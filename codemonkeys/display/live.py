@@ -15,6 +15,7 @@ from codemonkeys.core.events import (
     AgentError,
     AgentStarted,
     Event,
+    RateLimitHit,
     ToolCall,
     ToolDenied,
     TokenUpdate,
@@ -85,6 +86,11 @@ class LiveDisplay:
                 state.completed = True
                 state.cost_usd = event.result.cost_usd
                 state.usage = event.result.usage
+        elif isinstance(event, RateLimitHit):
+            if event.agent_name in self.agents:
+                self.agents[
+                    event.agent_name
+                ].current_tool = f"rate limited — retrying in {event.wait_seconds}s"
         elif isinstance(event, AgentError):
             if event.agent_name in self.agents:
                 state = self.agents[event.agent_name]
