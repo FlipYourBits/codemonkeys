@@ -26,11 +26,11 @@ def make_python_file_reviewer(
     *,
     model: str = "sonnet",
 ) -> AgentDefinition:
-    """Create a reviewer agent for one or more Python files."""
+    """Reviews Python files for code quality and security issues."""
     file_list = "\n".join(f"- `{f}`" for f in files)
 
     return AgentDefinition(
-        name=f"reviewer:{','.join(f.split('/')[-1] for f in files)}",
+        name=f"python_file_reviewer:{','.join(f.split('/')[-1] for f in files)}",
         model=model,
         system_prompt=f"""\
 You review Python files for code quality and security issues.
