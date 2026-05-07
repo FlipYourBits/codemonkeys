@@ -1,22 +1,35 @@
 <script lang="ts">
   import '../app.css';
+  import { onMount, onDestroy } from 'svelte';
+  import { connect, disconnect } from '$lib/stores/ws';
+  import { fetchAgents } from '$lib/stores/agents';
+  import TopBar from '$lib/components/TopBar.svelte';
+  import FilePicker from '$lib/components/FilePicker.svelte';
+  import AgentMonitor from '$lib/components/AgentMonitor.svelte';
+  import ResultsPanel from '$lib/components/ResultsPanel.svelte';
+
+  onMount(() => {
+    connect();
+    fetchAgents();
+  });
+
+  onDestroy(() => {
+    disconnect();
+  });
 </script>
 
 <div class="dashboard">
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">🐒</span>
-      <span class="title">Codemonkeys</span>
-    </div>
-    <div class="session-cost">
-      <span class="label">Session cost:</span>
-      <span class="value">$0.00</span>
-    </div>
-  </header>
+  <TopBar />
   <main class="panels">
-    <aside class="file-picker">File Picker (TODO)</aside>
-    <section class="agent-monitor">Agent Monitor (TODO)</section>
-    <aside class="results-panel">Results Panel (TODO)</aside>
+    <aside class="file-picker">
+      <FilePicker />
+    </aside>
+    <section class="agent-monitor">
+      <AgentMonitor />
+    </section>
+    <aside class="results-panel">
+      <ResultsPanel />
+    </aside>
   </main>
 </div>
 
@@ -26,58 +39,19 @@
     flex-direction: column;
     height: 100vh;
   }
-
-  .topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    border-bottom: 2px solid var(--border);
-    background: var(--bg-raised);
-  }
-
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .logo { font-size: 18px; }
-  .title { font-weight: 700; font-size: 16px; }
-
-  .session-cost .label {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-right: 8px;
-  }
-
-  .session-cost .value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--green);
-  }
-
   .panels {
     display: grid;
     grid-template-columns: 280px 1fr 320px;
     flex: 1;
     overflow: hidden;
   }
-
   .file-picker {
     border-right: 1px solid var(--border);
-    padding: 16px;
-    overflow-y: auto;
+    overflow: hidden;
   }
-
-  .agent-monitor {
-    overflow-y: auto;
-    padding: 16px;
-  }
-
+  .agent-monitor { overflow: hidden; }
   .results-panel {
     border-left: 1px solid var(--border);
-    overflow-y: auto;
-    padding: 16px;
+    overflow: hidden;
   }
 </style>
