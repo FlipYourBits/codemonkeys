@@ -224,3 +224,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+codemonkeys/dashboard/static/
+.superpowers/
