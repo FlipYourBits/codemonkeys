@@ -33,7 +33,12 @@ def _discover_files_explicit(paths: list[str]) -> list[str]:
         if not path.exists():
             console.print(f"[yellow]Warning: {p} does not exist, skipping[/yellow]")
             continue
-        if not path.suffix == ".py":
+        if path.is_dir():
+            for child in sorted(path.rglob("*.py")):
+                if not any(part in EXCLUDE_DIRS for part in child.parts):
+                    resolved.append(str(child))
+            continue
+        if path.suffix != ".py":
             console.print(f"[yellow]Warning: {p} is not a .py file, skipping[/yellow]")
             continue
         resolved.append(str(path))
