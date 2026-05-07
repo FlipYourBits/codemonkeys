@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import subprocess
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from codemonkeys.dashboard.orchestrator import Orchestrator
@@ -69,6 +71,23 @@ def create_app() -> FastAPI:
     agents = discover_agents()
     app.state.orchestrator = orchestrator
 
+    # WebSocket connections
+    ws_connections: list[WebSocket] = []
+
+    def broadcast_event(run_id: str, event_data: dict):
+        """Queue event for all connected WebSocket clients."""
+        msg = json.dumps(event_data, default=str)
+        disconnected = []
+        for ws in ws_connections:
+            try:
+                asyncio.create_task(ws.send_text(msg))
+            except Exception:
+                disconnected.append(ws)
+        for ws in disconnected:
+            ws_connections.remove(ws)
+
+    orchestrator.add_event_listener(broadcast_event)
+
     @app.get("/api/agents")
     def get_agents():
         return [
@@ -106,6 +125,64 @@ def create_app() -> FastAPI:
         if state is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return state
+
+    @app.post("/api/runs")
+    async def submit_run(body: dict):
+        agent_name = body.get("agent")
+        input_data = body.get("input", {})
+
+        agent_meta = next((a for a in agents if a.name == agent_name), None)
+        if agent_meta is None:
+            raise HTTPException(
+                status_code=404, detail=f"Agent not found: {agent_name}"
+            )
+
+        from codemonkeys.dashboard.registry import get_factory
+
+        factory = get_factory(agent_name)
+        if factory is None:
+            raise HTTPException(
+                status_code=404, detail=f"Factory not found: {agent_name}"
+            )
+
+        files = input_data.get("files", [])
+        findings = input_data.get("findings")
+
+        if findings is not None:
+            from codemonkeys.agents.fixer import FixItem
+
+            items = [FixItem(**f) for f in findings]
+            agent_def = factory(items)
+        else:
+            agent_def = factory(files)
+
+        prompt = "Execute your task on the provided inputs."
+        run_id = await orchestrator.submit(agent_def, prompt)
+        return {"run_id": run_id}
+
+    @app.delete("/api/runs/{run_id}")
+    def cancel_run(run_id: str):
+        success = orchestrator.cancel(run_id)
+        if not success:
+            raise HTTPException(
+                status_code=404, detail="Run not found or not cancellable"
+            )
+        return {"status": "cancelled"}
+
+    @app.delete("/api/runs")
+    def kill_all_runs():
+        orchestrator.kill_all()
+        return {"status": "killed"}
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(ws: WebSocket):
+        await ws.accept()
+        ws_connections.append(ws)
+        try:
+            while True:
+                await ws.receive_text()
+        except WebSocketDisconnect:
+            ws_connections.remove(ws)
 
     if STATIC_DIR.exists():
         app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

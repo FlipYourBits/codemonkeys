@@ -66,3 +66,39 @@ def test_list_runs_empty(client: TestClient):
     resp = client.get("/api/runs")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_post_run_missing_agent(client: TestClient):
+    resp = client.post(
+        "/api/runs", json={"agent": "nonexistent", "input": {"files": ["foo.py"]}}
+    )
+    assert resp.status_code == 404
+
+
+def test_post_run_returns_run_id(client: TestClient):
+    resp = client.post(
+        "/api/runs",
+        json={
+            "agent": "make_python_file_reviewer",
+            "input": {"files": ["codemonkeys/__init__.py"]},
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "run_id" in data
+    assert data["run_id"].startswith("run_")
+
+
+def test_delete_runs_kill_all(client: TestClient):
+    resp = client.delete("/api/runs")
+    assert resp.status_code == 200
+
+
+def test_websocket_connects(client: TestClient):
+    with client.websocket_connect("/ws") as _ws:
+        pass
+
+
+def test_delete_run_not_found(client: TestClient):
+    resp = client.delete("/api/runs/run_nonexistent")
+    assert resp.status_code == 404

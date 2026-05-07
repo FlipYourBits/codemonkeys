@@ -6,6 +6,7 @@ import importlib
 import inspect
 import pkgutil
 from dataclasses import dataclass, field
+from typing import Callable
 
 import codemonkeys.agents as agents_pkg
 from codemonkeys.core.types import AgentDefinition
@@ -80,3 +81,13 @@ def discover_agents() -> list[AgentMeta]:
             )
 
     return sorted(agents, key=lambda a: a.name)
+
+
+def get_factory(name: str) -> Callable | None:
+    """Get an agent factory function by name."""
+    for module_info in pkgutil.iter_modules(agents_pkg.__path__):
+        module = importlib.import_module(f"codemonkeys.agents.{module_info.name}")
+        obj = getattr(module, name, None)
+        if obj is not None and callable(obj):
+            return obj
+    return None
