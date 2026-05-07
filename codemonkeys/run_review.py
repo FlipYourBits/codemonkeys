@@ -183,16 +183,11 @@ def _make_stdout_printer() -> Any:
                 f"tokens: {event.usage.input_tokens:,}in/{event.usage.output_tokens:,}out "
                 f"cost: ${event.cost_usd:.4f}"
             )
-        elif isinstance(event, RateLimitHit):
-            if event.status == "rejected":
-                _console.print(
-                    f"  [red]{name} rate limited ({event.rate_limit_type}) "
-                    f"— waiting {event.wait_seconds}s[/red]"
-                )
-            else:
-                _console.print(
-                    f"  [dim]{name} rate limit warning ({event.rate_limit_type})[/dim]"
-                )
+        elif isinstance(event, RateLimitHit) and event.status == "rejected":
+            _console.print(
+                f"  [red]{name} rate limited ({event.rate_limit_type}) "
+                f"— waiting {event.wait_seconds}s[/red]"
+            )
         elif isinstance(event, AgentCompleted):
             r = event.result
             _console.print(
