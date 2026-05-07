@@ -1,5 +1,3 @@
-import pytest
-
 from codemonkeys.core.hooks import build_tool_hooks, check_tool_allowed
 
 

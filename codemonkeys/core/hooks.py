@@ -6,7 +6,7 @@ import fnmatch
 import re
 from typing import Any
 
-from claude_agent_sdk import HookMatcher, PreToolUseHookInput
+from claude_agent_sdk import HookCallback, HookInput, HookMatcher
 from claude_agent_sdk.types import HookEvent, SyncHookJSONOutput
 
 _BASH_PATTERN_RE = re.compile(r"^Bash\((.+)\)$")
@@ -27,7 +27,9 @@ def _has_bare_bash(tools: list[str]) -> bool:
     return "Bash" in tools
 
 
-def check_tool_allowed(tool_name: str, tool_input: dict[str, Any], allowed_tools: list[str]) -> bool:
+def check_tool_allowed(
+    tool_name: str, tool_input: dict[str, Any], allowed_tools: list[str]
+) -> bool:
     """Check if a tool call is permitted by the allowlist."""
     if tool_name == "Bash":
         if _has_bare_bash(allowed_tools):
@@ -40,7 +42,9 @@ def check_tool_allowed(tool_name: str, tool_input: dict[str, Any], allowed_tools
             return False
         return any(fnmatch.fnmatch(command, p) for p in patterns)
 
-    simple_tools = {t for t in allowed_tools if not _BASH_PATTERN_RE.match(t) and t != "Bash"}
+    simple_tools = {
+        t for t in allowed_tools if not _BASH_PATTERN_RE.match(t) and t != "Bash"
+    }
     return tool_name in simple_tools
 
 
@@ -60,11 +64,11 @@ def build_tool_hooks(
         return None
 
     async def _enforce_bash(
-        hook_input: PreToolUseHookInput,
+        hook_input: HookInput,
         _tool_use_id: str | None,
         _context: Any,
     ) -> SyncHookJSONOutput:
-        command = hook_input.tool_input.get("command", "").strip()
+        command = hook_input["tool_input"].get("command", "").strip()  # type: ignore[typeddict-item]
         for pattern in bash_patterns:
             if fnmatch.fnmatch(command, pattern):
                 return {
@@ -83,6 +87,5 @@ def build_tool_hooks(
             }
         }
 
-    return {
-        "PreToolUse": [HookMatcher(matcher="Bash", hooks=[_enforce_bash])]
-    }
+    hook_fn: HookCallback = _enforce_bash  # type: ignore[assignment]
+    return {"PreToolUse": [HookMatcher(matcher="Bash", hooks=[hook_fn])]}

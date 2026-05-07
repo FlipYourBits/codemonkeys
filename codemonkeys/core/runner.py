@@ -57,7 +57,9 @@ async def run_agent(
 ) -> RunResult:
     """Run a single agent and return its result."""
     now = time.time()
-    _emit(on_event, AgentStarted(agent_name=agent.name, timestamp=now, model=agent.model))
+    _emit(
+        on_event, AgentStarted(agent_name=agent.name, timestamp=now, model=agent.model)
+    )
 
     start_time = time.monotonic()
 
@@ -134,7 +136,9 @@ async def run_agent(
             if info.status == "rejected":
                 resets_at = info.resets_at or 0
                 wait = max(resets_at - int(time.time()), 30)
-                _log.warning("Rate limited (%s), waiting %ds", info.rate_limit_type, wait)
+                _log.warning(
+                    "Rate limited (%s), waiting %ds", info.rate_limit_type, wait
+                )
                 await asyncio.sleep(wait)
 
         elif isinstance(message, ResultMessage):
@@ -144,15 +148,19 @@ async def run_agent(
     elapsed_ms = int((time.monotonic() - start_time) * 1000)
 
     if last_result is None:
+        err_msg = "No result message received from SDK"
         error_result = RunResult(
             output=None,
             text="",
             usage=current_usage,
             cost_usd=0.0,
             duration_ms=elapsed_ms,
-            error="No result message received from SDK",
+            error=err_msg,
         )
-        _emit(on_event, AgentError(agent_name=agent.name, timestamp=time.time(), error=error_result.error))
+        _emit(
+            on_event,
+            AgentError(agent_name=agent.name, timestamp=time.time(), error=err_msg),
+        )
         return error_result
 
     # Extract from final result
@@ -192,8 +200,14 @@ async def run_agent(
     )
 
     if error:
-        _emit(on_event, AgentError(agent_name=agent.name, timestamp=time.time(), error=error))
+        _emit(
+            on_event,
+            AgentError(agent_name=agent.name, timestamp=time.time(), error=error),
+        )
     else:
-        _emit(on_event, AgentCompleted(agent_name=agent.name, timestamp=time.time(), result=result))
+        _emit(
+            on_event,
+            AgentCompleted(agent_name=agent.name, timestamp=time.time(), result=result),
+        )
 
     return result

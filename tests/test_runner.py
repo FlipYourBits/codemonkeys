@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -7,12 +6,7 @@ from pydantic import BaseModel
 from claude_agent_sdk import AssistantMessage, ResultMessage, ToolUseBlock
 
 from codemonkeys.core.events import (
-    AgentCompleted,
-    AgentError,
-    AgentStarted,
     Event,
-    ToolCall,
-    TokenUpdate,
 )
 from codemonkeys.core.runner import run_agent
 from codemonkeys.core.types import AgentDefinition
@@ -45,7 +39,9 @@ def _make_tool_use_block(name="Read", input=None):
     return ToolUseBlock(id="tool-1", name=name, input=input or {})
 
 
-def _make_result_message(text="", structured_output=None, cost=0.01, duration_ms=500, is_error=False):
+def _make_result_message(
+    text="", structured_output=None, cost=0.01, duration_ms=500, is_error=False
+):
     return ResultMessage(
         subtype="result",
         duration_ms=duration_ms,

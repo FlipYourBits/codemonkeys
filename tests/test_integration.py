@@ -5,7 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
-from codemonkeys.agents.python_file_reviewer import FileFindings, make_python_file_reviewer
+from codemonkeys.agents.python_file_reviewer import (
+    FileFindings,
+    make_python_file_reviewer,
+)
 from codemonkeys.core.events import AgentCompleted, AgentStarted, Event
 from codemonkeys.core.runner import run_agent
 from codemonkeys.display.live import LiveDisplay

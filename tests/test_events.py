@@ -8,7 +8,6 @@ from codemonkeys.core.events import (
     EventHandler,
     ToolCall,
     ToolDenied,
-    ToolResult,
     TokenUpdate,
 )
 from codemonkeys.core.types import RunResult, TokenUsage

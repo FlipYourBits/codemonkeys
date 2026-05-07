@@ -109,8 +109,7 @@ class LiveDisplay:
                 if state.error:
                     status = f"[red]error: {state.error[:60]}[/red]"
                 line = Text.from_markup(
-                    f"  {state.name} [{state.model}] — "
-                    f"${state.cost_usd:.4f} — {status}"
+                    f"  {state.name} [{state.model}] — ${state.cost_usd:.4f} — {status}"
                 )
                 table.add_row(line)
             else:
