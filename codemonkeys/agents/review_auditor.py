@@ -29,7 +29,7 @@ class AuditFinding(BaseModel):
 
 class ReviewAudit(BaseModel):
     verdict: Verdict
-    findings: list[AuditFinding]
+    results: list[AuditFinding]
     summary: str
 
 

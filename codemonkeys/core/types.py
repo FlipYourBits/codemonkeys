@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -75,3 +76,12 @@ class RunResult:
         path = directory / f"{name}.json"
         path.write_text(self.output.model_dump_json(indent=2) + "\n")
         return path
+
+
+def make_log_dir(label: str = "") -> Path:
+    """Create a timestamped log directory under .codemonkeys/logs/."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    name = f"{ts}_{label}" if label else ts
+    log_dir = Path(".codemonkeys") / "logs" / name
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir

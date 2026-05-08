@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from rich.console import Console
@@ -15,7 +14,7 @@ from rich.table import Table
 
 from codemonkeys.agents.fixer import FixItem, FixResult, make_fixer
 from codemonkeys.core.runner import run_agent
-from codemonkeys.core.types import RunResult
+from codemonkeys.core.types import RunResult, make_log_dir
 from codemonkeys.display.formatting import severity_style
 from codemonkeys.display.logger import FileLogger
 from codemonkeys.display.stdout import fan_out, make_stdout_printer
@@ -157,9 +156,7 @@ async def run_fix(
     """Run the fixer agent on selected findings."""
     agent = make_fixer(items, model=model)
 
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-    log_dir = Path(".codemonkeys") / "logs" / ts
-    log_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = make_log_dir("fix")
 
     file_logger = FileLogger(log_dir / "fix_events.jsonl")
     stdout_printer = make_stdout_printer()

@@ -36,9 +36,9 @@ def make_stdout_printer(console: Console | None = None) -> EventHandler:
     """
     _console = console or Console(stderr=True)
     _total_cost = 0.0
-    _turn = 0
     _last_tool: dict[str, str] = {}
     _current_tool: dict[str, str] = {}
+    _turns: dict[str, int] = {}
     _running: set[str] = set()
     _live: Live | None = None
 
@@ -53,13 +53,20 @@ def make_stdout_printer(console: Console | None = None) -> EventHandler:
         if _live and _running:
             _live.update(Spinner("dots", text=f" {_spinner_text()}"))
 
+    def _stop_spinner() -> None:
+        nonlocal _live
+        if _live:
+            _live.stop()
+            _live = None
+
     def _handle(event: Event) -> None:
-        nonlocal _total_cost, _turn, _live
+        nonlocal _total_cost, _live
         name = event.agent_name
 
         if isinstance(event, AgentStarted):
             _running.add(name)
             _current_tool[name] = "starting"
+            _turns[name] = 0
             if _live is None:
                 _live = Live(
                     Spinner("dots", text=f" {name} starting"),
@@ -90,12 +97,13 @@ def make_stdout_printer(console: Console | None = None) -> EventHandler:
             )
 
         elif isinstance(event, TokenUpdate):
-            _turn += 1
+            _turns[name] = _turns.get(name, 0) + 1
             _total_cost += event.cost_usd
+            turn = _turns[name]
             u = event.usage
             _console.print(
                 f"  [dim]{name}[/dim] "
-                f"turn {_turn}: [bold]${event.cost_usd:.4f}[/bold] "
+                f"turn {turn}: [bold]${event.cost_usd:.4f}[/bold] "
                 f"({u.input_tokens:,} in + {u.cache_read_tokens:,} cache_read "
                 f"+ {u.cache_creation_tokens:,} cache_write / {u.output_tokens:,} out) "
                 f"| running: ${_total_cost:.4f}",
@@ -137,6 +145,11 @@ def make_stdout_printer(console: Console | None = None) -> EventHandler:
         elif isinstance(event, AgentCompleted):
             _running.discard(name)
             _current_tool.pop(name, None)
+            _turns.pop(name, None)
+            if not _running:
+                _stop_spinner()
+            else:
+                _update_spinner()
             r = event.result
             secs = r.duration_ms / 1000
             duration = f"{secs / 60:.1f}m" if secs >= 60 else f"{secs:.1f}s"
@@ -144,21 +157,16 @@ def make_stdout_printer(console: Console | None = None) -> EventHandler:
                 f"[bold green]{name}[/bold green] done "
                 f"— ${r.cost_usd:.4f} in {duration}"
             )
-            if _running:
-                _update_spinner()
-            elif _live:
-                _live.stop()
-                _live = None
 
         elif isinstance(event, AgentError):
             _running.discard(name)
             _current_tool.pop(name, None)
-            _console.print(f"[bold red]{name} ERROR: {event.error}[/bold red]")
-            if _running:
+            _turns.pop(name, None)
+            if not _running:
+                _stop_spinner()
+            else:
                 _update_spinner()
-            elif _live:
-                _live.stop()
-                _live = None
+            _console.print(f"[bold red]{name} ERROR: {event.error}[/bold red]")
 
     return _handle
 

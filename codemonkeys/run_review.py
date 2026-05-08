@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from rich.console import Console
@@ -23,7 +22,7 @@ from codemonkeys.agents.review_auditor import (
     auditor_from_result,
 )
 from codemonkeys.core.runner import run_agent
-from codemonkeys.core.types import RunResult
+from codemonkeys.core.types import RunResult, make_log_dir
 from codemonkeys.display.formatting import severity_style
 from codemonkeys.display.logger import FileLogger
 from codemonkeys.display.stdout import fan_out, make_stdout_printer
@@ -196,9 +195,9 @@ def _print_audit_results(
         table.add_column("Finding", ratio=3)
         table.add_column("Suggestion", ratio=2)
 
-        if audit.findings:
+        if audit.results:
             sorted_findings = sorted(
-                audit.findings,
+                audit.results,
                 key=lambda f: severity_order.get(f.severity.lower(), 9),
             )
             for f in sorted_findings:
@@ -216,13 +215,6 @@ def _print_audit_results(
 
         console.print()
         console.print(table)
-
-
-def _make_log_dir() -> Path:
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-    log_dir = Path(".codemonkeys") / "logs" / ts
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
 
 
 def _export_outputs(results: list[RunResult], log_dir: Path) -> None:
@@ -243,7 +235,7 @@ async def run_review(
         f"\n[bold]Reviewing {len(files)} file(s) in {len(batches)} batch(es) [{model}][/bold]\n"
     )
 
-    log_dir = _make_log_dir()
+    log_dir = make_log_dir("review")
     file_logger = FileLogger(log_dir / "events.jsonl")
     stdout_printer = make_stdout_printer()
     on_event = fan_out(stdout_printer, file_logger.handle)
