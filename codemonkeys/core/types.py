@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -62,3 +64,14 @@ class RunResult:
     error: str | None = None
     agent_def: AgentDefinition | None = None
     events: list = field(default_factory=list)
+
+    def save_output(self, directory: str | Path) -> Path | None:
+        """Write structured output JSON to directory. Returns path or None."""
+        if self.output is None or self.agent_def is None:
+            return None
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        name = re.sub(r"[^\w\-.]", "_", self.agent_def.name)
+        path = directory / f"{name}.json"
+        path.write_text(self.output.model_dump_json(indent=2) + "\n")
+        return path

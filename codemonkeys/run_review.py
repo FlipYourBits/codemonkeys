@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -21,11 +20,11 @@ from codemonkeys.agents.python_file_reviewer import (
 )
 from codemonkeys.agents.review_auditor import (
     ReviewAudit,
-    make_review_auditor,
+    auditor_from_result,
 )
 from codemonkeys.core.runner import run_agent
 from codemonkeys.core.types import RunResult
-from codemonkeys.display.formatting import format_event_trace, severity_style
+from codemonkeys.display.formatting import severity_style
 from codemonkeys.display.logger import FileLogger
 from codemonkeys.display.stdout import fan_out, make_stdout_printer
 
@@ -226,18 +225,11 @@ def _make_log_dir() -> Path:
     return log_dir
 
 
-def _safe_filename(name: str) -> str:
-    return re.sub(r"[^\w\-.]", "_", name)
-
-
 def _export_outputs(results: list[RunResult], log_dir: Path) -> None:
     for result in results:
-        if result.output is None or result.agent_def is None:
-            continue
-        filename = _safe_filename(result.agent_def.name) + ".json"
-        path = log_dir / filename
-        path.write_text(result.output.model_dump_json(indent=2) + "\n")
-        console.print(f"  [dim]{path}[/dim]")
+        path = result.save_output(log_dir)
+        if path:
+            console.print(f"  [dim]{path}[/dim]")
 
 
 async def run_review(
@@ -293,24 +285,10 @@ async def run_review(
             audit_on_event = fan_out(stdout_printer, audit_logger.handle)
 
             try:
-                audit_agents = []
-                for r in successful_results:
-                    ad = r.agent_def
-                    assert ad is not None
-                    trace = format_event_trace(r.events)
-                    findings_json = r.output.model_dump_json(indent=2) if r.output else "null"
-                    tools_str = ", ".join(ad.tools) if ad.tools else "(none)"
-                    audit_agents.append(
-                        make_review_auditor(
-                            trace=trace,
-                            findings_json=findings_json,
-                            reviewer_name=ad.name,
-                            reviewer_model=ad.model,
-                            reviewer_tools=tools_str,
-                            reviewer_prompt=ad.system_prompt,
-                            model=model,
-                        )
-                    )
+                audit_agents = [
+                    auditor_from_result(r, model=model)
+                    for r in successful_results
+                ]
                 audit_results_raw: list[RunResult] = await asyncio.gather(
                     *[
                         run_agent(a, "Audit this review.", on_event=audit_on_event)

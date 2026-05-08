@@ -32,8 +32,12 @@ def format_tool_call(tool_name: str, tool_input: dict) -> str:
     return f"{tool_name}({json.dumps(tool_input, default=str)[:200]})"
 
 
-def format_tool_result(data: dict) -> str:
-    """Extract a readable summary from a raw SDK tool result."""
+def format_tool_result(data: dict, *, verbose: bool = False) -> str:
+    """Extract a readable summary from a raw SDK tool result.
+
+    verbose=False (default): short hint for stdout (e.g. "app.py (42 lines, 1234 chars)")
+    verbose=True: includes truncated content for audit traces
+    """
     tur = data.get("tool_use_result", {})
     if isinstance(tur, str):
         if len(tur) <= RESULT_CAP:
@@ -46,11 +50,14 @@ def format_tool_result(data: dict) -> str:
         path = f["filePath"]
         num_lines = f.get("numLines", "?")
         content = f.get("content", "")
+        content_len = len(content) if isinstance(content, str) else 0
+        if not verbose:
+            return f"{path} ({num_lines} lines, {content_len} chars)"
         if isinstance(content, str) and len(content) > READ_CONTENT_CAP:
             content = (
                 content[:READ_CONTENT_CAP]
                 + "\n... (truncated FOR THIS AUDIT TRACE ONLY — "
-                + f"the reviewer saw the full {len(content)} chars, {num_lines} lines)"
+                + f"the reviewer saw the full {content_len} chars, {num_lines} lines)"
             )
         return f"{path} ({num_lines} lines):\n{content}"
     parts = []
@@ -81,7 +88,7 @@ def format_event_trace(events: list[Event]) -> str:
             lines.append(f"{ts} TOOL: {inp}")
 
         elif isinstance(event, RawMessage) and event.message_type == "UserMessage":
-            summary = format_tool_result(event.data)
+            summary = format_tool_result(event.data, verbose=True)
             if summary:
                 lines.append(f"       RESULT: {summary}")
 

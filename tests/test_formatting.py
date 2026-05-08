@@ -100,7 +100,7 @@ def test_format_tool_result_file():
     assert "42 lines" in result
 
 
-def test_format_tool_result_file_truncates_content():
+def test_format_tool_result_file_short_summary():
     content = "x" * 2000
     data = {
         "tool_use_result": {
@@ -108,7 +108,19 @@ def test_format_tool_result_file_truncates_content():
         }
     }
     result = format_tool_result(data)
+    assert result == "big.py (100 lines, 2000 chars)"
+
+
+def test_format_tool_result_file_verbose_truncates():
+    content = "x" * 2000
+    data = {
+        "tool_use_result": {
+            "file": {"filePath": "big.py", "numLines": 100, "content": content}
+        }
+    }
+    result = format_tool_result(data, verbose=True)
     assert "truncated" in result.lower()
+    assert "big.py" in result
 
 
 def test_format_tool_result_counts():

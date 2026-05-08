@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from codemonkeys.core.types import AgentDefinition
+from codemonkeys.core.types import AgentDefinition, RunResult
 
 Verdict = Literal["pass", "warn", "fail"]
 Category = Literal[
@@ -31,6 +31,28 @@ class ReviewAudit(BaseModel):
     verdict: Verdict
     findings: list[AuditFinding]
     summary: str
+
+
+def auditor_from_result(
+    result: RunResult,
+    *,
+    model: str = "sonnet",
+) -> AgentDefinition:
+    """Convenience: build an auditor directly from a reviewer's RunResult."""
+    from codemonkeys.display.formatting import format_event_trace
+
+    ad = result.agent_def
+    if ad is None:
+        raise ValueError("RunResult has no agent_def — cannot audit")
+    return make_review_auditor(
+        trace=format_event_trace(result.events),
+        findings_json=result.output.model_dump_json(indent=2) if result.output else "null",
+        reviewer_name=ad.name,
+        reviewer_model=ad.model,
+        reviewer_tools=", ".join(ad.tools) if ad.tools else "(none)",
+        reviewer_prompt=ad.system_prompt,
+        model=model,
+    )
 
 
 def make_review_auditor(

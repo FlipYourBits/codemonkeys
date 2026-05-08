@@ -116,12 +116,15 @@ async def run_agent(
 
     # Build SDK options — restrict to declared tools only, no external extensions
     sdk_tools = _extract_simple_tools(agent.tools)
+    allowed = list(sdk_tools)
+    if output_format:
+        allowed.append("StructuredOutput")
     options = ClaudeAgentOptions(
         system_prompt=agent.system_prompt,
         model=agent.model,
         permission_mode="bypassPermissions",
         tools=sdk_tools,
-        allowed_tools=sdk_tools,
+        allowed_tools=allowed,
         hooks=build_tool_hooks(agent.tools, on_deny=_on_deny),
         output_format=output_format,
         mcp_servers={},
