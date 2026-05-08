@@ -17,7 +17,7 @@ def test_get_agents(client: TestClient):
     assert isinstance(data, list)
     assert len(data) >= 3
     names = [a["name"] for a in data]
-    assert "make_python_file_reviewer" in names
+    assert "python_file_reviewer" in names
 
 
 def test_get_agents_has_fields(client: TestClient):
@@ -79,7 +79,7 @@ def test_post_run_returns_run_id(client: TestClient):
     resp = client.post(
         "/api/runs",
         json={
-            "agent": "make_python_file_reviewer",
+            "agent": "python_file_reviewer",
             "input": {"files": ["codemonkeys/__init__.py"]},
         },
     )

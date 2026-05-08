@@ -71,9 +71,11 @@ def discover_agents() -> list[AgentMeta]:
                 if model_param.default is not inspect.Parameter.empty:
                     default_model = model_param.default
 
+            display_name = attr_name.removeprefix("make_")
+
             agents.append(
                 AgentMeta(
-                    name=attr_name,
+                    name=display_name,
                     description=description,
                     accepts=accepts,
                     default_model=default_model,
@@ -85,9 +87,11 @@ def discover_agents() -> list[AgentMeta]:
 
 def get_factory(name: str) -> Callable | None:
     """Get an agent factory function by name."""
+    candidates = [name, f"make_{name}"]
     for module_info in pkgutil.iter_modules(agents_pkg.__path__):
         module = importlib.import_module(f"codemonkeys.agents.{module_info.name}")
-        obj = getattr(module, name, None)
-        if obj is not None and callable(obj):
-            return obj
+        for candidate in candidates:
+            obj = getattr(module, candidate, None)
+            if obj is not None and callable(obj):
+                return obj
     return None

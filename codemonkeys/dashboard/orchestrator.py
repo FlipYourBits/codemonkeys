@@ -5,12 +5,11 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from dataclasses import asdict
 from typing import Any, Callable, Awaitable
 
-from codemonkeys.core.events import Event, EventHandler
+from codemonkeys.core.events import AgentCompleted, Event, EventHandler
 from codemonkeys.core.runner import run_agent
-from codemonkeys.core.types import AgentDefinition, RunResult
+from codemonkeys.core.types import AgentDefinition, RunResult, json_safe
 
 
 RunAgentFn = Callable[..., Awaitable[RunResult]]
@@ -34,11 +33,16 @@ class Orchestrator:
 
     def _emit_ws_event(self, run_id: str, event: Event) -> None:
         """Broadcast an event to all registered listeners."""
+        data = json_safe(event)
+        if isinstance(event, AgentCompleted) and isinstance(data.get("result"), dict):
+            result = data["result"]
+            result.pop("events", None)
+            result.pop("agent_def", None)
         event_data = {
             "run_id": run_id,
             "event_type": type(event).__name__,
             "agent_name": event.agent_name,
-            "data": asdict(event),
+            "data": data,
             "timestamp": event.timestamp,
         }
         for listener in self._event_listeners:

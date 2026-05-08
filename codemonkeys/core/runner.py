@@ -14,9 +14,6 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     RateLimitEvent,
     ResultMessage,
-    TaskNotificationMessage,
-    TaskProgressMessage,
-    TaskStartedMessage,
     TextBlock,
     ThinkingBlock,
     ToolUseBlock,
@@ -27,15 +24,18 @@ from codemonkeys.core.events import (
     AgentCompleted,
     AgentError,
     AgentStarted,
+    EventCollector,
     EventHandler,
     RateLimitHit,
     RawMessage,
+    TextOutput,
+    ThinkingOutput,
     ToolCall,
     ToolDenied,
     TokenUpdate,
 )
 from codemonkeys.core.hooks import build_tool_hooks
-from codemonkeys.core.types import AgentDefinition, RunResult, TokenUsage
+from codemonkeys.core.types import AgentDefinition, RunResult, TokenUsage, json_safe
 
 _log = logging.getLogger(__name__)
 
@@ -62,73 +62,7 @@ def _estimate_cost(usage: dict[str, int], model: str) -> float:
     )
 
 
-def _emit(on_event: EventHandler | None, event: Any) -> None:
-    if on_event:
-        on_event(event)
-
-
-def _serialize_message(message: Any) -> dict[str, Any]:
-    """Serialize an SDK message to a JSON-safe dict."""
-    entry: dict[str, Any] = {"type": type(message).__name__}
-    if isinstance(message, AssistantMessage):
-        entry["usage"] = message.usage
-        blocks = []
-        for b in message.content:
-            if isinstance(b, ToolUseBlock):
-                blocks.append({"type": "tool_use", "name": b.name, "input": b.input})
-            elif isinstance(b, TextBlock):
-                blocks.append({"type": "text", "text": (b.text or "")[:500]})
-            elif isinstance(b, ThinkingBlock):
-                blocks.append(
-                    {"type": "thinking", "thinking": (b.thinking or "")[:500]}
-                )
-        entry["content"] = blocks
-    elif isinstance(message, ResultMessage):
-        entry["result"] = ((message.result) or "")[:500]
-        raw_structured = message.structured_output
-        if raw_structured is not None:
-            entry["structured_output"] = (
-                raw_structured[:2000]
-                if isinstance(raw_structured, str)
-                else raw_structured
-            )
-        entry["usage"] = message.usage
-        entry["cost"] = message.total_cost_usd
-        entry["duration_ms"] = message.duration_ms
-        entry["is_error"] = message.is_error
-        entry["num_turns"] = message.num_turns
-    elif isinstance(message, TaskStartedMessage):
-        entry["task_id"] = message.task_id
-        entry["description"] = message.description
-    elif isinstance(message, TaskProgressMessage):
-        usage = message.usage
-        entry["task_id"] = message.task_id
-        entry["usage"] = (
-            dict(usage)
-            if isinstance(usage, dict)
-            else {
-                "total_tokens": getattr(usage, "total_tokens", 0),
-                "tool_uses": getattr(usage, "tool_uses", 0),
-            }
-        )
-    elif isinstance(message, TaskNotificationMessage):
-        entry["task_id"] = message.task_id
-        usage = message.usage
-        if usage:
-            entry["usage"] = (
-                dict(usage)
-                if isinstance(usage, dict)
-                else {
-                    "total_tokens": getattr(usage, "total_tokens", 0),
-                }
-            )
-    elif isinstance(message, RateLimitEvent):
-        info = message.rate_limit_info
-        entry["status"] = info.status
-        entry["rate_limit_type"] = info.rate_limit_type
-        entry["resets_at"] = info.resets_at
-        entry["utilization"] = info.utilization
-    return entry
+_json_safe = json_safe
 
 
 def _extract_simple_tools(tools: list[str]) -> list[str]:
@@ -149,10 +83,15 @@ async def run_agent(
     on_event: EventHandler | None = None,
 ) -> RunResult:
     """Run a single agent and return its result."""
+    collector = EventCollector()
+
+    def _combined_emit(event: Any) -> None:
+        collector.handle(event)
+        if on_event:
+            on_event(event)
+
     now = time.time()
-    _emit(
-        on_event, AgentStarted(agent_name=agent.name, timestamp=now, model=agent.model)
-    )
+    _combined_emit(AgentStarted(agent_name=agent.name, timestamp=now, model=agent.model))
 
     start_time = time.monotonic()
 
@@ -166,8 +105,7 @@ async def run_agent(
 
     # Build on_deny callback
     def _on_deny(tool_name: str, command: str) -> None:
-        _emit(
-            on_event,
+        _combined_emit(
             ToolDenied(
                 agent_name=agent.name,
                 timestamp=time.time(),
@@ -176,31 +114,36 @@ async def run_agent(
             ),
         )
 
-    # Build SDK options
+    # Build SDK options — restrict to declared tools only, no external extensions
     sdk_tools = _extract_simple_tools(agent.tools)
     options = ClaudeAgentOptions(
         system_prompt=agent.system_prompt,
         model=agent.model,
         permission_mode="bypassPermissions",
+        tools=sdk_tools,
         allowed_tools=sdk_tools,
         hooks=build_tool_hooks(agent.tools, on_deny=_on_deny),
         output_format=output_format,
+        mcp_servers={},
+        plugins=[],
+        setting_sources=[],
+        skills=[],
     )
 
     # Track state
     last_result: ResultMessage | None = None
     current_usage = TokenUsage(input_tokens=0, output_tokens=0)
     current_cost = 0.0
+    last_emitted_usage: TokenUsage | None = None
 
     async for message in query(prompt=prompt, options=options):
         # Emit raw message for full-fidelity logging
-        _emit(
-            on_event,
+        _combined_emit(
             RawMessage(
                 agent_name=agent.name,
                 timestamp=time.time(),
                 message_type=type(message).__name__,
-                data=_serialize_message(message),
+                data=_json_safe(message),
             ),
         )
 
@@ -215,9 +158,24 @@ async def run_agent(
             current_cost = _estimate_cost(usage, agent.model)
 
             for block in message.content:
-                if isinstance(block, ToolUseBlock):
-                    _emit(
-                        on_event,
+                if isinstance(block, ThinkingBlock):
+                    _combined_emit(
+                        ThinkingOutput(
+                            agent_name=agent.name,
+                            timestamp=time.time(),
+                            text=block.thinking or "",
+                        ),
+                    )
+                elif isinstance(block, TextBlock):
+                    _combined_emit(
+                        TextOutput(
+                            agent_name=agent.name,
+                            timestamp=time.time(),
+                            text=block.text or "",
+                        ),
+                    )
+                elif isinstance(block, ToolUseBlock):
+                    _combined_emit(
                         ToolCall(
                             agent_name=agent.name,
                             timestamp=time.time(),
@@ -226,15 +184,16 @@ async def run_agent(
                         ),
                     )
 
-            _emit(
-                on_event,
-                TokenUpdate(
-                    agent_name=agent.name,
-                    timestamp=time.time(),
-                    usage=current_usage,
-                    cost_usd=current_cost,
-                ),
-            )
+            if current_usage != last_emitted_usage:
+                _combined_emit(
+                    TokenUpdate(
+                        agent_name=agent.name,
+                        timestamp=time.time(),
+                        usage=current_usage,
+                        cost_usd=current_cost,
+                    ),
+                )
+                last_emitted_usage = current_usage
 
         elif isinstance(message, RateLimitEvent):
             info = message.rate_limit_info
@@ -244,8 +203,7 @@ async def run_agent(
                 if info.status == "rejected"
                 else 0
             )
-            _emit(
-                on_event,
+            _combined_emit(
                 RateLimitHit(
                     agent_name=agent.name,
                     timestamp=time.time(),
@@ -275,9 +233,10 @@ async def run_agent(
             cost_usd=0.0,
             duration_ms=elapsed_ms,
             error=err_msg,
+            agent_def=agent,
+            events=list(collector.events),
         )
-        _emit(
-            on_event,
+        _combined_emit(
             AgentError(agent_name=agent.name, timestamp=time.time(), error=err_msg),
         )
         return error_result
@@ -309,6 +268,10 @@ async def run_agent(
     if last_result.is_error:
         error = last_result.result or "Agent returned an error"
 
+    # Snapshot events before emitting the terminal event — otherwise
+    # AgentCompleted.result.events would contain itself (circular ref).
+    events_snapshot = list(collector.events)
+
     result = RunResult(
         output=parsed_output,
         text=last_result.result or "",
@@ -316,16 +279,16 @@ async def run_agent(
         cost_usd=final_cost,
         duration_ms=last_result.duration_ms or elapsed_ms,
         error=error,
+        agent_def=agent,
+        events=events_snapshot,
     )
 
     if error:
-        _emit(
-            on_event,
+        _combined_emit(
             AgentError(agent_name=agent.name, timestamp=time.time(), error=error),
         )
     else:
-        _emit(
-            on_event,
+        _combined_emit(
             AgentCompleted(agent_name=agent.name, timestamp=time.time(), result=result),
         )
 

@@ -48,26 +48,42 @@
       const input = d.tool_input as Record<string, unknown>;
       if (['Read', 'Edit', 'Write'].includes(name)) return `${name}(${input?.file_path ?? '?'})`;
       if (name === 'Grep') return `Grep('${input?.pattern ?? '?'}')`;
-      if (name === 'Bash') return `Bash($ ${((input?.command as string) ?? '').slice(0, 80)})`;
+      if (name === 'Bash') return `Bash($ ${(input?.command as string) ?? ''})`;
       return name;
     }
     if (event.event_type === 'ToolResult') {
       const output = (d.output as string) ?? '';
-      return `→ ${output.slice(0, 100)}${output.length > 100 ? '...' : ''}`;
+      return `→ ${output}`;
     }
-    if (event.event_type === 'ThinkingOutput') return (d.text as string)?.slice(0, 200) ?? '';
-    if (event.event_type === 'TextOutput') return (d.text as string)?.slice(0, 200) ?? '';
+    if (event.event_type === 'ThinkingOutput') return (d.text as string) ?? '';
+    if (event.event_type === 'TextOutput') return (d.text as string) ?? '';
     if (event.event_type === 'ToolDenied') return `DENIED: ${d.tool_name}(${d.command})`;
     if (event.event_type === 'RateLimitHit') return `Rate limited — waiting ${d.wait_seconds}s`;
     return '';
   }
 
+  const hiddenTypes = ['TokenUpdate', 'RawMessage', 'AgentCompleted', 'AgentError'];
+
   const displayEvents = $derived(
-    events.filter((e) => !['TokenUpdate', 'RawMessage'].includes(e.event_type))
+    events.filter((e) => !hiddenTypes.includes(e.event_type))
   );
+
+  let copied = $state(false);
+
+  function copyLog() {
+    const text = displayEvents
+      .map((e) => `${formatTime(e.timestamp)} [${eventLabel(e.event_type)}] ${eventDetail(e)}`)
+      .join('\n');
+    navigator.clipboard.writeText(text);
+    copied = true;
+    setTimeout(() => { copied = false; }, 1500);
+  }
 </script>
 
-<div class="event-log">
+<div class="event-log" onclick={(e) => e.stopPropagation()}>
+  <div class="log-toolbar">
+    <button class="copy-btn" onclick={copyLog}>{copied ? 'Copied!' : 'Copy log'}</button>
+  </div>
   {#each displayEvents as event}
     <div class="event-line">
       <span class="time">{formatTime(event.timestamp)}</span>
@@ -87,9 +103,25 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     line-height: 1.9;
+    user-select: text;
   }
-  .event-line { display: flex; gap: 8px; }
-  .time { color: var(--text-dim); min-width: 42px; }
-  .badge { font-weight: 600; min-width: 50px; }
-  .detail { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+  }
+  .copy-btn {
+    font-size: 10px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+  .event-line { display: flex; gap: 8px; align-items: baseline; }
+  .time { color: var(--text-dim); min-width: 42px; flex-shrink: 0; }
+  .badge { font-weight: 600; min-width: 50px; flex-shrink: 0; }
+  .detail { color: var(--text-dim); word-break: break-word; white-space: pre-wrap; }
 </style>

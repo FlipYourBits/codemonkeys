@@ -41,7 +41,16 @@ lastEvent.subscribe((event) => {
 
     run.events.push(event);
 
-    if (event.event_type === 'TokenUpdate') {
+    if (run.status === 'queued') {
+      run.status = 'running';
+      run.started_at = event.timestamp;
+    }
+
+    if (event.event_type === 'AgentStarted') {
+      const data = event.data as Record<string, unknown>;
+      run.agent_name = event.agent_name;
+      run.model = (data.model as string) ?? run.model;
+    } else if (event.event_type === 'TokenUpdate') {
       const data = event.data as Record<string, unknown>;
       const usage = data.usage as Record<string, number> | undefined;
       if (usage) {
@@ -65,10 +74,15 @@ lastEvent.subscribe((event) => {
     } else if (event.event_type === 'AgentCompleted') {
       run.status = 'completed';
       run.current_tool = null;
+      run.completed_at = event.timestamp;
       const data = event.data as Record<string, unknown>;
       const result = data.result as Record<string, unknown> | undefined;
       if (result) {
         run.cost_usd = (result.cost_usd as number) ?? run.cost_usd;
+        const usage = result.usage as Record<string, number> | undefined;
+        if (usage) {
+          run.tokens = { input: usage.input_tokens ?? 0, output: usage.output_tokens ?? 0 };
+        }
         run.result = result;
       }
     } else if (event.event_type === 'AgentError') {

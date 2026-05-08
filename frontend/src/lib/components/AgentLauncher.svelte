@@ -24,7 +24,7 @@
 <div class="launcher">
   <select bind:value={selectedAgent}>
     {#each $agents as agent}
-      <option value={agent.name}>{agent.description || agent.name}</option>
+      <option value={agent.name}>{agent.name}</option>
     {/each}
   </select>
 

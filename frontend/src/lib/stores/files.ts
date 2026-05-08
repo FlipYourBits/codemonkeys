@@ -69,67 +69,112 @@ export async function fetchTree(): Promise<void> {
   fileTree.set(buildTreeFromPaths(paths));
 }
 
+export function clearSelection(): void {
+  fileTree.update(($tree) => {
+    function update(nodes: FileNode[]): FileNode[] {
+      return nodes.map((node) => ({
+        ...node,
+        selected: false,
+        children: node.children ? update(node.children) : undefined,
+      }));
+    }
+    return update($tree);
+  });
+}
+
 export async function fetchGitFiles(mode: string): Promise<void> {
   const resp = await fetch(`/api/files/git/${mode}`);
   const paths: string[] = await resp.json();
-  fileTree.update(($tree) => {
-    function clearSelection(nodes: FileNode[]) {
-      for (const node of nodes) {
-        node.selected = false;
-        if (node.children) clearSelection(node.children);
-      }
-    }
-    clearSelection($tree);
+  const pathSet = new Set(paths);
 
-    const pathSet = new Set(paths);
-    function selectMatches(nodes: FileNode[]) {
-      for (const node of nodes) {
-        if (pathSet.has(node.path)) node.selected = true;
-        if (node.children) selectMatches(node.children);
-      }
+  const parentDirs = new Set<string>();
+  for (const p of paths) {
+    const parts = p.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      parentDirs.add(parts.slice(0, i).join('/'));
     }
-    selectMatches($tree);
-    return [...$tree];
+  }
+
+  fileTree.update(($tree) => {
+    function update(nodes: FileNode[]): FileNode[] {
+      return nodes.map((node) => {
+        const selected = pathSet.has(node.path);
+        const expanded = parentDirs.has(node.path) ? true : node.expanded;
+        const children = node.children ? update(node.children) : undefined;
+        return { ...node, selected, expanded, children };
+      });
+    }
+    return update($tree);
   });
 }
 
 export function toggleNode(path: string): void {
   fileTree.update(($tree) => {
-    function walk(nodes: FileNode[]) {
-      for (const node of nodes) {
+    function update(nodes: FileNode[]): FileNode[] {
+      return nodes.map((node) => {
         if (node.path === path) {
-          node.selected = !node.selected;
-          if (node.is_dir && node.children) {
-            function setAll(nodes: FileNode[], val: boolean) {
-              for (const n of nodes) {
-                n.selected = val;
-                if (n.children) setAll(n.children, val);
-              }
-            }
-            setAll(node.children, node.selected);
-          }
-          return;
+          const newSelected = !node.selected;
+          const children = node.is_dir && node.children
+            ? setAll(node.children, newSelected)
+            : node.children;
+          return { ...node, selected: newSelected, children };
         }
-        if (node.children) walk(node.children);
-      }
+        if (node.children) {
+          return { ...node, children: update(node.children) };
+        }
+        return node;
+      });
     }
-    walk($tree);
-    return [...$tree];
+    function setAll(nodes: FileNode[], val: boolean): FileNode[] {
+      return nodes.map((n) => ({
+        ...n,
+        selected: val,
+        children: n.children ? setAll(n.children, val) : undefined,
+      }));
+    }
+    return update($tree);
+  });
+}
+
+export function expandAll(): void {
+  fileTree.update(($tree) => {
+    function update(nodes: FileNode[]): FileNode[] {
+      return nodes.map((node) => ({
+        ...node,
+        expanded: node.is_dir ? true : node.expanded,
+        children: node.children ? update(node.children) : undefined,
+      }));
+    }
+    return update($tree);
+  });
+}
+
+export function collapseAll(): void {
+  fileTree.update(($tree) => {
+    function update(nodes: FileNode[]): FileNode[] {
+      return nodes.map((node) => ({
+        ...node,
+        expanded: false,
+        children: node.children ? update(node.children) : undefined,
+      }));
+    }
+    return update($tree);
   });
 }
 
 export function toggleExpand(path: string): void {
   fileTree.update(($tree) => {
-    function walk(nodes: FileNode[]) {
-      for (const node of nodes) {
+    function update(nodes: FileNode[]): FileNode[] {
+      return nodes.map((node) => {
         if (node.path === path) {
-          node.expanded = !node.expanded;
-          return;
+          return { ...node, expanded: !node.expanded };
         }
-        if (node.children) walk(node.children);
-      }
+        if (node.children) {
+          return { ...node, children: update(node.children) };
+        }
+        return node;
+      });
     }
-    walk($tree);
-    return [...$tree];
+    return update($tree);
   });
 }

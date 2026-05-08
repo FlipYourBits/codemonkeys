@@ -70,6 +70,20 @@ class AgentError(Event):
 
 
 @dataclass
+class ThinkingOutput(Event):
+    """Emitted when the agent produces thinking content."""
+
+    text: str
+
+
+@dataclass
+class TextOutput(Event):
+    """Emitted when the agent produces text output."""
+
+    text: str
+
+
+@dataclass
 class RawMessage(Event):
     """Wraps every raw SDK message for full-fidelity logging."""
 
@@ -87,3 +101,13 @@ class RateLimitHit(Event):
 
 
 EventHandler = Callable[[Event], None]
+
+
+class EventCollector:
+    """Handler that accumulates events into a list."""
+
+    def __init__(self) -> None:
+        self.events: list[Event] = []
+
+    def handle(self, event: Event) -> None:
+        self.events.append(event)

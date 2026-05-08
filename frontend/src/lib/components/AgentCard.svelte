@@ -9,6 +9,8 @@
 
   let { run }: Props = $props();
   let expanded = $derived($selectedRunId === run.run_id);
+  let agentName = $derived(run.agent_name.split(':')[0]);
+  let agentFiles = $derived(run.agent_name.includes(':') ? run.agent_name.split(':').slice(1).join(':') : null);
 
   function handleClick() {
     selectedRunId.update((current) => (current === run.run_id ? null : run.run_id));
@@ -45,15 +47,20 @@
 <div
   class="card {statusClass(run.status)}"
   class:expanded
-  onclick={handleClick}
-  role="button"
-  tabindex="0"
-  onkeydown={(e) => e.key === 'Enter' && handleClick()}
 >
-  <div class="card-header">
+  <div
+    class="card-header"
+    onclick={handleClick}
+    role="button"
+    tabindex="0"
+    onkeydown={(e) => e.key === 'Enter' && handleClick()}
+  >
     <div class="left">
       <div class="status-dot"></div>
-      <span class="agent-name">{run.agent_name}</span>
+      <span class="agent-name">{agentName}</span>
+      {#if agentFiles}
+        <span class="agent-files" title={agentFiles}>{agentFiles}</span>
+      {/if}
       <span class="model-badge">{run.model}</span>
       {#if run.status === 'queued'}
         <span class="queue-label">queued</span>
@@ -100,7 +107,6 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     margin-bottom: 10px;
-    cursor: pointer;
     transition: border-color 0.15s;
   }
   .card:hover { border-color: var(--accent); }
@@ -110,6 +116,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 14px 16px;
+    cursor: pointer;
   }
   .left { display: flex; align-items: center; gap: 10px; }
   .right { display: flex; align-items: center; gap: 16px; }
@@ -131,6 +138,15 @@
   .status-queued { opacity: 0.6; }
 
   .agent-name { font-weight: 600; font-size: 14px; }
+  .agent-files {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: monospace;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .model-badge {
     font-size: 11px;
     color: var(--text-dim);

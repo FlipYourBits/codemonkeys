@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from pathlib import Path
 from typing import IO
 
 from codemonkeys.core.events import Event
+from codemonkeys.core.types import json_safe
 
 
 class FileLogger:
@@ -23,7 +23,7 @@ class FileLogger:
         self._file: IO[str] = open(path, "a")
 
     def handle(self, event: Event) -> None:
-        data = asdict(event)
+        data = json_safe(event)
         data["_type"] = type(event).__name__
         self._file.write(json.dumps(data, default=str) + "\n")
         self._file.flush()

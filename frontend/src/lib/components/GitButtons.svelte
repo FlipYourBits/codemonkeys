@@ -1,9 +1,14 @@
 <script lang="ts">
-  import { fetchGitFiles } from '$lib/stores/files';
+  import { fetchGitFiles, clearSelection } from '$lib/stores/files';
 
   let activeMode = $state('');
 
   async function selectMode(mode: string) {
+    if (activeMode === mode) {
+      activeMode = '';
+      clearSelection();
+      return;
+    }
     activeMode = mode;
     await fetchGitFiles(mode);
   }
